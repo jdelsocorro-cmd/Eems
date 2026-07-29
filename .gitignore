@@ -1,0 +1,31 @@
+# Env files
+.env
+.env.local
+backend/.env
+frontend/.env
+
+# Python
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.venv/
+backend/*.egg-info/
+backend/.pytest_cache/
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backups (never commit dumps)
+*.dump
+*.sql.gz

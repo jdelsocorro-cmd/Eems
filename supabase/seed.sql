@@ -1,0 +1,25 @@
+-- ============================================================================
+-- seed.sql -- NOT run automatically as a migration. This is a one-time,
+-- manual bootstrap you run after:
+--   1. The Supabase project exists and migrations have been applied.
+--   2. Your own EDGE company/department/team/position rows exist (created
+--      via the app once org-structure endpoints are live, or inserted by
+--      hand for the very first setup).
+--   3. You have signed up as a real Supabase Auth user (so auth.users has a
+--      row for you) and an `employees` row exists linking auth_user_id to
+--      that user (created via POST /employees or inserted by hand).
+--
+-- Without this step nobody can grant anyone a role -- role.manage itself is
+-- gated by RBAC, so the very first admin has to be seeded outside the app.
+-- ============================================================================
+
+-- Example (replace the two UUIDs before running):
+--
+-- insert into employee_roles (employee_id, role_id, scope_type, scope_id, granted_by)
+-- values (
+--   '<your-employees.id>',
+--   '00000000-0000-0000-0001-000000000001', -- Super Admin (see 007_seed_permissions.sql)
+--   'company',
+--   '<your-companies.id>',
+--   '<your-employees.id>' -- self-granted, since nobody else can grant it yet
+-- );

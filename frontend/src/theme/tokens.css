@@ -1,0 +1,172 @@
+/* ============================================================
+   EEMS — EDGE Design System v1.0 tokens
+   Ported verbatim from coaching-ops/frontend/Styles.html (lines 8-94) and
+   scheduling-app/frontend/Styles.html, the two existing EDGE apps this
+   token set was already shared by. Do not duplicate these values inline
+   anywhere else in this app -- reference the CSS variables, or the
+   tailwind.config.ts colors.edge.* / colors.surface.* mappings that wrap
+   them.
+   Brand: Deep Navy + Teal — "The Human Edge in Digital Learning"
+   ============================================================ */
+
+:root {
+  /* Brand core */
+  --edge-teal: #00c896;
+  --edge-teal-dark: #00a87a;
+  --edge-navy: #0b1526;
+
+  /* Dark theme (default) */
+  --c-bg: #0b1526;
+  --c-surface: #111d35;
+  --c-surface2: #162040;
+  --c-surface3: #1c2a4a;
+  --c-border: rgba(0, 200, 150, 0.12);
+  --c-border-hover: rgba(0, 200, 150, 0.25);
+  --c-accent: #00c896;
+  --c-accent-soft: rgba(0, 200, 150, 0.12);
+  --c-blue: #0ea5e9;
+  --c-blue-soft: rgba(14, 165, 233, 0.12);
+  --c-green: #00c896;
+  --c-green-soft: rgba(0, 200, 150, 0.12);
+  --c-yellow: #f5a623;
+  --c-yellow-soft: rgba(245, 166, 35, 0.14);
+  --c-orange: #f97316;
+  --c-red: #f45b69;
+  --c-text: #e8edf5;
+  --c-text-muted: #7a90b0;
+  --c-text-dim: #4a6080;
+  --c-nav-active: rgba(0, 200, 150, 0.12);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(0, 200, 150, 0.2);
+  --sidebar-w: 210px;
+  --sidebar-collapsed-w: 56px;
+  --topbar-h: 42px;
+  --transition: 0.2s ease;
+}
+
+[data-theme="light"] {
+  --c-bg: #f0f4f9;
+  --c-surface: #ffffff;
+  --c-surface2: #f8fafc;
+  --c-surface3: #eef3f9;
+  --c-border: rgba(13, 26, 48, 0.1);
+  --c-border-hover: rgba(13, 26, 48, 0.22);
+  --c-accent: #00a87a;
+  --c-accent-soft: rgba(0, 168, 122, 0.1);
+  --c-blue: #0880ba;
+  --c-blue-soft: rgba(8, 128, 186, 0.1);
+  --c-green: #00a87a;
+  --c-green-soft: rgba(0, 168, 122, 0.1);
+  --c-nav-active: rgba(0, 168, 122, 0.08);
+  --c-text: #0d1a30;
+  --c-text-muted: #5a7090;
+  --c-text-dim: #a0b0c8;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.12);
+  --shadow-glow: 0 0 16px rgba(0, 168, 122, 0.15);
+}
+
+/* Navy theme — dark sidebar + light content ("enterprise default" per the
+   existing EDGE apps; EEMS follows the same convention). */
+[data-theme="navy"] {
+  --c-bg: #f0f4f9;
+  --c-surface: #ffffff;
+  --c-surface2: #f8fafc;
+  --c-surface3: #eef3f9;
+  --c-border: rgba(13, 26, 48, 0.09);
+  --c-border-hover: rgba(13, 26, 48, 0.2);
+  --c-accent: #00a87a;
+  --c-accent-soft: rgba(0, 168, 122, 0.1);
+  --c-blue: #0880ba;
+  --c-blue-soft: rgba(8, 128, 186, 0.1);
+  --c-green: #00a87a;
+  --c-green-soft: rgba(0, 168, 122, 0.1);
+  --c-nav-active: rgba(0, 168, 122, 0.08);
+  --c-text: #0d1a30;
+  --c-text-muted: #5a7090;
+  --c-text-dim: #a0b0c8;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.09);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.13);
+  --shadow-glow: 0 0 16px rgba(0, 168, 122, 0.15);
+}
+
+[data-theme="navy"] .sidebar {
+  background: #0b1526;
+  border-right-color: rgba(0, 200, 150, 0.1);
+}
+[data-theme="navy"] .sidebar .nav-group-label {
+  color: rgba(255, 255, 255, 0.25);
+}
+[data-theme="navy"] .sidebar .nav-item {
+  color: rgba(255, 255, 255, 0.5);
+}
+[data-theme="navy"] .sidebar .nav-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.8);
+}
+[data-theme="navy"] .sidebar .nav-item.active {
+  background: rgba(0, 200, 150, 0.12);
+  color: #00c896;
+  font-weight: 600;
+}
+[data-theme="navy"] .sidebar .nav-item.active .nav-icon {
+  color: #00c896;
+}
+[data-theme="navy"] .sidebar .logo-text {
+  color: #fff;
+}
+[data-theme="navy"] .sidebar .logo-accent {
+  color: #00c896;
+}
+[data-theme="navy"] .sidebar-search input {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(0, 200, 150, 0.12);
+  color: #e8edf5;
+}
+[data-theme="navy"] .sidebar-search input::placeholder {
+  color: rgba(255, 255, 255, 0.28);
+}
+[data-theme="navy"] .sidebar-footer {
+  border-top-color: rgba(0, 200, 150, 0.1);
+}
+[data-theme="navy"] .sidebar .theme-toggle {
+  color: rgba(255, 255, 255, 0.5);
+}
+[data-theme="navy"] .sidebar .theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+}
+[data-theme="navy"] .sidebar-toggle {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.5);
+}
+[data-theme="navy"] .sidebar-toggle:hover {
+  background: #00c896;
+  color: #0b1526;
+}
+[data-theme="navy"] .sidebar-version {
+  color: rgba(255, 255, 255, 0.22);
+}
+[data-theme="navy"] .nav-badge.new,
+[data-theme="navy"] .nav-badge.alert {
+  background: rgba(0, 200, 150, 0.14);
+  color: #00c896;
+}
+
+body {
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: "Inter", -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
