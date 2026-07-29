@@ -21,6 +21,7 @@ frontend/*.tsbuildinfo
 # Supabase local
 supabase/.branches/
 supabase/.temp/
+supabase/.env
 
 # OS
 .DS_Store

@@ -87,7 +87,12 @@ def test_valid_es256_token_decodes(monkeypatch, keypair):
 def test_expired_token_raises_invalid_token_error(monkeypatch, keypair):
     private_key, public_key = keypair
     _patch_jwk_client(monkeypatch, public_key)
-    token = _make_token(private_key, exp=int(time.time()) - 10)
+    # Must exceed CLOCK_SKEW_LEEWAY_SECONDS (60s) -- a token expired by only
+    # a few seconds is deliberately still accepted, to tolerate ordinary
+    # clock drift between this machine and Supabase's servers (see
+    # security.py). Using well past that margin here so this test verifies
+    # "genuinely expired," not "expired within the tolerated skew window."
+    token = _make_token(private_key, exp=int(time.time()) - (security.CLOCK_SKEW_LEEWAY_SECONDS + 30))
 
     with pytest.raises(security.InvalidTokenError):
         security.decode_supabase_jwt(token)

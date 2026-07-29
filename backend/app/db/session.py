@@ -3,26 +3,39 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy import text
+from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 
 settings = get_settings()
 
-# Pool size kept modest -- Supabase free tier is a small shared-CPU instance;
-# a large pool just queues connections at the DB rather than helping.
+# SUPABASE_DB_URL points at Supabase's DIRECT connection (port 5432), not
+# the Transaction pooler (6543), despite the original plan's default
+# preference for the pooler. Reason, found via integration testing: even
+# with poolclass=NullPool + statement_cache_size=0 (both applied below), the
+# Transaction pooler (Supavisor) intermittently handed back a backend
+# connection with a stale prepared statement from an earlier, unrelated
+# client session, causing DuplicatePreparedStatementError on ordinary
+# queries -- including SQLAlchemy's own dialect-initialization query, before
+# any application code even ran. The identical NullPool + statement_cache_
+# size=0 setup against the direct connection had zero failures across
+# repeated testing. Phase 1 scale doesn't need pooler-level connection
+# multiplexing anyway (Supabase free tier allows 60 direct connections;
+# NullPool means at most one physical connection per in-flight request), so
+# reliability wins over following the general pooler-for-serverless
+# heuristic that doesn't hold up empirically for this combination right now.
+# Revisit if connection volume ever approaches that limit.
 #
-# statement_cache_size=0 is required, not optional: this connects through
-# Supabase's Transaction-mode pooler (Supavisor), which can hand a given
-# logical connection a different backend Postgres connection between
-# statements. asyncpg's default client-side prepared-statement cache assumes
-# a stable backend connection -- without disabling it here, you eventually
-# hit "prepared statement ... does not exist" errors that are hard to
-# reproduce because they depend on the pooler's routing, not the app's logic.
+# NullPool + statement_cache_size=0 are kept regardless (cheap, defensive,
+# and correct practice for any pgbouncer-fronted Postgres, direct or not):
+#   - statement_cache_size=0 stops asyncpg from using named prepared
+#     statements client-side at all.
+#   - NullPool means SQLAlchemy doesn't hold physical connections open
+#     between requests, so an idle app never occupies a chunk of the
+#     60-connection budget it isn't actively using.
 engine = create_async_engine(
     settings.supabase_db_url,
-    pool_size=5,
-    max_overflow=5,
-    pool_pre_ping=True,
+    poolclass=NullPool,
     connect_args={"statement_cache_size": 0},
 )
 
