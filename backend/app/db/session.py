@@ -10,7 +10,21 @@ settings = get_settings()
 
 # Pool size kept modest -- Supabase free tier is a small shared-CPU instance;
 # a large pool just queues connections at the DB rather than helping.
-engine = create_async_engine(settings.supabase_db_url, pool_size=5, max_overflow=5, pool_pre_ping=True)
+#
+# statement_cache_size=0 is required, not optional: this connects through
+# Supabase's Transaction-mode pooler (Supavisor), which can hand a given
+# logical connection a different backend Postgres connection between
+# statements. asyncpg's default client-side prepared-statement cache assumes
+# a stable backend connection -- without disabling it here, you eventually
+# hit "prepared statement ... does not exist" errors that are hard to
+# reproduce because they depend on the pooler's routing, not the app's logic.
+engine = create_async_engine(
+    settings.supabase_db_url,
+    pool_size=5,
+    max_overflow=5,
+    pool_pre_ping=True,
+    connect_args={"statement_cache_size": 0},
+)
 
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 

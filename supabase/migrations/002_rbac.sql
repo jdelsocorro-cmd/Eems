@@ -75,7 +75,12 @@ create table employee_roles (
   )
 );
 
-create index idx_employee_roles_employee on employee_roles(employee_id) where expires_at is null or expires_at > now();
+-- Partial index predicates must be IMMUTABLE -- now() is only STABLE, so it
+-- can't appear here. Indexing the common case (non-expiring grants) still
+-- helps; the query itself adds `or expires_at > now()` on top, which falls
+-- back to a normal (unindexed for that branch) filter -- acceptable at
+-- Phase 1 scale, where most employees hold a handful of grants.
+create index idx_employee_roles_employee on employee_roles(employee_id) where expires_at is null;
 create index idx_employee_roles_role on employee_roles(role_id);
 
 -- ----------------------------------------------------------------------------
@@ -90,7 +95,7 @@ create type audit_action as enum ('insert', 'update', 'delete');
 create table audit_log (
   id uuid primary key default gen_random_uuid(),
   table_name text not null,
-  record_id uuid not null,
+  record_id uuid, -- null for composite-key tables (e.g. role_permissions) -- old_data/new_data carry full row identity there
   action audit_action not null,
   actor_employee_id uuid references employees(id), -- null = system/job
   old_data jsonb,
@@ -128,6 +133,31 @@ begin
 end;
 $$;
 
+-- Composite-key variant for junction tables with no `id` column (role_permissions
+-- has PK (role_id, permission_id)) -- write_audit_log() above assumes NEW.id/OLD.id
+-- exist, which fails here. record_id is left null; old_data/new_data (which
+-- always contain the full row, including both key columns) are what identify
+-- the row for these tables.
+create or replace function app.write_audit_log_composite_key()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, app
+as $$
+begin
+  if tg_op = 'INSERT' then
+    insert into audit_log (table_name, record_id, action, actor_employee_id, new_data)
+    values (tg_table_name, null, 'insert', app.current_employee_id(), to_jsonb(new));
+    return new;
+  elsif tg_op = 'DELETE' then
+    insert into audit_log (table_name, record_id, action, actor_employee_id, old_data)
+    values (tg_table_name, null, 'delete', app.current_employee_id(), to_jsonb(old));
+    return old;
+  end if;
+  return null;
+end;
+$$;
+
 -- Attach audit logging to the RBAC tables themselves (grants/roles changing
 -- is exactly the kind of event that needs a trail).
 create trigger trg_audit_roles
@@ -136,7 +166,7 @@ create trigger trg_audit_roles
 
 create trigger trg_audit_role_permissions
   after insert or delete on role_permissions
-  for each row execute function app.write_audit_log();
+  for each row execute function app.write_audit_log_composite_key();
 
 create trigger trg_audit_employee_roles
   after insert or update or delete on employee_roles
