@@ -9,7 +9,6 @@ import os
 os.environ.setdefault("SUPABASE_URL", "https://placeholder.supabase.co")
 os.environ.setdefault("SUPABASE_ANON_KEY", "placeholder")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "placeholder")
-os.environ.setdefault("SUPABASE_JWT_SECRET", "placeholder")
 os.environ.setdefault("SUPABASE_DB_URL", "postgresql+asyncpg://user:pass@localhost:5432/postgres")
 
 from app.main import app  # noqa: E402
