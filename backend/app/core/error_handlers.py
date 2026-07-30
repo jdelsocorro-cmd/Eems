@@ -34,4 +34,19 @@ async def rls_violation_handler(request: Request, exc: DBAPIError) -> JSONRespon
             status_code=status.HTTP_403_FORBIDDEN,
             content={"detail": "Not authorized to perform this action on the specified resource."},
         )
+
+    # app.enforce_kpi_sensitive_changes() (005_goals_kpis.sql) and
+    # app.compute_and_snapshot_score() (022_compute_and_snapshot_score.sql)
+    # raise a plain `raise exception` for authorization failures they detect
+    # at the trigger/function level -- not RLS, so it doesn't match the text
+    # above, but the same "translate to a clean 403" treatment applies.
+    # Routers pre-check these same conditions for a nicer error message; this
+    # is the defense-in-depth backstop for paths that skip the router (e.g.
+    # Realtime, or a direct SQL call), matching the RLS-is-the-real-backstop
+    # philosophy the whole schema is built on.
+    if "not authorized" in str(exc.orig).lower():
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": "Not authorized to perform this action on the specified resource."},
+        )
     raise exc

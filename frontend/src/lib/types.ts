@@ -163,3 +163,90 @@ export interface TaskComment {
   created_at: string;
   updated_at: string;
 }
+
+export type GoalType = "company" | "department" | "team" | "individual";
+export type GoalStatus = "draft" | "active" | "completed" | "archived";
+export type KpiDirection = "higher_is_better" | "lower_is_better" | "target_is_exact";
+export type KpiStatus = "active" | "completed" | "archived";
+export type ScoreComputedBy = "system" | "manual";
+
+export interface Goal {
+  id: string;
+  company_id: string;
+  title: string;
+  description: string | null;
+  goal_type: GoalType;
+  department_id: string | null;
+  team_id: string | null;
+  employee_id: string | null;
+  parent_goal_id: string | null;
+  period_start: string;
+  period_end: string;
+  status: GoalStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KpiTemplate {
+  id: string;
+  company_id: string | null;
+  name: string;
+  description: string | null;
+  unit: string;
+  direction: KpiDirection;
+  default_weight: number;
+  is_active: boolean;
+}
+
+export interface Kpi {
+  id: string;
+  employee_id: string;
+  goal_id: string | null;
+  kpi_template_id: string | null;
+  task_id: string | null;
+  name: string;
+  unit: string;
+  direction: KpiDirection;
+  target_value: number;
+  current_value: number;
+  weight: number;
+  period_start: string;
+  period_end: string;
+  status: KpiStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KpiValueHistoryEntry {
+  id: string;
+  kpi_id: string;
+  old_value: number | null;
+  new_value: number;
+  changed_by: string | null;
+  changed_at: string;
+  note: string | null;
+}
+
+export interface KpiChangeLogEntry {
+  id: string;
+  kpi_id: string;
+  field_changed: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_by: string | null;
+  changed_at: string;
+  reason: string | null;
+}
+
+export interface KpiScore {
+  id: string;
+  employee_id: string;
+  period_start: string;
+  period_end: string;
+  computed_score: number | null;
+  kpi_snapshot: Array<{ kpi_id: string; name: string; target_value: number; current_value: number; weight: number; direction: KpiDirection }>;
+  computed_at: string;
+  computed_by: ScoreComputedBy;
+}

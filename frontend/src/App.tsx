@@ -10,7 +10,8 @@ import UserManagement from "@/pages/UserManagement";
 import RbacAdmin from "@/pages/RbacAdmin";
 import Projects from "@/pages/Projects";
 import Tasks from "@/pages/Tasks";
-import PlaceholderPage from "@/pages/PlaceholderPage";
+import Goals from "@/pages/Goals";
+import MyScorecard from "@/pages/MyScorecard";
 
 export default function App() {
   return (
@@ -27,8 +28,8 @@ export default function App() {
                   <Route path="/org-chart" element={<OrgChart />} />
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/tasks" element={<Tasks />} />
-                  <Route path="/scorecard" element={<PlaceholderPage title="My Scorecard" />} />
-                  <Route path="/goals" element={<PlaceholderPage title="Goals" />} />
+                  <Route path="/scorecard" element={<MyScorecard />} />
+                  <Route path="/goals" element={<Goals />} />
                   <Route path="/admin/org" element={<OrgAdmin />} />
                   <Route path="/admin/rbac" element={<RbacAdmin />} />
                   <Route path="/admin/users" element={<UserManagement />} />

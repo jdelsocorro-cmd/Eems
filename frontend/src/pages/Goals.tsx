@@ -1,0 +1,401 @@
+import { useState, type FormEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { apiClient, ApiError } from "@/lib/apiClient";
+import { useAuth } from "@/hooks/useAuth";
+import type { Company, Employee, Goal, GoalStatus, GoalType, Kpi, KpiDirection } from "@/lib/types";
+
+const GOAL_TYPES: GoalType[] = ["company", "department", "team", "individual"];
+const GOAL_STATUSES: GoalStatus[] = ["draft", "active", "completed", "archived"];
+const KPI_DIRECTIONS: KpiDirection[] = ["higher_is_better", "lower_is_better", "target_is_exact"];
+
+const GOAL_STATUS_STYLES: Record<GoalStatus, string> = {
+  draft: "bg-surface2 text-text-muted",
+  active: "bg-success-soft text-success",
+  completed: "bg-edge-teal/10 text-edge-teal",
+  archived: "bg-surface2 text-text-dim",
+};
+
+function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.detail;
+  return "Something went wrong.";
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return <p className="mt-2 rounded-edge-sm bg-danger/10 px-3 py-2 text-sm text-danger">{message}</p>;
+}
+
+export default function Goals() {
+  const { session } = useAuth();
+  const queryClient = useQueryClient();
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+
+  const meQuery = useQuery({
+    queryKey: ["employees", "me"],
+    queryFn: () => apiClient.get<Employee>("/employees/me"),
+    enabled: !!session,
+  });
+
+  const goalsQuery = useQuery({ queryKey: ["goals"], queryFn: () => apiClient.get<Goal[]>("/goals") });
+  const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiClient.get<Company[]>("/companies") });
+  const employeesQuery = useQuery({ queryKey: ["employees"], queryFn: () => apiClient.get<Employee[]>("/employees") });
+
+  const selectedGoal = goalsQuery.data?.find((g) => g.id === selectedGoalId) ?? null;
+
+  const kpisQuery = useQuery({
+    queryKey: ["kpis", "goal", selectedGoalId],
+    queryFn: () => apiClient.get<Kpi[]>(`/kpis?goal_id=${selectedGoalId}`),
+    enabled: !!selectedGoalId,
+  });
+
+  const createGoal = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => apiClient.post<Goal>("/goals", payload),
+    onSuccess: (goal) => {
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+      setSelectedGoalId(goal.id);
+      setShowCreateForm(false);
+    },
+  });
+
+  const updateGoalStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: GoalStatus }) => apiClient.patch<Goal>(`/goals/${id}`, { status }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["goals"] }),
+  });
+
+  const createKpi = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => apiClient.post<Kpi>("/kpis", { ...payload, goal_id: selectedGoalId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["kpis", "goal", selectedGoalId] }),
+  });
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-text">Goals</h1>
+          <p className="mt-1 text-sm text-text-muted">Company, department, team, and individual goals with cascading alignment.</p>
+        </div>
+        <button
+          onClick={() => setShowCreateForm((v) => !v)}
+          className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark"
+        >
+          + New goal
+        </button>
+      </div>
+
+      {showCreateForm && (
+        <CreateGoalForm
+          companies={companiesQuery.data ?? []}
+          employees={employeesQuery.data ?? []}
+          defaultEmployeeId={meQuery.data?.id ?? ""}
+          onSubmit={(payload) => createGoal.mutate(payload)}
+          pending={createGoal.isPending}
+          error={createGoal.isError ? errorMessage(createGoal.error) : null}
+        />
+      )}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2 rounded-edge-lg border border-border bg-surface">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
+                <th className="px-4 py-2">Title</th>
+                <th className="px-4 py-2">Type</th>
+                <th className="px-4 py-2">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(goalsQuery.data ?? []).map((goal) => (
+                <tr
+                  key={goal.id}
+                  onClick={() => setSelectedGoalId(goal.id)}
+                  className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
+                    selectedGoalId === goal.id ? "bg-nav-active" : ""
+                  }`}
+                >
+                  <td className="px-4 py-2 text-text">{goal.title}</td>
+                  <td className="px-4 py-2 text-text-muted">{goal.goal_type}</td>
+                  <td className="px-4 py-2">
+                    <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${GOAL_STATUS_STYLES[goal.status]}`}>
+                      {goal.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {goalsQuery.data?.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-6 text-center text-text-dim">
+                    No goals yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="rounded-edge-lg border border-border bg-surface p-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Details</h2>
+          {!selectedGoal ? (
+            <p className="text-sm text-text-dim">Select a goal to see details.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="text-base font-medium text-text">{selectedGoal.title}</p>
+                {selectedGoal.description && <p className="mt-1 text-sm text-text-muted">{selectedGoal.description}</p>}
+                <p className="mt-1 text-xs text-text-dim">
+                  {selectedGoal.period_start} to {selectedGoal.period_end}
+                </p>
+              </div>
+
+              <div className="border-t border-border pt-3">
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Status</p>
+                <select
+                  value={selectedGoal.status}
+                  onChange={(e) => updateGoalStatus.mutate({ id: selectedGoal.id, status: e.target.value as GoalStatus })}
+                  className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+                >
+                  {GOAL_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                {updateGoalStatus.isError && <ErrorBanner message={errorMessage(updateGoalStatus.error)} />}
+              </div>
+
+              <div className="border-t border-border pt-3">
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Linked KPIs</p>
+                <ul className="flex flex-col gap-1 text-sm text-text">
+                  {(kpisQuery.data ?? []).map((kpi) => (
+                    <li key={kpi.id} className="flex items-center justify-between">
+                      <span>{kpi.name}</span>
+                      <span className="text-text-muted">
+                        {kpi.current_value}/{kpi.target_value} {kpi.unit} &middot; w{kpi.weight}
+                      </span>
+                    </li>
+                  ))}
+                  {kpisQuery.data?.length === 0 && <li className="text-sm text-text-dim">No KPIs linked yet.</li>}
+                </ul>
+                {createKpi.isError && <ErrorBanner message={errorMessage(createKpi.error)} />}
+                <NewKpiForm
+                  employees={employeesQuery.data ?? []}
+                  pending={createKpi.isPending}
+                  onSubmit={(payload) => createKpi.mutate(payload)}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreateGoalForm({
+  companies,
+  employees,
+  defaultEmployeeId,
+  onSubmit,
+  pending,
+  error,
+}: {
+  companies: Company[];
+  employees: Employee[];
+  defaultEmployeeId: string;
+  onSubmit: (payload: Record<string, unknown>) => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const [title, setTitle] = useState("");
+  const [companyId, setCompanyId] = useState("");
+  const [goalType, setGoalType] = useState<GoalType>("individual");
+  const [employeeId, setEmployeeId] = useState(defaultEmployeeId);
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!title.trim() || !companyId || !periodStart || !periodEnd) return;
+    const payload: Record<string, unknown> = {
+      title: title.trim(),
+      company_id: companyId,
+      goal_type: goalType,
+      period_start: periodStart,
+      period_end: periodEnd,
+    };
+    if (goalType === "individual") payload.employee_id = employeeId;
+    onSubmit(payload);
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="rounded-edge-lg border border-border bg-surface p-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Goal title"
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
+        />
+        <select
+          value={companyId}
+          onChange={(e) => setCompanyId(e.target.value)}
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+        >
+          <option value="" disabled>
+            Choose a company...
+          </option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={goalType}
+          onChange={(e) => setGoalType(e.target.value as GoalType)}
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+        >
+          {GOAL_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        {goalType === "individual" && (
+          <select
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
+            className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+          >
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {emp.first_name} {emp.last_name}
+              </option>
+            ))}
+          </select>
+        )}
+        <input
+          type="date"
+          value={periodStart}
+          onChange={(e) => setPeriodStart(e.target.value)}
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+        />
+        <input
+          type="date"
+          value={periodEnd}
+          onChange={(e) => setPeriodEnd(e.target.value)}
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+        />
+      </div>
+      <button
+        type="submit"
+        disabled={pending}
+        className="mt-3 rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
+      >
+        {pending ? "Creating..." : "Create goal"}
+      </button>
+      {error && <ErrorBanner message={error} />}
+    </form>
+  );
+}
+
+function NewKpiForm({
+  employees,
+  onSubmit,
+  pending,
+}: {
+  employees: Employee[];
+  onSubmit: (payload: Record<string, unknown>) => void;
+  pending: boolean;
+}) {
+  const [name, setName] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
+  const [unit, setUnit] = useState("");
+  const [direction, setDirection] = useState<KpiDirection>("higher_is_better");
+  const [targetValue, setTargetValue] = useState("");
+  const [weight, setWeight] = useState("");
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !employeeId || !unit.trim() || !targetValue || !weight) return;
+    onSubmit({
+      name: name.trim(),
+      employee_id: employeeId,
+      unit: unit.trim(),
+      direction,
+      target_value: Number(targetValue),
+      weight: Number(weight),
+      period_start: new Date().toISOString().slice(0, 10),
+      period_end: new Date(new Date().getFullYear(), 11, 31).toISOString().slice(0, 10),
+    });
+    setName("");
+    setUnit("");
+    setTargetValue("");
+    setWeight("");
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="KPI name"
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
+        />
+        <select
+          value={employeeId}
+          onChange={(e) => setEmployeeId(e.target.value)}
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text"
+        >
+          <option value="" disabled>
+            Owning employee...
+          </option>
+          {employees.map((emp) => (
+            <option key={emp.id} value={emp.id}>
+              {emp.first_name} {emp.last_name}
+            </option>
+          ))}
+        </select>
+        <input
+          value={unit}
+          onChange={(e) => setUnit(e.target.value)}
+          placeholder="Unit (e.g. count)"
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
+        />
+        <select
+          value={direction}
+          onChange={(e) => setDirection(e.target.value as KpiDirection)}
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text"
+        >
+          {KPI_DIRECTIONS.map((d) => (
+            <option key={d} value={d}>
+              {d.replace(/_/g, " ")}
+            </option>
+          ))}
+        </select>
+        <input
+          type="number"
+          value={targetValue}
+          onChange={(e) => setTargetValue(e.target.value)}
+          placeholder="Target value"
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
+        />
+        <input
+          type="number"
+          value={weight}
+          onChange={(e) => setWeight(e.target.value)}
+          placeholder="Weight (0-100)"
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
+        />
+      </div>
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
+      >
+        {pending ? "Adding..." : "Add KPI"}
+      </button>
+    </form>
+  );
+}
