@@ -1,9 +1,20 @@
+import uuid
+from datetime import date, datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import CurrentEmployee, get_current_employee, get_db
-from app.schemas.employee import EmployeeMe
+from app.core.deps import CurrentEmployee, get_current_employee, get_db, require_permission
+from app.models.employee import Employee as EmployeeModel
+from app.schemas.employee import (
+    Employee,
+    EmployeeCreate,
+    EmployeeMe,
+    EmployeeOffboard,
+    EmployeeUpdate,
+)
+from app.services.supabase_admin import SupabaseAdminError, ban_auth_user, invite_user_by_email
 
 router = APIRouter(prefix="/employees", tags=["employees"])
 
@@ -13,11 +24,6 @@ async def get_me(
     current: CurrentEmployee = Depends(get_current_employee),
     db: AsyncSession = Depends(get_db),
 ) -> EmployeeMe:
-    """The first real end-to-end proof of the auth chain: JWT verified ->
-    app.current_employee_id() resolved -> RLS-scoped row fetched -- if this
-    endpoint works for a logged-in user, the whole foundation (JWT, RLS
-    claim-setting, employees_select policy) is wired correctly.
-    """
     result = await db.execute(
         text("""
             select id, employee_number, first_name, last_name, work_email, status, hire_date
@@ -30,3 +36,149 @@ async def get_me(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
     return EmployeeMe(**row)
+
+
+@router.get("", response_model=list[Employee])
+async def list_employees(
+    db: AsyncSession = Depends(get_db),
+    _current: CurrentEmployee = Depends(get_current_employee),
+) -> list[EmployeeModel]:
+    result = await db.execute(select(EmployeeModel).where(EmployeeModel.deleted_at.is_(None)))
+    return list(result.scalars().all())
+
+
+@router.get("/{employee_id}", response_model=Employee)
+async def get_employee(
+    employee_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _current: CurrentEmployee = Depends(get_current_employee),
+) -> EmployeeModel:
+    employee = await db.get(EmployeeModel, employee_id)
+    if employee is None or employee.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+    return employee
+
+
+@router.post("", response_model=Employee, status_code=status.HTTP_201_CREATED)
+async def create_employee(
+    payload: EmployeeCreate,
+    db: AsyncSession = Depends(get_db),
+    current: CurrentEmployee = Depends(require_permission("employee", "create")),
+) -> EmployeeModel:
+    """employee.create is intentionally NOT company-scoped the way
+    org_structure.manage is (013_scope_aware_org_structure_mutate.sql) --
+    unlike a department/team/position, a brand-new employee has no position
+    assignment yet, so there's no company to scope creation against, the
+    same reason company creation itself stays unscoped. Low real-world risk
+    at Phase 1 scale (single-tenant EDGE, one company total) -- revisit if
+    genuine multi-company tenancy is ever added.
+
+    created_by is set here (not left to a default) so employees_select's
+    "you can see records you created" clause (014_employee_created_by_
+    visibility.sql) actually applies -- otherwise the creator couldn't see
+    the employee they just made until that person is assigned a position.
+    """
+    auth_user_id = None
+    if payload.send_invite:
+        try:
+            auth_user_id = await invite_user_by_email(payload.work_email)
+        except SupabaseAdminError as exc:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    employee = EmployeeModel(
+        **payload.model_dump(exclude={"send_invite"}),
+        auth_user_id=auth_user_id,
+        created_by=uuid.UUID(current.employee_id),
+    )
+    db.add(employee)
+    await db.flush()
+    await db.refresh(employee)
+    return employee
+
+
+@router.patch("/{employee_id}", response_model=Employee)
+async def update_employee(
+    employee_id: uuid.UUID,
+    payload: EmployeeUpdate,
+    db: AsyncSession = Depends(get_db),
+    _current: CurrentEmployee = Depends(get_current_employee),
+) -> EmployeeModel:
+    """No require_permission dependency -- employees_update's own RLS
+    policy already allows self-edit OR has_permission_on_employee(...,
+    'employee', 'update') scoped to the target's accessible subtree, so the
+    UPDATE either succeeds under RLS or raises the 403 translated by
+    core/error_handlers.py. A require_permission("employee","update") guard
+    here would incorrectly block self-edits, since an ordinary employee has
+    no employee.update grant at all -- only the RLS self-check allows it.
+    """
+    employee = await db.get(EmployeeModel, employee_id)
+    if employee is None or employee.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(employee, field, value)
+
+    await db.flush()
+    await db.refresh(employee)
+    return employee
+
+
+@router.post("/{employee_id}/offboard", response_model=Employee)
+async def offboard_employee(
+    employee_id: uuid.UUID,
+    payload: EmployeeOffboard,
+    db: AsyncSession = Depends(get_db),
+    _current: CurrentEmployee = Depends(require_permission("employee", "update")),
+) -> EmployeeModel:
+    """Offboarding is a status change, never a DELETE -- audit history
+    (audit_log, kpi_scores, task assignments, ...) must survive. This:
+    (1) sets status=offboarded + termination_date, (2) closes any open
+    position_assignments so they stop counting as the position's current
+    holder / showing up in the org chart, (3) expires their role grants so
+    a disabled account can't retain elevated access, (4) bans (not deletes)
+    their Supabase Auth account, so login is blocked but the account -- and
+    everything it's linked to -- can be restored on rehire.
+
+    Order matters here, found via testing: the employee row's own UPDATE
+    must flush WHILE their position_assignment is still open, not after.
+    employees_update's RLS check (via has_permission_on_employee ->
+    accessible_employee_ids) requires the target to currently be within the
+    caller's accessible subtree, which depends on them HAVING an open
+    position_assignment -- closing it first, then trying to flush the
+    status change, makes the employee invisible to that RLS check before
+    the UPDATE it's gating even runs, so it silently matches zero rows
+    (StaleDataError) instead of actually offboarding them.
+    """
+    employee = await db.get(EmployeeModel, employee_id)
+    if employee is None or employee.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+
+    employee.status = "offboarded"
+    employee.termination_date = payload.termination_date or date.today()
+    await db.flush()
+
+    await db.execute(
+        text("update position_assignments set end_date = :end_date where employee_id = :employee_id and end_date is null"),
+        {"end_date": employee.termination_date, "employee_id": str(employee_id)},
+    )
+    await db.execute(
+        text("update employee_roles set expires_at = :now where employee_id = :employee_id and (expires_at is null or expires_at > :now)"),
+        {"now": datetime.now(timezone.utc), "employee_id": str(employee_id)},
+    )
+    await db.flush()
+
+    if employee.auth_user_id is not None:
+        try:
+            await ban_auth_user(str(employee.auth_user_id))
+        except SupabaseAdminError as exc:
+            # The DB-side offboarding already committed at this point (flush
+            # above) -- surface the auth-ban failure distinctly rather than
+            # rolling back state that's otherwise correct, so it's visible
+            # and can be retried/handled manually instead of silently lost.
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Employee offboarded, but disabling their login failed: {exc}",
+            ) from exc
+
+    await db.refresh(employee)
+    return employee

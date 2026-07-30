@@ -2,7 +2,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import DBAPIError
 
-from app.api.v1.routers import companies, departments, employees, health, positions, teams
+from app.api.v1.routers import (
+    companies,
+    departments,
+    employee_roles,
+    employees,
+    health,
+    position_assignments,
+    positions,
+    roles,
+    teams,
+)
 from app.core.config import get_settings
 from app.core.error_handlers import rls_violation_handler
 
@@ -24,4 +34,7 @@ app.include_router(companies.router, prefix="/api/v1")
 app.include_router(departments.router, prefix="/api/v1")
 app.include_router(teams.router, prefix="/api/v1")
 app.include_router(positions.router, prefix="/api/v1")
+app.include_router(position_assignments.router, prefix="/api/v1")
 app.include_router(employees.router, prefix="/api/v1")
+app.include_router(roles.router, prefix="/api/v1")
+app.include_router(employee_roles.router, prefix="/api/v1")
