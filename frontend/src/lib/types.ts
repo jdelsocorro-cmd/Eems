@@ -240,6 +240,22 @@ export interface KpiChangeLogEntry {
   reason: string | null;
 }
 
+export interface StatusCounts {
+  counts: Record<string, number>;
+  total: number;
+}
+
+export interface DashboardData {
+  scope_type: "company" | "department" | "team";
+  scope_id: string;
+  headcount: StatusCounts;
+  projects: StatusCounts;
+  tasks: StatusCounts;
+  goals: StatusCounts;
+  average_score: number | null;
+  scored_employee_count: number;
+}
+
 export interface KpiScore {
   id: string;
   employee_id: string;
