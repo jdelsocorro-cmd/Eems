@@ -10,7 +10,9 @@ from app.api.v1.routers import (
     health,
     position_assignments,
     positions,
+    projects,
     roles,
+    tasks,
     teams,
 )
 from app.core.config import get_settings
@@ -38,3 +40,5 @@ app.include_router(position_assignments.router, prefix="/api/v1")
 app.include_router(employees.router, prefix="/api/v1")
 app.include_router(roles.router, prefix="/api/v1")
 app.include_router(employee_roles.router, prefix="/api/v1")
+app.include_router(projects.router, prefix="/api/v1")
+app.include_router(tasks.router, prefix="/api/v1")

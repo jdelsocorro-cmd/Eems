@@ -8,6 +8,8 @@ import OrgAdmin from "@/pages/OrgAdmin";
 import OrgChart from "@/pages/OrgChart";
 import UserManagement from "@/pages/UserManagement";
 import RbacAdmin from "@/pages/RbacAdmin";
+import Projects from "@/pages/Projects";
+import Tasks from "@/pages/Tasks";
 import PlaceholderPage from "@/pages/PlaceholderPage";
 
 export default function App() {
@@ -23,8 +25,8 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<ExecutiveDashboard />} />
                   <Route path="/org-chart" element={<OrgChart />} />
-                  <Route path="/projects" element={<PlaceholderPage title="Projects" />} />
-                  <Route path="/tasks" element={<PlaceholderPage title="My Tasks" />} />
+                  <Route path="/projects" element={<Projects />} />
+                  <Route path="/tasks" element={<Tasks />} />
                   <Route path="/scorecard" element={<PlaceholderPage title="My Scorecard" />} />
                   <Route path="/goals" element={<PlaceholderPage title="Goals" />} />
                   <Route path="/admin/org" element={<OrgAdmin />} />
