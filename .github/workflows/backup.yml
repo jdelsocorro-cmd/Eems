@@ -1,0 +1,40 @@
+name: Nightly backup
+
+# The Supabase free tier caps the DB at 500MB, so dumps stay small -- this
+# is a plain pg_dump, not anything that needs chunking. Two independent
+# copies on purpose: R2 (10GB free, no egress fees, meant to be the durable
+# one) and a GitHub Actions artifact (short-retention, but a second storage
+# provider entirely -- if R2 credentials break silently, this still lands).
+on:
+  schedule:
+    - cron: "0 9 * * *" # 09:00 UTC nightly
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Dump the database
+        run: |
+          timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+          echo "DUMP_FILE=eems-backup-${timestamp}.dump" >> "$GITHUB_ENV"
+          pg_dump "${{ secrets.SUPABASE_DB_ADMIN_URL }}" -F c -f "eems-backup-${timestamp}.dump"
+
+      - name: Upload to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          aws s3 cp "$DUMP_FILE" "s3://${{ secrets.R2_BUCKET_NAME }}/$DUMP_FILE" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+
+      - name: Upload redundant copy as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DUMP_FILE }}
+          path: ${{ env.DUMP_FILE }}
+          retention-days: 14

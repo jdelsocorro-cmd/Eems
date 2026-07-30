@@ -1,0 +1,32 @@
+name: Keep-alive
+
+# Supabase free-tier projects auto-pause after 7 days with no activity --
+# that's a full outage of the whole app, not a UX inconvenience, so this
+# runs well inside that window. A scheduled trigger alone is one failure
+# domain (GitHub occasionally delays or, per its docs, can disable cron on
+# a repo with no commits in 60+ days) -- see the README note in this repo's
+# task list for the second, independent cron-job.org trigger that covers
+# the same endpoint from outside GitHub entirely.
+on:
+  schedule:
+    - cron: "0 */12 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit a real PostgREST query (not just a static endpoint)
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/companies?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+          echo "Supabase REST responded: $status"
+          # 200 (rows) or 401/403 (RLS correctly blocking an unauthenticated
+          # read) both prove the project is awake and responding -- only
+          # fail the job on something that suggests it's actually down.
+          if [ "$status" -ge 500 ] || [ "$status" -eq 000 ]; then
+            echo "Unexpected status from Supabase -- project may be down or paused."
+            exit 1
+          fi
