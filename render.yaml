@@ -1,0 +1,25 @@
+# Render Blueprint -- New + -> Blueprint -> select this repo, and Render
+# reads this file to provision the backend automatically. Secrets are
+# `sync: false` so Render prompts for each value at setup time instead of
+# storing them in this committed file.
+services:
+  - type: web
+    name: eems-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: CORS_ORIGINS
+        sync: false
