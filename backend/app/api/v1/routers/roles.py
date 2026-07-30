@@ -113,8 +113,23 @@ async def revoke_role_permission(
     db: AsyncSession = Depends(get_db),
     _current: CurrentEmployee = Depends(get_current_employee),
 ) -> None:
-    await db.execute(
-        text("delete from role_permissions where role_id = :role_id and permission_id = :permission_id"),
+    """Checks the DELETE actually matched a row -- found via browser
+    testing: a bare `DELETE ... WHERE` that RLS silently filters down to
+    zero matching rows is NOT an error in Postgres (unlike INSERT's WITH
+    CHECK, which raises), so without this check the endpoint would return
+    204 "success" even when role_permissions_mutate correctly blocked
+    editing a system role's permissions -- the client would have no way to
+    tell "revoked" from "silently did nothing." Same RETURNING-then-check
+    pattern already used in position_assignments.end_position_assignment
+    and employee_roles.revoke_employee_role.
+    """
+    result = await db.execute(
+        text("delete from role_permissions where role_id = :role_id and permission_id = :permission_id returning role_id"),
         {"role_id": str(role_id), "permission_id": str(permission_id)},
     )
+    if result.mappings().one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Permission grant not found, or you don't have rights to revoke it for this role",
+        )
     await db.flush()

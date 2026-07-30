@@ -5,6 +5,9 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import Login from "@/pages/Login";
 import ExecutiveDashboard from "@/pages/ExecutiveDashboard";
 import OrgAdmin from "@/pages/OrgAdmin";
+import OrgChart from "@/pages/OrgChart";
+import UserManagement from "@/pages/UserManagement";
+import RbacAdmin from "@/pages/RbacAdmin";
 import PlaceholderPage from "@/pages/PlaceholderPage";
 
 export default function App() {
@@ -19,14 +22,14 @@ export default function App() {
               <AppLayout>
                 <Routes>
                   <Route path="/" element={<ExecutiveDashboard />} />
-                  <Route path="/org-chart" element={<PlaceholderPage title="Org Chart" />} />
+                  <Route path="/org-chart" element={<OrgChart />} />
                   <Route path="/projects" element={<PlaceholderPage title="Projects" />} />
                   <Route path="/tasks" element={<PlaceholderPage title="My Tasks" />} />
                   <Route path="/scorecard" element={<PlaceholderPage title="My Scorecard" />} />
                   <Route path="/goals" element={<PlaceholderPage title="Goals" />} />
                   <Route path="/admin/org" element={<OrgAdmin />} />
-                  <Route path="/admin/rbac" element={<PlaceholderPage title="RBAC Admin" />} />
-                  <Route path="/admin/users" element={<PlaceholderPage title="Users" />} />
+                  <Route path="/admin/rbac" element={<RbacAdmin />} />
+                  <Route path="/admin/users" element={<UserManagement />} />
                 </Routes>
               </AppLayout>
             </ProtectedRoute>

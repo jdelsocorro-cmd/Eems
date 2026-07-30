@@ -176,6 +176,35 @@ async def test_user_management_and_rbac_admin_flow():
         assert resp.status_code == 200
         assert len(resp.json()) == 1 and resp.json()[0]["id"] == perm["id"]
 
+        # --- RBAC: revoking a permission from a SYSTEM role must fail loudly (404), not silently "succeed" (204) ---
+        # Regression test: found via browser testing that a bare `DELETE ...
+        # WHERE` whose row role_permissions_mutate's RLS policy filters out
+        # is NOT a Postgres error (unlike INSERT's WITH CHECK) -- it just
+        # matches zero rows. The original endpoint didn't check for that and
+        # always returned 204, meaning the client had no way to tell
+        # "actually revoked" from "silently blocked and did nothing." Super
+        # Admin (company_id null) can never have its permissions edited via
+        # the API by design (015_scope_aware_rbac_mutate.sql).
+        super_admin_role_id = await admin_conn.fetchval("select id from roles where name = 'Super Admin'")
+        org_structure_manage_perm_id = await admin_conn.fetchval(
+            "select id from permissions where resource = 'org_structure' and action = 'manage'"
+        )
+        resp = await api_client.delete(
+            f"/api/v1/roles/{super_admin_role_id}/permissions/{org_structure_manage_perm_id}", headers=headers
+        )
+        assert resp.status_code == 404, f"expected 404 (system role, RLS-blocked), got {resp.status_code}: {resp.text}"
+        still_granted = await admin_conn.fetchval(
+            "select count(*) from role_permissions where role_id = $1 and permission_id = $2",
+            super_admin_role_id, org_structure_manage_perm_id,
+        )
+        assert still_granted == 1, "Super Admin's permission must still be intact -- the DELETE must not have silently succeeded"
+
+        # --- RBAC: revoking a permission from our OWN company-scoped role must actually work ---
+        resp = await api_client.delete(f"/api/v1/roles/{custom_role_id}/permissions/{perm['id']}", headers=headers)
+        assert resp.status_code == 204, f"expected 204, got {resp.status_code}: {resp.text}"
+        resp = await api_client.get(f"/api/v1/roles/{custom_role_id}/permissions", headers=headers)
+        assert resp.status_code == 200 and len(resp.json()) == 0
+
         # --- RBAC: employee_roles grant, scope enforcement, revoke ---
         resp = await api_client.post(
             "/api/v1/employee-roles", headers=headers,
