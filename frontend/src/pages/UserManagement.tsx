@@ -42,11 +42,7 @@ export default function UserManagement() {
   const createEmployee = useMutation({
     mutationFn: (payload: { first_name: string; last_name: string; work_email: string; send_invite: boolean }) =>
       apiClient.post<Employee>("/employees", payload),
-    onSuccess: (employee) => {
-      queryClient.invalidateQueries({ queryKey: ["employees"] });
-      setSelectedEmployeeId(employee.id);
-      setShowCreateForm(false);
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["employees"] }),
   });
 
   const assignPosition = useMutation({
@@ -54,6 +50,29 @@ export default function UserManagement() {
       apiClient.post<PositionAssignment>("/position-assignments", payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["position-assignments"] }),
   });
+
+  const [provisionError, setProvisionError] = useState<string | null>(null);
+
+  async function handleProvisionEmployee(payload: {
+    first_name: string;
+    last_name: string;
+    work_email: string;
+    send_invite: boolean;
+    position_id: string | null;
+  }) {
+    setProvisionError(null);
+    try {
+      const { position_id, ...employeePayload } = payload;
+      const employee = await createEmployee.mutateAsync(employeePayload);
+      if (position_id) {
+        await assignPosition.mutateAsync({ employee_id: employee.id, position_id });
+      }
+      setSelectedEmployeeId(employee.id);
+      setShowCreateForm(false);
+    } catch (err) {
+      setProvisionError(errorMessage(err));
+    }
+  }
 
   const offboardEmployee = useMutation({
     mutationFn: (employeeId: string) => apiClient.post<Employee>(`/employees/${employeeId}/offboard`, {}),
@@ -80,9 +99,11 @@ export default function UserManagement() {
 
       {showCreateForm && (
         <CreateEmployeeForm
-          onSubmit={(payload) => createEmployee.mutate(payload)}
-          pending={createEmployee.isPending}
-          error={createEmployee.isError ? errorMessage(createEmployee.error) : null}
+          positions={positionsQuery.data ?? []}
+          units={unitsQuery.data ?? []}
+          onSubmit={handleProvisionEmployee}
+          pending={createEmployee.isPending || assignPosition.isPending}
+          error={provisionError}
         />
       )}
 
@@ -150,7 +171,9 @@ export default function UserManagement() {
 
               {selectedEmployee.status !== "offboarded" && (
                 <div className="border-t border-border pt-3">
-                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Assign to position</p>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">
+                    {selectedPosition ? "Reassign position" : "Assign to position"}
+                  </p>
                   <PositionPicker
                     positions={positionsQuery.data ?? []}
                     units={unitsQuery.data ?? []}
@@ -251,11 +274,21 @@ function ErrorBanner({ message }: { message: string }) {
 }
 
 function CreateEmployeeForm({
+  positions,
+  units,
   onSubmit,
   pending,
   error,
 }: {
-  onSubmit: (payload: { first_name: string; last_name: string; work_email: string; send_invite: boolean }) => void;
+  positions: Position[];
+  units: OrgUnit[];
+  onSubmit: (payload: {
+    first_name: string;
+    last_name: string;
+    work_email: string;
+    send_invite: boolean;
+    position_id: string | null;
+  }) => void;
   pending: boolean;
   error: string | null;
 }) {
@@ -263,11 +296,20 @@ function CreateEmployeeForm({
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [sendInvite, setSendInvite] = useState(true);
+  const [positionId, setPositionId] = useState<string | null>(null);
+
+  const selectedPosition = positions.find((p) => p.id === positionId) ?? null;
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim() || !email.trim()) return;
-    onSubmit({ first_name: firstName.trim(), last_name: lastName.trim(), work_email: email.trim(), send_invite: sendInvite });
+    onSubmit({
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
+      work_email: email.trim(),
+      send_invite: sendInvite,
+      position_id: positionId,
+    });
   }
 
   return (
@@ -293,6 +335,26 @@ function CreateEmployeeForm({
           className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
         />
       </div>
+
+      <div className="mt-3">
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">
+          Position (they'll be tied to this the moment they log in with the email above)
+        </p>
+        <PositionPicker positions={positions} units={units} onAssign={setPositionId} />
+        <p className="mt-1 text-xs text-text-muted">
+          {selectedPosition ? (
+            <>
+              Selected: <span className="font-medium text-text">{selectedPosition.title}</span>{" "}
+              <button type="button" onClick={() => setPositionId(null)} className="text-edge-teal hover:underline">
+                Clear
+              </button>
+            </>
+          ) : (
+            "No position selected -- you can assign one later, but it won't happen automatically."
+          )}
+        </p>
+      </div>
+
       <label className="mt-3 flex items-center gap-2 text-sm text-text-muted">
         <input type="checkbox" checked={sendInvite} onChange={(e) => setSendInvite(e.target.checked)} />
         Send an email invite now (uncheck to pre-provision without inviting yet)

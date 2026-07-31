@@ -11,6 +11,22 @@ class ApiError extends Error {
   }
 }
 
+function formatDetail(detail: unknown, fallback: string): string {
+  // FastAPI returns a plain string detail for most errors, but Pydantic
+  // validation failures (422) come back as an array of {msg, loc, ...}
+  // objects -- rendering that array directly as JSX children crashes
+  // React with no error boundary to catch it, so it's normalized to a
+  // string here once rather than in every page's error handling.
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => (typeof d === "string" ? d : typeof d?.msg === "string" ? d.msg : JSON.stringify(d)))
+      .join("; ");
+  }
+  if (detail && typeof detail === "object") return JSON.stringify(detail);
+  return fallback;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const {
     data: { session },
@@ -27,7 +43,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new ApiError(response.status, body.detail ?? response.statusText);
+    throw new ApiError(response.status, formatDetail(body.detail, response.statusText));
   }
 
   if (response.status === 204) {
