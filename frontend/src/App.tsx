@@ -13,6 +13,7 @@ import Projects from "@/pages/Projects";
 import Tasks from "@/pages/Tasks";
 import Goals from "@/pages/Goals";
 import MyScorecard from "@/pages/MyScorecard";
+import AccountSettings from "@/pages/AccountSettings";
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
                   <Route path="/admin/org" element={<OrgAdmin />} />
                   <Route path="/admin/rbac" element={<RbacAdmin />} />
                   <Route path="/admin/users" element={<UserManagement />} />
+                  <Route path="/settings" element={<AccountSettings />} />
                 </Routes>
               </AppLayout>
             </ProtectedRoute>

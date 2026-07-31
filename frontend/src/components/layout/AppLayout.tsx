@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
 import { supabase } from "@/lib/supabaseClient";
 
@@ -39,6 +39,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="sidebar-footer border-t border-border p-2">
+          <Link
+            to="/settings"
+            className="block rounded-edge-sm px-3 py-2 text-sm text-text-muted hover:bg-surface2"
+          >
+            Account Settings
+          </Link>
           <button
             onClick={() => supabase.auth.signOut()}
             className="theme-toggle w-full rounded-edge-sm px-3 py-2 text-left text-sm text-text-muted hover:bg-surface2"
