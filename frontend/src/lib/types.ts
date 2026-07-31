@@ -45,6 +45,7 @@ export interface Employee {
   avatar_url: string | null;
   hire_date: string | null;
   termination_date: string | null;
+  employment_type: EmploymentType | null;
   status: EmployeeStatus;
 }
 

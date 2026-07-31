@@ -1,7 +1,13 @@
 import uuid
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr
+
+# Same set positions.employment_type uses (schemas/org.py) -- kept as its own
+# alias since this describes the person, not the position they currently
+# hold.
+EmploymentType = Literal["full_time", "part_time", "contractor"]
 
 
 class EmployeeMe(BaseModel):
@@ -24,6 +30,7 @@ class EmployeeBase(BaseModel):
     personal_email: str | None = None
     phone: str | None = None
     hire_date: date | None = None
+    employment_type: EmploymentType | None = None
 
 
 class EmployeeCreate(EmployeeBase):
@@ -41,6 +48,8 @@ class EmployeeUpdate(BaseModel):
     personal_email: str | None = None
     phone: str | None = None
     avatar_url: str | None = None
+    hire_date: date | None = None
+    employment_type: EmploymentType | None = None
 
 
 class Employee(EmployeeBase):

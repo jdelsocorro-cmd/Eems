@@ -2,13 +2,24 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
-import type { Employee, OrgUnit, Position, PositionAssignment } from "@/lib/types";
+import type { Employee, EmploymentType, OrgUnit, Position, PositionAssignment } from "@/lib/types";
 
 const STATUS_STYLES: Record<Employee["status"], string> = {
   active: "bg-success-soft text-success",
   on_leave: "bg-warning-soft text-warning",
   offboarded: "bg-danger/10 text-danger",
 };
+
+// Consultant-facing labels -- deliberately only Full-Time/Part-Time are
+// offered when setting this (the "contractor" value exists in the shared
+// enum for positions.employment_type, but isn't a consultant classification
+// EEMS collects here).
+const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+  full_time: "Full-Time Consultant",
+  part_time: "Part-Time Consultant",
+  contractor: "Contractor",
+};
+const CONSULTANT_EMPLOYMENT_TYPES: EmploymentType[] = ["full_time", "part_time"];
 
 export default function UserManagement() {
   const queryClient = useQueryClient();
@@ -40,8 +51,14 @@ export default function UserManagement() {
   const selectedPosition = positionsQuery.data?.find((p) => p.id === selectedAssignment?.position_id) ?? null;
 
   const createEmployee = useMutation({
-    mutationFn: (payload: { first_name: string; last_name: string; work_email: string; send_invite: boolean }) =>
-      apiClient.post<Employee>("/employees", payload),
+    mutationFn: (payload: {
+      first_name: string;
+      last_name: string;
+      work_email: string;
+      send_invite: boolean;
+      hire_date: string | null;
+      employment_type: EmploymentType | null;
+    }) => apiClient.post<Employee>("/employees", payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["employees"] }),
   });
 
@@ -58,6 +75,8 @@ export default function UserManagement() {
     last_name: string;
     work_email: string;
     send_invite: boolean;
+    hire_date: string | null;
+    employment_type: EmploymentType | null;
     position_id: string | null;
   }) {
     setProvisionError(null);
@@ -79,6 +98,17 @@ export default function UserManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employees"] });
       queryClient.invalidateQueries({ queryKey: ["position-assignments"] });
+    },
+  });
+
+  const [editingProfile, setEditingProfile] = useState(false);
+
+  const updateEmployee = useMutation({
+    mutationFn: ({ employeeId, ...payload }: { employeeId: string; hire_date: string | null; employment_type: EmploymentType | null }) =>
+      apiClient.patch<Employee>(`/employees/${employeeId}`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+      setEditingProfile(false);
     },
   });
 
@@ -108,7 +138,7 @@ export default function UserManagement() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-edge-lg border border-border bg-surface">
+        <div className="lg:col-span-2 rounded-edge-lg border border-border bg-surface shadow-edge-sm">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
@@ -121,7 +151,10 @@ export default function UserManagement() {
               {(employeesQuery.data ?? []).map((emp) => (
                 <tr
                   key={emp.id}
-                  onClick={() => setSelectedEmployeeId(emp.id)}
+                  onClick={() => {
+                    setSelectedEmployeeId(emp.id);
+                    setEditingProfile(false);
+                  }}
                   className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
                     selectedEmployeeId === emp.id ? "bg-nav-active" : ""
                   }`}
@@ -148,20 +181,51 @@ export default function UserManagement() {
           </table>
         </div>
 
-        <div className="rounded-edge-lg border border-border bg-surface p-4">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Details</h2>
+        <div className="rounded-edge-lg border border-border bg-surface p-4 shadow-edge-sm">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Consultant Profile</h2>
           {!selectedEmployee ? (
-            <p className="text-sm text-text-dim">Select an employee to see details.</p>
+            <p className="text-sm text-text-dim">Select an employee to see their profile.</p>
           ) : (
             <div className="flex flex-col gap-3">
               <div>
                 <p className="text-base font-medium text-text">
                   {selectedEmployee.first_name} {selectedEmployee.last_name}
                 </p>
-                <p className="text-sm text-text-muted">{selectedEmployee.work_email}</p>
                 <span className={`mt-1 inline-block rounded-edge-sm px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[selectedEmployee.status]}`}>
                   {selectedEmployee.status}
                 </span>
+              </div>
+
+              <div className="border-t border-border pt-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Email</p>
+                <p className="mt-1 text-sm text-text">{selectedEmployee.work_email}</p>
+              </div>
+
+              <div className="border-t border-border pt-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Hire date &amp; employment type</p>
+                  {selectedEmployee.status !== "offboarded" && !editingProfile && (
+                    <button onClick={() => setEditingProfile(true)} className="text-xs text-edge-teal hover:underline">
+                      Edit
+                    </button>
+                  )}
+                </div>
+                {editingProfile ? (
+                  <ConsultantProfileEditForm
+                    employee={selectedEmployee}
+                    onSubmit={(payload) => updateEmployee.mutate({ employeeId: selectedEmployee.id, ...payload })}
+                    onCancel={() => setEditingProfile(false)}
+                    pending={updateEmployee.isPending}
+                    error={updateEmployee.isError ? errorMessage(updateEmployee.error) : null}
+                  />
+                ) : (
+                  <div className="mt-1 flex flex-col gap-0.5">
+                    <p className="text-sm text-text">{selectedEmployee.hire_date ?? "Hire date not set"}</p>
+                    <p className="text-sm text-text">
+                      {selectedEmployee.employment_type ? EMPLOYMENT_TYPE_LABELS[selectedEmployee.employment_type] : "Employment type not set"}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-border pt-3">
@@ -264,6 +328,64 @@ function PositionPicker({
   );
 }
 
+function ConsultantProfileEditForm({
+  employee,
+  onSubmit,
+  onCancel,
+  pending,
+  error,
+}: {
+  employee: Employee;
+  onSubmit: (payload: { hire_date: string | null; employment_type: EmploymentType | null }) => void;
+  onCancel: () => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const [hireDate, setHireDate] = useState(employee.hire_date ?? "");
+  const [employmentType, setEmploymentType] = useState<EmploymentType | "">(employee.employment_type ?? "");
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    onSubmit({ hire_date: hireDate || null, employment_type: employmentType || null });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-1 flex flex-col gap-1.5">
+      <input
+        type="date"
+        value={hireDate}
+        onChange={(e) => setHireDate(e.target.value)}
+        className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
+      />
+      <select
+        value={employmentType}
+        onChange={(e) => setEmploymentType(e.target.value as EmploymentType | "")}
+        className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+      >
+        <option value="">Employment type not set</option>
+        {CONSULTANT_EMPLOYMENT_TYPES.map((t) => (
+          <option key={t} value={t}>
+            {EMPLOYMENT_TYPE_LABELS[t]}
+          </option>
+        ))}
+      </select>
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
+        >
+          {pending ? "Saving..." : "Save"}
+        </button>
+        <button type="button" onClick={onCancel} className="text-sm text-text-muted hover:underline">
+          Cancel
+        </button>
+      </div>
+      {error && <ErrorBanner message={error} />}
+    </form>
+  );
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.detail;
   return "Something went wrong.";
@@ -287,6 +409,8 @@ function CreateEmployeeForm({
     last_name: string;
     work_email: string;
     send_invite: boolean;
+    hire_date: string | null;
+    employment_type: EmploymentType | null;
     position_id: string | null;
   }) => void;
   pending: boolean;
@@ -296,6 +420,8 @@ function CreateEmployeeForm({
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [sendInvite, setSendInvite] = useState(true);
+  const [hireDate, setHireDate] = useState("");
+  const [employmentType, setEmploymentType] = useState<EmploymentType | "">("");
   const [positionId, setPositionId] = useState<string | null>(null);
 
   const selectedPosition = positions.find((p) => p.id === positionId) ?? null;
@@ -308,6 +434,8 @@ function CreateEmployeeForm({
       last_name: lastName.trim(),
       work_email: email.trim(),
       send_invite: sendInvite,
+      hire_date: hireDate || null,
+      employment_type: employmentType || null,
       position_id: positionId,
     });
   }
@@ -334,6 +462,33 @@ function CreateEmployeeForm({
           placeholder="Work email"
           className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
         />
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Hire date</p>
+          <input
+            type="date"
+            value={hireDate}
+            onChange={(e) => setHireDate(e.target.value)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
+          />
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Employment type</p>
+          <select
+            value={employmentType}
+            onChange={(e) => setEmploymentType(e.target.value as EmploymentType | "")}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+          >
+            <option value="">Not set</option>
+            {CONSULTANT_EMPLOYMENT_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {EMPLOYMENT_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="mt-3">

@@ -10,6 +10,11 @@ from app.db.base import Base
 
 EmployeeStatus = PgEnum("active", "on_leave", "offboarded", name="employee_status", create_type=False)
 AssignmentType = PgEnum("permanent", "acting", "interim", name="assignment_type", create_type=False)
+# Same Postgres enum positions.employment_type uses (models/org.py) -- this
+# column describes the specific person's actual classification, which is a
+# distinct concept from what a position's seat is defined as, so it isn't
+# reusing that column, just the same underlying type.
+EmploymentType = PgEnum("full_time", "part_time", "contractor", name="employment_type", create_type=False)
 
 
 class Employee(Base):
@@ -27,6 +32,7 @@ class Employee(Base):
     avatar_url: Mapped[str | None] = mapped_column(String)
     hire_date: Mapped[date | None] = mapped_column(Date)
     termination_date: Mapped[date | None] = mapped_column(Date)
+    employment_type: Mapped[str | None] = mapped_column(EmploymentType)
     status: Mapped[str] = mapped_column(EmployeeStatus, nullable=False, default="active")
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("employees.id"))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
