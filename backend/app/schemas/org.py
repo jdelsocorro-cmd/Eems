@@ -85,6 +85,7 @@ class PositionCreate(PositionBase):
 class PositionUpdate(BaseModel):
     title: str | None = None
     code: str | None = None
+    org_unit_id: uuid.UUID | None = None
     seniority_level: int | None = None
     employment_type: EmploymentType | None = None
     headcount_cap: int | None = None
@@ -94,6 +95,11 @@ class PositionUpdate(BaseModel):
     # what the position_closure/position_hierarchy_history trail exists for)
     # and goes through PositionReparent + POST /positions/{id}/reparent
     # instead of a silent PATCH.
+    #
+    # org_unit_id (which org unit a position belongs to) has no analogous
+    # audit table -- unlike reports_to_position_id, there's no
+    # closure-table/cycle-detection concern in moving a position to a
+    # different unit, so it's a plain editable field like title/code.
 
 
 class Position(PositionBase):

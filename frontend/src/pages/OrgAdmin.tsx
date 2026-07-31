@@ -100,6 +100,12 @@ export default function OrgAdmin() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["positions"] }),
   });
 
+  const movePositionToUnit = useMutation({
+    mutationFn: ({ positionId, orgUnitId }: { positionId: string; orgUnitId: string }) =>
+      apiClient.patch<Position>(`/positions/${positionId}`, { org_unit_id: orgUnitId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["positions"] }),
+  });
+
   const unitsForCompany = useMemo(
     () => (unitsQuery.data ?? []).filter((u) => u.company_id === activeCompanyId),
     [unitsQuery.data, activeCompanyId],
@@ -142,8 +148,8 @@ export default function OrgAdmin() {
         <h1 className="text-lg font-semibold text-text">Org Admin</h1>
         <p className="mt-0.5 text-xs text-text-muted">
           Click a unit to select it. Use <span className="font-medium">+ child</span> to add nested units of any depth (division,
-          department, team -- whatever labels fit) and <span className="font-medium">Move under...</span> to reorganize; every change is
-          audit-logged.
+          department, team -- whatever labels fit), <span className="font-medium">Move under...</span> to reorganize units, and{" "}
+          <span className="font-medium">In: Move to...</span> on a position to move it between units; every change is audit-logged.
         </p>
       </div>
 
@@ -288,6 +294,27 @@ export default function OrgAdmin() {
                             ))}
                         </select>
                       </div>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span className="text-[10px] text-text-muted">In:</span>
+                        <select
+                          className="ml-auto rounded-edge-sm border border-border bg-surface px-1 py-0.5 text-[10px] text-text"
+                          value={p.org_unit_id}
+                          onChange={(e) => {
+                            if (e.target.value !== p.org_unit_id) {
+                              movePositionToUnit.mutate({ positionId: p.id, orgUnitId: e.target.value });
+                            }
+                          }}
+                        >
+                          {unitsForCompany.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              Move to: {u.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {movePositionToUnit.isError && movePositionToUnit.variables?.positionId === p.id && (
+                        <ErrorBanner message={errorMessage(movePositionToUnit.error)} />
+                      )}
                     </li>
                   ),
                 )}
