@@ -4,7 +4,15 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-ScopeType = Literal["company", "department", "team", "position_subtree", "self"]
+# Must mirror the Postgres rbac_scope_type enum (rewritten in
+# 025_migrate_positions_projects_goals_to_org_units.sql, which collapsed
+# the separate 'department'/'team' scope branches into one 'org_unit'
+# scope) -- this Literal was missed during that migration, so every grant
+# at anything but 'company' or 'self' scope was rejected by this schema
+# before ever reaching the database. Found live: granting "Manager" at
+# org_unit scope failed with "Input should be 'company', 'department',
+# 'team', 'position_subtree' or 'self'".
+ScopeType = Literal["company", "org_unit", "position_subtree", "self"]
 
 
 class Permission(BaseModel):
