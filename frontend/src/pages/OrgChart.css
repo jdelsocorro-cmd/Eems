@@ -1,0 +1,77 @@
+/* Connector-line org chart, CSS-only (no JS layout math, no charting
+   library). Classic flexbox org-chart recipe: each node's children are a
+   <ul class="org-tree"> of <li> siblings. The horizontal bar between
+   siblings is drawn as two half top-borders (one on each li) that meet at
+   the shared boundary; a single vertical stub per li drops from that bar
+   into its own box, and a separate rule drops a line from a node's own
+   box down to its children's bar. Scoped to this page only -- not part of
+   the shared token set in theme/tokens.css. */
+
+.org-tree,
+.org-tree ul {
+  display: flex;
+  justify-content: center;
+}
+
+.org-tree ul {
+  padding-top: 1.25rem;
+  position: relative;
+}
+
+.org-tree li {
+  list-style: none;
+  position: relative;
+  padding: 1.25rem 0.625rem 0 0.625rem;
+}
+
+.org-tree li::before,
+.org-tree li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 50%;
+  width: 50%;
+  height: 1.25rem;
+  border-top: 1.5px solid var(--c-border-hover);
+}
+
+.org-tree li::after {
+  right: auto;
+  left: 50%;
+  border-left: 1.5px solid var(--c-border-hover);
+}
+
+/* A lone child has no sibling to form a horizontal bar with, but it should
+   still get a plain vertical stub down to its box -- not float
+   disconnected from its parent. */
+.org-tree li:only-child::before {
+  display: none;
+}
+
+.org-tree li:only-child::after {
+  border-top: none;
+}
+
+.org-tree li:first-child::before,
+.org-tree li:last-child::after {
+  border: 0 none;
+}
+
+.org-tree li:last-child::before {
+  border-right: 1.5px solid var(--c-border-hover);
+  border-radius: 0 6px 0 0;
+}
+
+.org-tree li:first-child::after {
+  border-radius: 6px 0 0 0;
+}
+
+.org-tree ul ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 1.25rem;
+  border-left: 1.5px solid var(--c-border-hover);
+}

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/apiClient";
 import type { Company, Employee, OrgUnit, Position, PositionAssignment } from "@/lib/types";
+import "./OrgChart.css";
 
 interface TreeNode {
   position: Position;
@@ -76,6 +77,14 @@ export default function OrgChart() {
     return haystack.includes(q) || node.children.some(matchesSearch);
   };
 
+  const isDirectMatch = (node: TreeNode): boolean => {
+    const q = search.trim().toLowerCase();
+    if (!q) return false;
+    const emp = employeeForPosition.get(node.position.id);
+    const haystack = `${node.position.title} ${emp ? `${emp.first_name} ${emp.last_name}` : ""}`.toLowerCase();
+    return haystack.includes(q);
+  };
+
   function toggle(id: string) {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -86,12 +95,13 @@ export default function OrgChart() {
   }
 
   const isLoading = companiesQuery.isLoading || positionsQuery.isLoading || unitsQuery.isLoading;
+  const visibleRoots = tree.filter(matchesSearch);
 
   return (
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-xl font-semibold text-text">Org Chart</h1>
-        <p className="mt-1 text-sm text-text-muted">Navigate the company hierarchy. Click a row to expand or collapse.</p>
+        <p className="mt-1 text-sm text-text-muted">Click a box to expand or collapse its reports.</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -114,32 +124,44 @@ export default function OrgChart() {
         />
       </div>
 
-      <div className="rounded-edge-lg border border-border bg-surface p-2">
+      <div className="rounded-edge-lg border border-border bg-surface p-6 overflow-x-auto">
         {isLoading && <p className="p-4 text-sm text-text-muted">Loading...</p>}
         {!isLoading && tree.length === 0 && <p className="p-4 text-sm text-text-dim">No positions in this company yet.</p>}
-        {tree.filter(matchesSearch).map((node) => (
-          <TreeRow
-            key={node.position.id}
-            node={node}
-            depth={0}
-            collapsed={collapsed}
-            onToggle={toggle}
-            employeeForPosition={employeeForPosition}
-            matchesSearch={matchesSearch}
-          />
-        ))}
+        {visibleRoots.length > 0 && (
+          <div className="flex min-w-max justify-center gap-10">
+            {visibleRoots.map((node) => (
+              <OrgNode
+                key={node.position.id}
+                node={node}
+                depth={0}
+                collapsed={collapsed}
+                onToggle={toggle}
+                employeeForPosition={employeeForPosition}
+                matchesSearch={matchesSearch}
+                isDirectMatch={isDirectMatch}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function TreeRow({
+const TIER_BOX_STYLE = [
+  "border border-edge-teal/40 bg-edge-navy text-white shadow-edge-md",
+  "border border-border border-t-[3px] border-t-edge-teal bg-surface shadow-edge-sm",
+  "border border-border bg-surface2",
+];
+
+function OrgNode({
   node,
   depth,
   collapsed,
   onToggle,
   employeeForPosition,
   matchesSearch,
+  isDirectMatch,
 }: {
   node: TreeNode;
   depth: number;
@@ -147,41 +169,60 @@ function TreeRow({
   onToggle: (id: string) => void;
   employeeForPosition: Map<string, Employee>;
   matchesSearch: (node: TreeNode) => boolean;
+  isDirectMatch: (node: TreeNode) => boolean;
 }) {
   const isCollapsed = collapsed.has(node.position.id);
   const employee = employeeForPosition.get(node.position.id);
   const hasChildren = node.children.length > 0;
   const visibleChildren = node.children.filter(matchesSearch);
+  const tierStyle = TIER_BOX_STYLE[Math.min(depth, TIER_BOX_STYLE.length - 1)];
+  const isRoot = depth === 0;
 
   return (
-    <div>
-      <div
+    <div className="flex flex-col items-center">
+      <button
+        type="button"
         onClick={() => hasChildren && onToggle(node.position.id)}
-        style={{ paddingLeft: `${depth * 20 + 8}px` }}
-        className={`flex items-center gap-2 rounded-edge-sm py-1.5 pr-2 text-sm ${hasChildren ? "cursor-pointer hover:bg-surface2" : ""}`}
+        className={`group relative flex w-44 flex-col gap-1 rounded-edge-md px-3 py-2 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle} ${
+          hasChildren ? "cursor-pointer" : "cursor-default"
+        } ${isDirectMatch(node) ? "ring-2 ring-edge-teal ring-offset-1 ring-offset-surface" : ""}`}
       >
-        <span className="w-4 text-text-dim">{hasChildren ? (isCollapsed ? "▸" : "▾") : ""}</span>
-        <span className="font-medium text-text">{node.position.title}</span>
+        <span className={`text-xs font-semibold leading-tight ${isRoot ? "text-white" : "text-text"}`}>
+          {node.position.title}
+        </span>
         {employee ? (
-          <span className="text-text-muted">
-            — {employee.first_name} {employee.last_name}
+          <span className={`text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}>
+            {employee.first_name} {employee.last_name}
           </span>
         ) : (
-          <span className="text-text-dim italic">— vacant</span>
+          <span className="inline-block w-fit rounded-edge-sm bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">
+            Vacant
+          </span>
         )}
-        {hasChildren && <span className="ml-auto text-xs text-text-dim">{node.children.length} direct report(s)</span>}
-      </div>
-      {!isCollapsed && visibleChildren.map((child) => (
-        <TreeRow
-          key={child.position.id}
-          node={child}
-          depth={depth + 1}
-          collapsed={collapsed}
-          onToggle={onToggle}
-          employeeForPosition={employeeForPosition}
-          matchesSearch={matchesSearch}
-        />
-      ))}
+        {hasChildren && (
+          <span className={`mt-0.5 text-[10px] ${isRoot ? "text-white/50" : "text-text-dim"}`}>
+            {isCollapsed ? "▸" : "▾"} {node.children.length} direct report{node.children.length === 1 ? "" : "s"}
+          </span>
+        )}
+      </button>
+
+      {hasChildren && !isCollapsed && visibleChildren.length > 0 && (
+        <ul className="org-tree">
+          {visibleChildren.map((child) => (
+            <li key={child.position.id}>
+              <OrgNode
+                node={child}
+                depth={depth + 1}
+                collapsed={collapsed}
+                onToggle={onToggle}
+                employeeForPosition={employeeForPosition}
+                matchesSearch={matchesSearch}
+                isDirectMatch={isDirectMatch}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
