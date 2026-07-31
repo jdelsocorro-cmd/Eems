@@ -83,17 +83,14 @@ async def test_user_management_and_rbac_admin_flow():
             admin_employee_id, super_admin_role_id, company_id,
         )
 
-        dept_id = await admin_conn.fetchval(
-            "insert into departments (company_id, name, code) values ($1,'Eng',$2) returning id", company_id, f"ENG{suffix}"
-        )
-        team_id = await admin_conn.fetchval(
-            "insert into teams (department_id, name, code) values ($1,'Backend',$2) returning id", dept_id, f"BE{suffix}"
+        unit_id = await admin_conn.fetchval(
+            "insert into org_units (company_id, name, unit_type) values ($1,'Eng','department') returning id", company_id
         )
         position_id = await admin_conn.fetchval(
-            "insert into positions (team_id, title, code) values ($1,'Engineer',$2) returning id", team_id, f"ENG1{suffix}"
+            "insert into positions (org_unit_id, title, code) values ($1,'Engineer',$2) returning id", unit_id, f"ENG1{suffix}"
         )
         other_position_id = await admin_conn.fetchval(
-            "insert into positions (team_id, title, code) values ($1,'Engineer II',$2) returning id", team_id, f"ENG2{suffix}"
+            "insert into positions (org_unit_id, title, code) values ($1,'Engineer II',$2) returning id", unit_id, f"ENG2{suffix}"
         )
 
         resp = await auth_client.post(
@@ -241,8 +238,7 @@ async def test_user_management_and_rbac_admin_flow():
             company_ids = [r["id"] for r in company_ids]
             if company_ids:
                 position_ids = await admin_conn.fetch(
-                    """select p.id from positions p join teams t on t.id = p.team_id
-                       join departments d on d.id = t.department_id where d.company_id = any($1::uuid[])""",
+                    "select p.id from positions p join org_units ou on ou.id = p.org_unit_id where ou.company_id = any($1::uuid[])",
                     company_ids,
                 )
                 position_ids = [r["id"] for r in position_ids]
@@ -258,10 +254,14 @@ async def test_user_management_and_rbac_admin_flow():
                         position_ids,
                     )
                     await admin_conn.execute("delete from positions where id = any($1::uuid[])", position_ids)
-                await admin_conn.execute(
-                    "delete from teams where department_id in (select id from departments where company_id = any($1::uuid[]))", company_ids
-                )
-                await admin_conn.execute("delete from departments where company_id = any($1::uuid[])", company_ids)
+                unit_ids = await admin_conn.fetch("select id from org_units where company_id = any($1::uuid[])", company_ids)
+                unit_ids = [r["id"] for r in unit_ids]
+                if unit_ids:
+                    await admin_conn.execute(
+                        "delete from org_unit_closure where ancestor_unit_id = any($1::uuid[]) or descendant_unit_id = any($1::uuid[])",
+                        unit_ids,
+                    )
+                await admin_conn.execute("delete from org_units where company_id = any($1::uuid[])", company_ids)
 
             emp_ids = await admin_conn.fetch("select id from employees where work_email like $1", f"%eems-t7-%{suffix}%")
             emp_ids = [r["id"] for r in emp_ids]

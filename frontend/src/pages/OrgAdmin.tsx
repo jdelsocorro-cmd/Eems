@@ -1,51 +1,35 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
-import type { Company, Department, Position, Team } from "@/lib/types";
+import type { Company, OrgUnit, Position } from "@/lib/types";
 
-function ErrorBanner({ message }: { message: string }) {
-  return <p className="mt-2 rounded-edge-sm bg-danger/10 px-3 py-2 text-sm text-danger">{message}</p>;
+interface UnitNode {
+  unit: OrgUnit;
+  children: UnitNode[];
 }
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-edge-lg border border-border bg-surface p-4">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">{title}</h2>
-      {children}
-    </div>
-  );
+function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.detail;
+  return "Something went wrong.";
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return <p className="mt-1 rounded-edge-sm bg-danger/10 px-2 py-1 text-xs text-danger">{message}</p>;
 }
 
 export default function OrgAdmin() {
   const queryClient = useQueryClient();
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [addingChildOf, setAddingChildOf] = useState<string | null>(null);
 
-  const companiesQuery = useQuery({
-    queryKey: ["companies"],
-    queryFn: () => apiClient.get<Company[]>("/companies"),
-  });
+  const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiClient.get<Company[]>("/companies") });
+  const unitsQuery = useQuery({ queryKey: ["org-units"], queryFn: () => apiClient.get<OrgUnit[]>("/org-units") });
+  const positionsQuery = useQuery({ queryKey: ["positions"], queryFn: () => apiClient.get<Position[]>("/positions") });
 
-  const departmentsQuery = useQuery({
-    queryKey: ["departments"],
-    queryFn: () => apiClient.get<Department[]>("/departments"),
-  });
-
-  const teamsQuery = useQuery({
-    queryKey: ["teams"],
-    queryFn: () => apiClient.get<Team[]>("/teams"),
-  });
-
-  const positionsQuery = useQuery({
-    queryKey: ["positions"],
-    queryFn: () => apiClient.get<Position[]>("/positions"),
-  });
-
-  const departmentsForCompany = (departmentsQuery.data ?? []).filter((d) => d.company_id === selectedCompanyId);
-  const teamsForDepartment = (teamsQuery.data ?? []).filter((t) => t.department_id === selectedDepartmentId);
-  const positionsForTeam = (positionsQuery.data ?? []).filter((p) => p.team_id === selectedTeamId);
+  const activeCompanyId = selectedCompanyId ?? companiesQuery.data?.[0]?.id ?? null;
 
   const createCompany = useMutation({
     mutationFn: (name: string) => apiClient.post<Company>("/companies", { name }),
@@ -55,322 +39,437 @@ export default function OrgAdmin() {
     },
   });
 
-  const createDepartment = useMutation({
-    mutationFn: (payload: { name: string; code: string }) =>
-      apiClient.post<Department>("/departments", { ...payload, company_id: selectedCompanyId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["departments"] }),
+  const createUnit = useMutation({
+    mutationFn: (payload: { name: string; unit_type: string; parent_unit_id: string | null }) =>
+      apiClient.post<OrgUnit>("/org-units", { ...payload, company_id: activeCompanyId }),
+    onSuccess: (unit) => {
+      queryClient.invalidateQueries({ queryKey: ["org-units"] });
+      setAddingChildOf(null);
+      setSelectedUnitId(unit.id);
+    },
   });
 
-  const createTeam = useMutation({
-    mutationFn: (payload: { name: string; code: string }) =>
-      apiClient.post<Team>("/teams", { ...payload, department_id: selectedDepartmentId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["teams"] }),
+  const reparentUnit = useMutation({
+    mutationFn: ({ unitId, newParentId }: { unitId: string; newParentId: string | null }) =>
+      apiClient.post<OrgUnit>(`/org-units/${unitId}/reparent`, { new_parent_unit_id: newParentId, reason: "Reparented via Org Admin" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["org-units"] }),
   });
 
   const createPosition = useMutation({
     mutationFn: (payload: { title: string; code: string; reports_to_position_id: string | null }) =>
-      apiClient.post<Position>("/positions", { ...payload, team_id: selectedTeamId }),
+      apiClient.post<Position>("/positions", { ...payload, org_unit_id: selectedUnitId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["positions"] }),
   });
 
   const reparentPosition = useMutation({
     mutationFn: ({ positionId, newParentId }: { positionId: string; newParentId: string | null }) =>
-      apiClient.post<Position>(`/positions/${positionId}/reparent`, {
-        new_reports_to_position_id: newParentId,
-        reason: "Reparented via Org Admin",
-      }),
+      apiClient.post<Position>(`/positions/${positionId}/reparent`, { new_reports_to_position_id: newParentId, reason: "Reparented via Org Admin" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["positions"] }),
   });
 
+  const unitsForCompany = useMemo(
+    () => (unitsQuery.data ?? []).filter((u) => u.company_id === activeCompanyId),
+    [unitsQuery.data, activeCompanyId],
+  );
+
+  const tree = useMemo(() => {
+    const byId = new Map(unitsForCompany.map((u) => [u.id, u]));
+    const childrenOf = new Map<string, OrgUnit[]>();
+    const roots: OrgUnit[] = [];
+    for (const u of unitsForCompany) {
+      if (u.parent_unit_id && byId.has(u.parent_unit_id)) {
+        const list = childrenOf.get(u.parent_unit_id) ?? [];
+        list.push(u);
+        childrenOf.set(u.parent_unit_id, list);
+      } else {
+        roots.push(u);
+      }
+    }
+    function build(unit: OrgUnit): UnitNode {
+      return { unit, children: (childrenOf.get(unit.id) ?? []).map(build) };
+    }
+    return roots.map(build);
+  }, [unitsForCompany]);
+
+  function toggle(id: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const selectedUnit = unitsForCompany.find((u) => u.id === selectedUnitId) ?? null;
+  const positionsForUnit = (positionsQuery.data ?? []).filter((p) => p.org_unit_id === selectedUnitId);
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-semibold text-text">Org Admin</h1>
-        <p className="mt-1 text-sm text-text-muted">
-          Manage the Company → Department → Team → Position hierarchy. Reparenting a position updates the whole
-          subtree and is audit-logged.
+        <h1 className="text-lg font-semibold text-text">Org Admin</h1>
+        <p className="mt-0.5 text-xs text-text-muted">
+          Click a unit to select it. Use <span className="font-medium">+ child</span> to add nested units of any depth (division,
+          department, team -- whatever labels fit) and <span className="font-medium">Move under...</span> to reorganize; every change is
+          audit-logged.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
-        <SectionCard title="Companies">
-          <EntityList
-            items={(companiesQuery.data ?? []).map((c) => ({ id: c.id, label: c.name }))}
-            selectedId={selectedCompanyId}
-            onSelect={(id) => {
-              setSelectedCompanyId(id);
-              setSelectedDepartmentId(null);
-              setSelectedTeamId(null);
-            }}
-            loading={companiesQuery.isLoading}
-          />
-          <CreateForm
-            placeholder="Company name"
-            onSubmit={(name) => createCompany.mutate(name)}
-            pending={createCompany.isPending}
-          />
-          {createCompany.isError && <ErrorBanner message={errorMessage(createCompany.error)} />}
-        </SectionCard>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={activeCompanyId ?? ""}
+          onChange={(e) => {
+            setSelectedCompanyId(e.target.value);
+            setSelectedUnitId(null);
+          }}
+          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text"
+        >
+          {(companiesQuery.data ?? []).map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <NewCompanyForm onSubmit={(name) => createCompany.mutate(name)} pending={createCompany.isPending} />
+      </div>
 
-        <SectionCard title="Departments">
-          {!selectedCompanyId ? (
-            <EmptyHint text="Select a company first" />
-          ) : (
-            <>
-              <EntityList
-                items={departmentsForCompany.map((d) => ({ id: d.id, label: `${d.name} (${d.code})` }))}
-                selectedId={selectedDepartmentId}
-                onSelect={(id) => {
-                  setSelectedDepartmentId(id);
-                  setSelectedTeamId(null);
-                }}
-                loading={departmentsQuery.isLoading}
-              />
-              <CreateForm
-                placeholder="Department name"
-                withCode
-                onSubmit={(name, code) => createDepartment.mutate({ name, code: code! })}
-                pending={createDepartment.isPending}
-              />
-              {createDepartment.isError && <ErrorBanner message={errorMessage(createDepartment.error)} />}
-            </>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.3fr_1fr]">
+        <div className="rounded-edge-lg border border-border bg-surface p-2">
+          {unitsQuery.isLoading && <p className="p-3 text-xs text-text-muted">Loading...</p>}
+          {!unitsQuery.isLoading && tree.length === 0 && (
+            <p className="p-3 text-xs text-text-dim">No org units yet -- add the first one below.</p>
           )}
-        </SectionCard>
-
-        <SectionCard title="Teams">
-          {!selectedDepartmentId ? (
-            <EmptyHint text="Select a department first" />
-          ) : (
-            <>
-              <EntityList
-                items={teamsForDepartment.map((t) => ({ id: t.id, label: `${t.name} (${t.code})` }))}
-                selectedId={selectedTeamId}
-                onSelect={setSelectedTeamId}
-                loading={teamsQuery.isLoading}
-              />
-              <CreateForm
-                placeholder="Team name"
-                withCode
-                onSubmit={(name, code) => createTeam.mutate({ name, code: code! })}
-                pending={createTeam.isPending}
-              />
-              {createTeam.isError && <ErrorBanner message={errorMessage(createTeam.error)} />}
-            </>
-          )}
-        </SectionCard>
-
-        <SectionCard title="Positions">
-          {!selectedTeamId ? (
-            <EmptyHint text="Select a team first" />
-          ) : (
-            <PositionsPanel
-              positions={positionsForTeam}
-              allPositions={positionsQuery.data ?? []}
-              onCreate={(title, code, reportsTo) => createPosition.mutate({ title, code, reports_to_position_id: reportsTo })}
-              createPending={createPosition.isPending}
-              createError={createPosition.isError ? errorMessage(createPosition.error) : null}
-              onReparent={(positionId, newParentId) => reparentPosition.mutate({ positionId, newParentId })}
-              reparentError={reparentPosition.isError ? errorMessage(reparentPosition.error) : null}
+          {tree.map((node) => (
+            <UnitRow
+              key={node.unit.id}
+              node={node}
+              depth={0}
+              collapsed={collapsed}
+              onToggle={toggle}
+              selectedUnitId={selectedUnitId}
+              onSelect={setSelectedUnitId}
+              addingChildOf={addingChildOf}
+              onStartAddChild={setAddingChildOf}
+              onCreateChild={(parentId, name, unitType) => createUnit.mutate({ name, unit_type: unitType, parent_unit_id: parentId })}
+              createPending={createUnit.isPending}
+              createError={createUnit.isError ? errorMessage(createUnit.error) : null}
+              allUnits={unitsForCompany}
+              onReparent={(unitId, newParentId) => reparentUnit.mutate({ unitId, newParentId })}
             />
+          ))}
+          <div className="mt-2 border-t border-border pt-2">
+            {addingChildOf === "root" ? (
+              <NewUnitForm
+                onSubmit={(name, unitType) => createUnit.mutate({ name, unit_type: unitType, parent_unit_id: null })}
+                onCancel={() => setAddingChildOf(null)}
+                pending={createUnit.isPending}
+                error={createUnit.isError ? errorMessage(createUnit.error) : null}
+              />
+            ) : (
+              <button
+                onClick={() => setAddingChildOf("root")}
+                className="rounded-edge-sm px-2 py-1 text-xs text-edge-teal hover:bg-surface2"
+              >
+                + Add top-level unit
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-edge-lg border border-border bg-surface p-3">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Positions</h2>
+          {!selectedUnit ? (
+            <p className="text-xs text-text-dim">Select a unit to see and manage its positions.</p>
+          ) : (
+            <>
+              <p className="mb-2 text-xs text-text-muted">
+                In <span className="font-medium text-text">{selectedUnit.name}</span>
+              </p>
+              <ul className="mb-2 flex flex-col gap-1.5">
+                {positionsForUnit.length === 0 && <li className="text-xs text-text-dim">None yet.</li>}
+                {positionsForUnit.map((p) => (
+                  <li key={p.id} className="rounded-edge-sm border border-border bg-surface2 p-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-text">{p.title}</span>
+                      <span className="text-[10px] text-text-dim">{p.code}</span>
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <span className="text-[10px] text-text-muted">
+                        Reports to:{" "}
+                        {p.reports_to_position_id
+                          ? positionsQuery.data?.find((x) => x.id === p.reports_to_position_id)?.title ?? "Unknown"
+                          : "(root)"}
+                      </span>
+                      <select
+                        className="ml-auto rounded-edge-sm border border-border bg-surface px-1 py-0.5 text-[10px] text-text"
+                        value={p.reports_to_position_id ?? ""}
+                        onChange={(e) => reparentPosition.mutate({ positionId: p.id, newParentId: e.target.value || null })}
+                      >
+                        <option value="">(root)</option>
+                        {(positionsQuery.data ?? [])
+                          .filter((candidate) => candidate.id !== p.id)
+                          .map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                              {candidate.title}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {reparentPosition.isError && <ErrorBanner message={errorMessage(reparentPosition.error)} />}
+              <NewPositionForm
+                positionsForUnit={positionsForUnit}
+                onSubmit={(title, code, reportsTo) => createPosition.mutate({ title, code, reports_to_position_id: reportsTo })}
+                pending={createPosition.isPending}
+                error={createPosition.isError ? errorMessage(createPosition.error) : null}
+              />
+            </>
           )}
-        </SectionCard>
+        </div>
       </div>
     </div>
   );
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
-
-function EmptyHint({ text }: { text: string }) {
-  return <p className="text-sm text-text-dim">{text}</p>;
-}
-
-function EntityList({
-  items,
-  selectedId,
+function UnitRow({
+  node,
+  depth,
+  collapsed,
+  onToggle,
+  selectedUnitId,
   onSelect,
-  loading,
+  addingChildOf,
+  onStartAddChild,
+  onCreateChild,
+  createPending,
+  createError,
+  allUnits,
+  onReparent,
 }: {
-  items: { id: string; label: string }[];
-  selectedId: string | null;
+  node: UnitNode;
+  depth: number;
+  collapsed: Set<string>;
+  onToggle: (id: string) => void;
+  selectedUnitId: string | null;
   onSelect: (id: string) => void;
-  loading: boolean;
+  addingChildOf: string | null;
+  onStartAddChild: (id: string) => void;
+  onCreateChild: (parentId: string, name: string, unitType: string) => void;
+  createPending: boolean;
+  createError: string | null;
+  allUnits: OrgUnit[];
+  onReparent: (unitId: string, newParentId: string | null) => void;
 }) {
-  if (loading) return <p className="text-sm text-text-muted">Loading...</p>;
-  if (items.length === 0) return <p className="mb-3 text-sm text-text-dim">None yet.</p>;
+  const isCollapsed = collapsed.has(node.unit.id);
+  const hasChildren = node.children.length > 0;
+  const isSelected = selectedUnitId === node.unit.id;
 
   return (
-    <ul className="mb-3 flex flex-col gap-1">
-      {items.map((item) => (
-        <li key={item.id}>
-          <button
-            onClick={() => onSelect(item.id)}
-            className={`w-full rounded-edge-sm px-2 py-1.5 text-left text-sm transition ${
-              selectedId === item.id
-                ? "bg-nav-active font-medium text-edge-teal"
-                : "text-text hover:bg-surface2"
-            }`}
-          >
-            {item.label}
-          </button>
-        </li>
-      ))}
-    </ul>
+    <div>
+      <div
+        style={{ paddingLeft: `${depth * 18 + 6}px` }}
+        className={`flex items-center gap-1.5 rounded-edge-sm py-1 pr-1.5 text-xs ${isSelected ? "bg-nav-active" : "hover:bg-surface2"}`}
+      >
+        <span
+          onClick={() => hasChildren && onToggle(node.unit.id)}
+          className={`w-3 text-text-dim ${hasChildren ? "cursor-pointer" : ""}`}
+        >
+          {hasChildren ? (isCollapsed ? "▸" : "▾") : ""}
+        </span>
+        <span onClick={() => onSelect(node.unit.id)} className="cursor-pointer font-medium text-text">
+          {node.unit.name}
+        </span>
+        <span className="rounded-edge-sm bg-surface3 px-1 py-0.5 text-[10px] text-text-dim">{node.unit.unit_type}</span>
+        <select
+          className="ml-auto rounded-edge-sm border border-border bg-surface2 px-1 py-0.5 text-[10px] text-text"
+          value={node.unit.parent_unit_id ?? ""}
+          onChange={(e) => onReparent(node.unit.id, e.target.value || null)}
+        >
+          <option value="">Move under: (root)</option>
+          {allUnits
+            .filter((candidate) => candidate.id !== node.unit.id)
+            .map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                Move under: {candidate.name}
+              </option>
+            ))}
+        </select>
+        <button onClick={() => onStartAddChild(node.unit.id)} className="text-[10px] text-edge-teal hover:underline">
+          + child
+        </button>
+      </div>
+
+      {addingChildOf === node.unit.id && (
+        <div style={{ paddingLeft: `${(depth + 1) * 18 + 6}px` }} className="py-1">
+          <NewUnitForm
+            onSubmit={(name, unitType) => onCreateChild(node.unit.id, name, unitType)}
+            onCancel={() => onStartAddChild("")}
+            pending={createPending}
+            error={createError}
+          />
+        </div>
+      )}
+
+      {!isCollapsed &&
+        node.children.map((child) => (
+          <UnitRow
+            key={child.unit.id}
+            node={child}
+            depth={depth + 1}
+            collapsed={collapsed}
+            onToggle={onToggle}
+            selectedUnitId={selectedUnitId}
+            onSelect={onSelect}
+            addingChildOf={addingChildOf}
+            onStartAddChild={onStartAddChild}
+            onCreateChild={onCreateChild}
+            createPending={createPending}
+            createError={createError}
+            allUnits={allUnits}
+            onReparent={onReparent}
+          />
+        ))}
+    </div>
   );
 }
 
-function CreateForm({
-  placeholder,
-  withCode = false,
-  onSubmit,
-  pending,
-}: {
-  placeholder: string;
-  withCode?: boolean;
-  onSubmit: (name: string, code?: string) => void;
-  pending: boolean;
-}) {
+function NewCompanyForm({ onSubmit, pending }: { onSubmit: (name: string) => void; pending: boolean }) {
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim() || (withCode && !code.trim())) return;
-    onSubmit(name.trim(), withCode ? code.trim() : undefined);
+    if (!name.trim()) return;
+    onSubmit(name.trim());
     setName("");
-    setCode("");
   }
-
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-2 border-t border-border pt-3">
+    <form onSubmit={handleSubmit} className="flex items-center gap-1.5">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder={placeholder}
-        className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
+        placeholder="New company name"
+        className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
       />
-      {withCode && (
-        <input
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="Code (e.g. ENG)"
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
-        />
-      )}
       <button
         type="submit"
         disabled={pending}
-        className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
+        className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
       >
-        {pending ? "Adding..." : "+ Add"}
+        + Add
       </button>
     </form>
   );
 }
 
-function PositionsPanel({
-  positions,
-  allPositions,
-  onCreate,
-  createPending,
-  createError,
-  onReparent,
-  reparentError,
+function NewUnitForm({
+  onSubmit,
+  onCancel,
+  pending,
+  error,
 }: {
-  positions: Position[];
-  allPositions: Position[];
-  onCreate: (title: string, code: string, reportsTo: string | null) => void;
-  createPending: boolean;
-  createError: string | null;
-  onReparent: (positionId: string, newParentId: string | null) => void;
-  reparentError: string | null;
+  onSubmit: (name: string, unitType: string) => void;
+  onCancel: () => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const [name, setName] = useState("");
+  const [unitType, setUnitType] = useState("department");
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSubmit(name.trim(), unitType.trim() || "department");
+    setName("");
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-center gap-1.5">
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Unit name"
+        autoFocus
+        className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
+      />
+      <input
+        value={unitType}
+        onChange={(e) => setUnitType(e.target.value)}
+        placeholder="Type (department, team, division...)"
+        className="w-40 rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
+      />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
+      >
+        Add
+      </button>
+      <button type="button" onClick={onCancel} className="text-xs text-text-muted hover:underline">
+        Cancel
+      </button>
+      {error && <ErrorBanner message={error} />}
+    </form>
+  );
+}
+
+function NewPositionForm({
+  positionsForUnit,
+  onSubmit,
+  pending,
+  error,
+}: {
+  positionsForUnit: Position[];
+  onSubmit: (title: string, code: string, reportsTo: string | null) => void;
+  pending: boolean;
+  error: string | null;
 }) {
   const [title, setTitle] = useState("");
   const [code, setCode] = useState("");
-  const [reportsTo, setReportsTo] = useState<string>("");
+  const [reportsTo, setReportsTo] = useState("");
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!title.trim() || !code.trim()) return;
-    onCreate(title.trim(), code.trim(), reportsTo || null);
+    onSubmit(title.trim(), code.trim(), reportsTo || null);
     setTitle("");
     setCode("");
     setReportsTo("");
   }
 
-  const positionTitle = (id: string) => allPositions.find((p) => p.id === id)?.title ?? "Unknown";
-
   return (
-    <>
-      <ul className="mb-3 flex flex-col gap-2">
-        {positions.length === 0 && <p className="text-sm text-text-dim">None yet.</p>}
-        {positions.map((p) => (
-          <li key={p.id} className="rounded-edge-sm border border-border bg-surface2 p-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-text">{p.title}</span>
-              <span className="text-xs text-text-dim">{p.code}</span>
-            </div>
-            <div className="mt-1 flex items-center gap-2">
-              <span className="text-xs text-text-muted">
-                Reports to: {p.reports_to_position_id ? positionTitle(p.reports_to_position_id) : "(root)"}
-              </span>
-              <select
-                className="ml-auto rounded-edge-sm border border-border bg-surface px-1.5 py-0.5 text-xs text-text"
-                value={p.reports_to_position_id ?? ""}
-                onChange={(e) => onReparent(p.id, e.target.value || null)}
-              >
-                <option value="">(root)</option>
-                {positions
-                  .filter((candidate) => candidate.id !== p.id)
-                  .map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>
-                      {candidate.title}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </li>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-1.5 border-t border-border pt-2">
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Position title"
+        className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
+      />
+      <input
+        value={code}
+        onChange={(e) => setCode(e.target.value.toUpperCase())}
+        placeholder="Code (e.g. EM1)"
+        className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
+      />
+      <select
+        value={reportsTo}
+        onChange={(e) => setReportsTo(e.target.value)}
+        className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text"
+      >
+        <option value="">Reports to: (root)</option>
+        {positionsForUnit.map((p) => (
+          <option key={p.id} value={p.id}>
+            Reports to: {p.title}
+          </option>
         ))}
-      </ul>
-      {reparentError && <ErrorBanner message={reparentError} />}
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2 border-t border-border pt-3">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Position title"
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
-        />
-        <input
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="Code (e.g. EM1)"
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
-        />
-        <select
-          value={reportsTo}
-          onChange={(e) => setReportsTo(e.target.value)}
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
-        >
-          <option value="">Reports to: (root)</option>
-          {positions.map((p) => (
-            <option key={p.id} value={p.id}>
-              Reports to: {p.title}
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          disabled={createPending}
-          className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-        >
-          {createPending ? "Adding..." : "+ Add position"}
-        </button>
-      </form>
-      {createError && <ErrorBanner message={createError} />}
-    </>
+      </select>
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
+      >
+        {pending ? "Adding..." : "+ Add position"}
+      </button>
+      {error && <ErrorBanner message={error} />}
+    </form>
   );
 }

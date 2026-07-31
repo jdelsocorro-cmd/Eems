@@ -12,8 +12,7 @@ TaskStatus = Literal["todo", "in_progress", "in_review", "blocked", "done", "can
 
 class ProjectBase(BaseModel):
     company_id: uuid.UUID
-    department_id: uuid.UUID | None = None
-    team_id: uuid.UUID | None = None
+    org_unit_id: uuid.UUID | None = None
     name: str
     description: str | None = None
     status: ProjectStatus = "planning"
@@ -33,8 +32,7 @@ class ProjectCreate(ProjectBase):
 
 
 class ProjectUpdate(BaseModel):
-    department_id: uuid.UUID | None = None
-    team_id: uuid.UUID | None = None
+    org_unit_id: uuid.UUID | None = None
     name: str | None = None
     description: str | None = None
     status: ProjectStatus | None = None

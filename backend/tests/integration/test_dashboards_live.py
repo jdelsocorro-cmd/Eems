@@ -1,10 +1,12 @@
-"""Live test of task 10 (executive/department/team dashboards) against the
-real Supabase database: aggregate counts for headcount/projects/tasks/goals
-at each scope, average-score computation from the latest kpi_scores
-snapshot per employee, and that dashboards are naturally RLS-scoped (an
-outsider with no visibility into the company sees an all-zero dashboard
-rather than an error or someone else's data) plus the one gated case
-(executive dashboard requires dashboard/view_executive).
+"""Live test of task 10 (executive/org-unit dashboards) against the real
+Supabase database: aggregate counts for headcount/projects/tasks/goals at
+each scope, average-score computation from the latest kpi_scores snapshot
+per employee, that dashboards are naturally RLS-scoped (an outsider with no
+visibility into the company sees an all-zero dashboard rather than an error
+or someone else's data) plus the one gated case (executive dashboard
+requires dashboard/view_executive), and that an org-unit dashboard rolls up
+its whole subtree (a Department-level dashboard includes a nested Team's
+data, not just direct children) via org_unit_closure.
 
 Skipped by default -- see test_user_rbac_live.py for the RUN_LIVE_TESTS=1
 convention and rationale.
@@ -70,18 +72,19 @@ async def test_dashboards_flow():
         company_id = await admin_conn.fetchval("insert into companies (name) values ($1) returning id", f"T10 Co {suffix}")
         outsider_company_id = await admin_conn.fetchval("insert into companies (name) values ($1) returning id", f"T10 Outsider Co {suffix}")
 
-        dept_id = await admin_conn.fetchval(
-            "insert into departments (company_id, name, code) values ($1,'Eng',$2) returning id", company_id, f"ENG{suffix}"
+        dept_unit_id = await admin_conn.fetchval(
+            "insert into org_units (company_id, name, unit_type) values ($1,'Eng','department') returning id", company_id
         )
-        team_id = await admin_conn.fetchval(
-            "insert into teams (department_id, name, code) values ($1,'Backend',$2) returning id", dept_id, f"BE{suffix}"
+        team_unit_id = await admin_conn.fetchval(
+            "insert into org_units (company_id, name, unit_type, parent_unit_id) values ($1,'Backend','team',$2) returning id",
+            company_id, dept_unit_id,
         )
         mgr_pos_id = await admin_conn.fetchval(
-            "insert into positions (team_id, title, code) values ($1,'Manager',$2) returning id", team_id, f"MGR{suffix}"
+            "insert into positions (org_unit_id, title, code) values ($1,'Manager',$2) returning id", team_unit_id, f"MGR{suffix}"
         )
         staff_pos_id = await admin_conn.fetchval(
-            "insert into positions (team_id, title, code, reports_to_position_id) values ($1,'Engineer',$2,$3) returning id",
-            team_id, f"ENG{suffix}", mgr_pos_id,
+            "insert into positions (org_unit_id, title, code, reports_to_position_id) values ($1,'Engineer',$2,$3) returning id",
+            team_unit_id, f"ENG{suffix}", mgr_pos_id,
         )
 
         async def make_employee(email: str, first: str) -> tuple[str, dict]:
@@ -146,7 +149,7 @@ async def test_dashboards_flow():
         # projects + tasks in various statuses
         resp = await api_client.post(
             "/api/v1/projects", headers=headers_admin,
-            json={"company_id": str(company_id), "department_id": str(dept_id), "team_id": str(team_id), "name": "P1", "status": "active"},
+            json={"company_id": str(company_id), "org_unit_id": str(team_unit_id), "name": "P1", "status": "active"},
         )
         assert resp.status_code == 201, resp.text
         project_id = resp.json()["id"]
@@ -221,22 +224,27 @@ async def test_dashboards_flow():
         resp = await api_client.get(f"/api/v1/dashboards/executive/{company_id}", headers=headers_outsider)
         assert resp.status_code == 403, f"expected 403, got {resp.status_code}: {resp.text}"
 
-        # --- department dashboard: no permission gate, but RLS naturally scopes it ---
-        resp = await api_client.get(f"/api/v1/dashboards/department/{dept_id}", headers=headers_admin)
+        # --- department-level org-unit dashboard: no permission gate, RLS naturally scopes it.
+        # Rolls up the subtree via org_unit_closure -- P1 is attached to the
+        # nested Backend TEAM unit, not the Department unit directly, and
+        # should still show up here.
+        resp = await api_client.get(f"/api/v1/dashboards/org-unit/{dept_unit_id}", headers=headers_admin)
         assert resp.status_code == 200, resp.text
-        assert resp.json()["headcount"]["total"] == 2
+        dept_dash = resp.json()
+        assert dept_dash["headcount"]["total"] == 2
+        assert dept_dash["projects"]["counts"].get("active") == 1, "should roll up the nested team's project"
 
-        # outsider CAN load the department dashboard (no permission gate) but sees nothing real --
+        # outsider CAN load the org-unit dashboard (no permission gate) but sees nothing real --
         # RLS filters every underlying table to zero visible rows for them
-        resp = await api_client.get(f"/api/v1/dashboards/department/{dept_id}", headers=headers_outsider)
+        resp = await api_client.get(f"/api/v1/dashboards/org-unit/{dept_unit_id}", headers=headers_outsider)
         assert resp.status_code == 200, resp.text
         outsider_dept_dash = resp.json()
         assert outsider_dept_dash["headcount"]["total"] == 0
         assert outsider_dept_dash["projects"]["total"] == 0
         assert outsider_dept_dash["average_score"] is None
 
-        # --- team dashboard: manager (holds no dashboard permission, but has subtree visibility via their own position) ---
-        resp = await api_client.get(f"/api/v1/dashboards/team/{team_id}", headers=headers_manager)
+        # --- team-level org-unit dashboard: manager (holds no dashboard permission, but has subtree visibility via their own position) ---
+        resp = await api_client.get(f"/api/v1/dashboards/org-unit/{team_unit_id}", headers=headers_manager)
         assert resp.status_code == 200, resp.text
         team_dash = resp.json()
         assert team_dash["headcount"]["total"] == 2, "manager should see themself + their direct report via accessible_employee_ids"
@@ -262,8 +270,7 @@ async def test_dashboards_flow():
             await admin_conn.execute("delete from projects where company_id = any($1::uuid[])", company_ids)
 
             position_ids = await admin_conn.fetch(
-                """select p.id from positions p join teams t on t.id = p.team_id
-                   join departments d on d.id = t.department_id where d.company_id = any($1::uuid[])""",
+                "select p.id from positions p join org_units ou on ou.id = p.org_unit_id where ou.company_id = any($1::uuid[])",
                 company_ids,
             )
             position_ids = [r["id"] for r in position_ids]
@@ -279,8 +286,20 @@ async def test_dashboards_flow():
                     position_ids,
                 )
                 await admin_conn.execute("delete from positions where id = any($1::uuid[])", position_ids)
-            await admin_conn.execute("delete from teams where department_id in (select id from departments where company_id = any($1::uuid[]))", company_ids)
-            await admin_conn.execute("delete from departments where company_id = any($1::uuid[])", company_ids)
+
+            unit_ids = await admin_conn.fetch("select id from org_units where company_id = any($1::uuid[])", company_ids)
+            unit_ids = [r["id"] for r in unit_ids]
+            if unit_ids:
+                await admin_conn.execute(
+                    "delete from org_unit_closure where ancestor_unit_id = any($1::uuid[]) or descendant_unit_id = any($1::uuid[])",
+                    unit_ids,
+                )
+                await admin_conn.execute("update org_units set parent_unit_id = null where id = any($1::uuid[])", unit_ids)
+                await admin_conn.execute(
+                    "delete from org_unit_hierarchy_history where org_unit_id = any($1::uuid[]) or old_parent_unit_id = any($1::uuid[]) or new_parent_unit_id = any($1::uuid[])",
+                    unit_ids,
+                )
+                await admin_conn.execute("delete from org_units where id = any($1::uuid[])", unit_ids)
 
             if emp_ids:
                 await admin_conn.execute("delete from employee_roles where employee_id = any($1::uuid[])", emp_ids)

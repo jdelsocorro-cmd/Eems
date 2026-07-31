@@ -3,9 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
-import type { Company, DashboardData, Department, Team } from "@/lib/types";
+import type { Company, DashboardData, OrgUnit } from "@/lib/types";
 
-type ScopeType = "company" | "department" | "team";
+type ScopeType = "company" | "org_unit";
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.detail;
@@ -41,24 +41,16 @@ export default function ExecutiveDashboard() {
   const [scopeId, setScopeId] = useState<string>("");
 
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiClient.get<Company[]>("/companies"), enabled: !!session });
-  const departmentsQuery = useQuery({ queryKey: ["departments"], queryFn: () => apiClient.get<Department[]>("/departments"), enabled: !!session });
-  const teamsQuery = useQuery({ queryKey: ["teams"], queryFn: () => apiClient.get<Team[]>("/teams"), enabled: !!session });
+  const unitsQuery = useQuery({ queryKey: ["org-units"], queryFn: () => apiClient.get<OrgUnit[]>("/org-units"), enabled: !!session });
 
   const options: Array<{ id: string; name: string }> =
     scopeType === "company"
       ? (companiesQuery.data ?? []).map((c) => ({ id: c.id, name: c.name }))
-      : scopeType === "department"
-        ? (departmentsQuery.data ?? []).map((d) => ({ id: d.id, name: d.name }))
-        : (teamsQuery.data ?? []).map((t) => ({ id: t.id, name: t.name }));
+      : (unitsQuery.data ?? []).map((u) => ({ id: u.id, name: `${u.name} (${u.unit_type})` }));
 
   const effectiveScopeId = scopeId || options[0]?.id || "";
 
-  const endpoint =
-    scopeType === "company"
-      ? `/dashboards/executive/${effectiveScopeId}`
-      : scopeType === "department"
-        ? `/dashboards/department/${effectiveScopeId}`
-        : `/dashboards/team/${effectiveScopeId}`;
+  const endpoint = scopeType === "company" ? `/dashboards/executive/${effectiveScopeId}` : `/dashboards/org-unit/${effectiveScopeId}`;
 
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", scopeType, effectiveScopeId],
@@ -83,8 +75,7 @@ export default function ExecutiveDashboard() {
           className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
         >
           <option value="company">Company (executive)</option>
-          <option value="department">Department</option>
-          <option value="team">Team</option>
+          <option value="org_unit">Org unit</option>
         </select>
         <select
           value={effectiveScopeId}

@@ -5,20 +5,19 @@ from sqlalchemy.exc import DBAPIError
 from app.api.v1.routers import (
     companies,
     dashboards,
-    departments,
     employee_roles,
     employees,
     goals,
     health,
     kpi_templates,
     kpis,
+    org_units,
     position_assignments,
     positions,
     projects,
     roles,
     scores,
     tasks,
-    teams,
 )
 from app.core.config import get_settings
 from app.core.error_handlers import rls_violation_handler
@@ -38,8 +37,7 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(companies.router, prefix="/api/v1")
-app.include_router(departments.router, prefix="/api/v1")
-app.include_router(teams.router, prefix="/api/v1")
+app.include_router(org_units.router, prefix="/api/v1")
 app.include_router(positions.router, prefix="/api/v1")
 app.include_router(position_assignments.router, prefix="/api/v1")
 app.include_router(employees.router, prefix="/api/v1")

@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-GoalType = Literal["company", "department", "team", "individual"]
+GoalType = Literal["company", "org_unit", "individual"]
 GoalStatus = Literal["draft", "active", "completed", "archived"]
 KpiDirection = Literal["higher_is_better", "lower_is_better", "target_is_exact"]
 KpiStatus = Literal["active", "completed", "archived"]
@@ -16,8 +16,7 @@ class GoalBase(BaseModel):
     title: str
     description: str | None = None
     goal_type: GoalType
-    department_id: uuid.UUID | None = None
-    team_id: uuid.UUID | None = None
+    org_unit_id: uuid.UUID | None = None
     employee_id: uuid.UUID | None = None
     parent_goal_id: uuid.UUID | None = None
     period_start: date
@@ -30,10 +29,9 @@ class GoalBase(BaseModel):
         # validated here too so the client gets a clean 422 instead of a raw
         # constraint-violation 500.
         owners = {
-            "company": (self.department_id is None and self.team_id is None and self.employee_id is None),
-            "department": (self.department_id is not None and self.team_id is None and self.employee_id is None),
-            "team": (self.department_id is None and self.team_id is not None and self.employee_id is None),
-            "individual": (self.department_id is None and self.team_id is None and self.employee_id is not None),
+            "company": (self.org_unit_id is None and self.employee_id is None),
+            "org_unit": (self.org_unit_id is not None and self.employee_id is None),
+            "individual": (self.org_unit_id is None and self.employee_id is not None),
         }
         if not owners[self.goal_type]:
             raise ValueError(f"goal_type '{self.goal_type}' requires exactly its own owning field set")

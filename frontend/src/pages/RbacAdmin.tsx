@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import type { Company, Employee, EmployeeRole, Permission, Role, ScopeType } from "@/lib/types";
 
-const SCOPE_TYPES: ScopeType[] = ["company", "department", "team", "position_subtree", "self"];
+const SCOPE_TYPES: ScopeType[] = ["company", "org_unit", "position_subtree", "self"];
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.detail;

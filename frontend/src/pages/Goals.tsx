@@ -3,9 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
-import type { Company, Employee, Goal, GoalStatus, GoalType, Kpi, KpiDirection } from "@/lib/types";
+import type { Company, Employee, Goal, GoalStatus, GoalType, Kpi, KpiDirection, OrgUnit } from "@/lib/types";
 
-const GOAL_TYPES: GoalType[] = ["company", "department", "team", "individual"];
+const GOAL_TYPES: GoalType[] = ["company", "org_unit", "individual"];
 const GOAL_STATUSES: GoalStatus[] = ["draft", "active", "completed", "archived"];
 const KPI_DIRECTIONS: KpiDirection[] = ["higher_is_better", "lower_is_better", "target_is_exact"];
 
@@ -40,6 +40,7 @@ export default function Goals() {
   const goalsQuery = useQuery({ queryKey: ["goals"], queryFn: () => apiClient.get<Goal[]>("/goals") });
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiClient.get<Company[]>("/companies") });
   const employeesQuery = useQuery({ queryKey: ["employees"], queryFn: () => apiClient.get<Employee[]>("/employees") });
+  const unitsQuery = useQuery({ queryKey: ["org-units"], queryFn: () => apiClient.get<OrgUnit[]>("/org-units") });
 
   const selectedGoal = goalsQuery.data?.find((g) => g.id === selectedGoalId) ?? null;
 
@@ -73,7 +74,7 @@ export default function Goals() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-text">Goals</h1>
-          <p className="mt-1 text-sm text-text-muted">Company, department, team, and individual goals with cascading alignment.</p>
+          <p className="mt-1 text-sm text-text-muted">Company, org-unit, and individual goals with cascading alignment.</p>
         </div>
         <button
           onClick={() => setShowCreateForm((v) => !v)}
@@ -87,6 +88,7 @@ export default function Goals() {
         <CreateGoalForm
           companies={companiesQuery.data ?? []}
           employees={employeesQuery.data ?? []}
+          units={unitsQuery.data ?? []}
           defaultEmployeeId={meQuery.data?.id ?? ""}
           onSubmit={(payload) => createGoal.mutate(payload)}
           pending={createGoal.isPending}
@@ -194,6 +196,7 @@ export default function Goals() {
 function CreateGoalForm({
   companies,
   employees,
+  units,
   defaultEmployeeId,
   onSubmit,
   pending,
@@ -201,6 +204,7 @@ function CreateGoalForm({
 }: {
   companies: Company[];
   employees: Employee[];
+  units: OrgUnit[];
   defaultEmployeeId: string;
   onSubmit: (payload: Record<string, unknown>) => void;
   pending: boolean;
@@ -210,12 +214,14 @@ function CreateGoalForm({
   const [companyId, setCompanyId] = useState("");
   const [goalType, setGoalType] = useState<GoalType>("individual");
   const [employeeId, setEmployeeId] = useState(defaultEmployeeId);
+  const [orgUnitId, setOrgUnitId] = useState("");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!title.trim() || !companyId || !periodStart || !periodEnd) return;
+    if (goalType === "org_unit" && !orgUnitId) return;
     const payload: Record<string, unknown> = {
       title: title.trim(),
       company_id: companyId,
@@ -224,6 +230,7 @@ function CreateGoalForm({
       period_end: periodEnd,
     };
     if (goalType === "individual") payload.employee_id = employeeId;
+    if (goalType === "org_unit") payload.org_unit_id = orgUnitId;
     onSubmit(payload);
   }
 
@@ -270,6 +277,22 @@ function CreateGoalForm({
             {employees.map((emp) => (
               <option key={emp.id} value={emp.id}>
                 {emp.first_name} {emp.last_name}
+              </option>
+            ))}
+          </select>
+        )}
+        {goalType === "org_unit" && (
+          <select
+            value={orgUnitId}
+            onChange={(e) => setOrgUnitId(e.target.value)}
+            className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+          >
+            <option value="" disabled>
+              Choose a unit...
+            </option>
+            {units.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.unit_type})
               </option>
             ))}
           </select>

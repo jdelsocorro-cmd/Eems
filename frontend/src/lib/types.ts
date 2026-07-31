@@ -6,20 +6,13 @@ export interface Company {
   is_active: boolean;
 }
 
-export interface Department {
+export interface OrgUnit {
   id: string;
   company_id: string;
+  parent_unit_id: string | null;
+  unit_type: string;
   name: string;
-  code: string;
-  description: string | null;
-  is_active: boolean;
-}
-
-export interface Team {
-  id: string;
-  department_id: string;
-  name: string;
-  code: string;
+  code: string | null;
   description: string | null;
   is_active: boolean;
 }
@@ -28,7 +21,7 @@ export type EmploymentType = "full_time" | "part_time" | "contractor";
 
 export interface Position {
   id: string;
-  team_id: string;
+  org_unit_id: string;
   title: string;
   code: string;
   reports_to_position_id: string | null;
@@ -82,7 +75,7 @@ export interface Role {
   is_system: boolean;
 }
 
-export type ScopeType = "company" | "department" | "team" | "position_subtree" | "self";
+export type ScopeType = "company" | "org_unit" | "position_subtree" | "self";
 
 export interface EmployeeRole {
   id: string;
@@ -103,8 +96,7 @@ export type TaskStatus = "todo" | "in_progress" | "in_review" | "blocked" | "don
 export interface Project {
   id: string;
   company_id: string;
-  department_id: string | null;
-  team_id: string | null;
+  org_unit_id: string | null;
   name: string;
   description: string | null;
   status: ProjectStatus;
@@ -164,7 +156,7 @@ export interface TaskComment {
   updated_at: string;
 }
 
-export type GoalType = "company" | "department" | "team" | "individual";
+export type GoalType = "company" | "org_unit" | "individual";
 export type GoalStatus = "draft" | "active" | "completed" | "archived";
 export type KpiDirection = "higher_is_better" | "lower_is_better" | "target_is_exact";
 export type KpiStatus = "active" | "completed" | "archived";
@@ -176,8 +168,7 @@ export interface Goal {
   title: string;
   description: string | null;
   goal_type: GoalType;
-  department_id: string | null;
-  team_id: string | null;
+  org_unit_id: string | null;
   employee_id: string | null;
   parent_goal_id: string | null;
   period_start: string;
@@ -246,7 +237,7 @@ export interface StatusCounts {
 }
 
 export interface DashboardData {
-  scope_type: "company" | "department" | "team";
+  scope_type: "company" | "org_unit";
   scope_id: string;
   headcount: StatusCounts;
   projects: StatusCounts;

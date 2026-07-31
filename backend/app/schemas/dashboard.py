@@ -7,8 +7,9 @@ class StatusCounts(BaseModel):
 
 
 class Dashboard(BaseModel):
-    """Shared shape for executive/department/team dashboards -- all three
-    are the same rollup at a different scope, so one schema covers them.
+    """Shared shape for the executive (company) dashboard and any org-unit
+    dashboard (which rolls up its whole subtree) -- both are the same
+    rollup at a different scope, so one schema covers them.
     """
 
     scope_type: str

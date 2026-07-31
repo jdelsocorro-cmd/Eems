@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/apiClient";
-import type { Company, Employee, Position, PositionAssignment, Team } from "@/lib/types";
+import type { Company, Employee, OrgUnit, Position, PositionAssignment } from "@/lib/types";
 
 interface TreeNode {
   position: Position;
@@ -15,7 +15,7 @@ export default function OrgChart() {
   const [search, setSearch] = useState("");
 
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiClient.get<Company[]>("/companies") });
-  const teamsQuery = useQuery({ queryKey: ["teams"], queryFn: () => apiClient.get<Team[]>("/teams") });
+  const unitsQuery = useQuery({ queryKey: ["org-units"], queryFn: () => apiClient.get<OrgUnit[]>("/org-units") });
   const positionsQuery = useQuery({ queryKey: ["positions"], queryFn: () => apiClient.get<Position[]>("/positions") });
   const employeesQuery = useQuery({ queryKey: ["employees"], queryFn: () => apiClient.get<Employee[]>("/employees") });
   const assignmentsQuery = useQuery({
@@ -25,17 +25,14 @@ export default function OrgChart() {
 
   const activeCompanyId = selectedCompanyId ?? companiesQuery.data?.[0]?.id ?? null;
 
-  const teamIdsForCompany = useMemo(() => {
-    if (!activeCompanyId || !teamsQuery.data) return new Set<string>();
-    // Teams don't carry company_id directly -- derive via department, which
-    // this page doesn't otherwise need, so just accept all teams when there's
-    // only one company (Phase 1 reality) and narrow later if that changes.
-    return new Set(teamsQuery.data.map((t) => t.id));
-  }, [activeCompanyId, teamsQuery.data]);
+  const unitIdsForCompany = useMemo(() => {
+    if (!activeCompanyId || !unitsQuery.data) return new Set<string>();
+    return new Set(unitsQuery.data.filter((u) => u.company_id === activeCompanyId).map((u) => u.id));
+  }, [activeCompanyId, unitsQuery.data]);
 
   const tree = useMemo(() => {
     if (!positionsQuery.data) return [];
-    const positions = positionsQuery.data.filter((p) => teamIdsForCompany.has(p.team_id));
+    const positions = positionsQuery.data.filter((p) => unitIdsForCompany.has(p.org_unit_id));
     const byId = new Map(positions.map((p) => [p.id, p]));
     const childrenOf = new Map<string, Position[]>();
     const roots: Position[] = [];
@@ -58,7 +55,7 @@ export default function OrgChart() {
     }
 
     return roots.map(build);
-  }, [positionsQuery.data, teamIdsForCompany]);
+  }, [positionsQuery.data, unitIdsForCompany]);
 
   const employeeForPosition = useMemo(() => {
     const map = new Map<string, Employee>();
@@ -88,7 +85,7 @@ export default function OrgChart() {
     });
   }
 
-  const isLoading = companiesQuery.isLoading || positionsQuery.isLoading || teamsQuery.isLoading;
+  const isLoading = companiesQuery.isLoading || positionsQuery.isLoading || unitsQuery.isLoading;
 
   return (
     <div className="flex flex-col gap-4">

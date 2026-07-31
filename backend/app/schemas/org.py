@@ -28,61 +28,47 @@ class Company(CompanyBase):
     id: uuid.UUID
 
 
-class DepartmentBase(BaseModel):
+class OrgUnitBase(BaseModel):
     company_id: uuid.UUID
+    parent_unit_id: uuid.UUID | None = None
+    unit_type: str = "department"
     name: str
-    code: str
+    code: str | None = None
     description: str | None = None
     is_active: bool = True
 
 
-class DepartmentCreate(DepartmentBase):
+class OrgUnitCreate(OrgUnitBase):
     pass
 
 
-class DepartmentUpdate(BaseModel):
+class OrgUnitUpdate(BaseModel):
     name: str | None = None
+    unit_type: str | None = None
     code: str | None = None
     description: str | None = None
     is_active: bool | None = None
+    # parent_unit_id deliberately excluded here, same reasoning as
+    # PositionUpdate below -- reparenting is a distinct, audited action
+    # (POST /org-units/{id}/reparent), not a silent PATCH.
 
 
-class Department(DepartmentBase):
+class OrgUnit(OrgUnitBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
 
 
-class TeamBase(BaseModel):
-    department_id: uuid.UUID
-    name: str
-    code: str
-    description: str | None = None
-    is_active: bool = True
-
-
-class TeamCreate(TeamBase):
-    pass
-
-
-class TeamUpdate(BaseModel):
-    name: str | None = None
-    code: str | None = None
-    description: str | None = None
-    is_active: bool | None = None
-
-
-class Team(TeamBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
+class OrgUnitReparent(BaseModel):
+    new_parent_unit_id: uuid.UUID | None
+    reason: str | None = None
 
 
 EmploymentType = Literal["full_time", "part_time", "contractor"]
 
 
 class PositionBase(BaseModel):
-    team_id: uuid.UUID
+    org_unit_id: uuid.UUID
     title: str
     code: str
     reports_to_position_id: uuid.UUID | None = None

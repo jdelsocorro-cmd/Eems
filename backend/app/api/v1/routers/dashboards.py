@@ -12,39 +12,35 @@ router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
 # Every query below runs on the normal RLS-scoped eems_app connection, same
 # as every other read in this codebase -- no bypass, no extra bypass
-# function needed. That's deliberate: a dashboard is just an aggregate over
-# tables that are already correctly scoped by their own RLS policies
-# (employees_select, projects_select, tasks_select, goals_select), so
-# whatever the caller can't individually see, they also can't see summed up
-# here. Company-scope filtering below (via the department/team/company join
-# chain) narrows WHICH rows the aggregate considers; RLS still governs
+# function needed. A dashboard is just an aggregate over tables that are
+# already correctly scoped by their own RLS policies (employees_select,
+# projects_select, tasks_select, goals_select); whatever the caller can't
+# individually see, they also can't see summed up here. The scope filtering
+# below narrows WHICH rows the aggregate considers; RLS still governs
 # whether the caller is allowed to see each of those rows at all.
+#
+# "org_unit" scope rolls up the whole subtree via org_unit_closure (024),
+# not just direct matches -- a unit with nested units under it (e.g. a
+# Division containing Departments containing Teams) should show everything
+# nested under it on its dashboard, the same way position_subtree scope
+# already works for RBAC grants.
 EMPLOYEE_SCOPE_JOIN = {
     "company": """
         join position_assignments pa on pa.employee_id = e.id and pa.end_date is null and pa.is_primary
         join positions p on p.id = pa.position_id
-        join teams t on t.id = p.team_id
-        join departments d on d.id = t.department_id
-        where d.company_id = :scope_id
+        join org_units ou on ou.id = p.org_unit_id
+        where ou.company_id = :scope_id
     """,
-    "department": """
+    "org_unit": """
         join position_assignments pa on pa.employee_id = e.id and pa.end_date is null and pa.is_primary
         join positions p on p.id = pa.position_id
-        join teams t on t.id = p.team_id
-        where t.department_id = :scope_id
-    """,
-    "team": """
-        join position_assignments pa on pa.employee_id = e.id and pa.end_date is null and pa.is_primary
-        join positions p on p.id = pa.position_id
-        where p.team_id = :scope_id
+        join org_unit_closure ouc on ouc.descendant_unit_id = p.org_unit_id
+        where ouc.ancestor_unit_id = :scope_id
     """,
 }
 
-PROJECT_SCOPE_COLUMN = {"company": "company_id", "department": "department_id", "team": "team_id"}
-GOAL_SCOPE_COLUMN = {"company": "company_id", "department": "department_id", "team": "team_id"}
 
-
-async def _build_dashboard(db: AsyncSession, scope_type: Literal["company", "department", "team"], scope_id: uuid.UUID) -> Dashboard:
+async def _build_dashboard(db: AsyncSession, scope_type: Literal["company", "org_unit"], scope_id: uuid.UUID) -> Dashboard:
     headcount_result = await db.execute(
         text(f"""
             select e.status, count(*) as n
@@ -57,22 +53,28 @@ async def _build_dashboard(db: AsyncSession, scope_type: Literal["company", "dep
     )
     headcount = {row.status: row.n for row in headcount_result.all()}
 
-    project_column = PROJECT_SCOPE_COLUMN[scope_type]
-    projects_result = await db.execute(
-        text(f"""
-            select status, count(*) as n from projects
-            where {project_column} = :scope_id and deleted_at is null
-            group by status
-        """),
-        {"scope_id": str(scope_id)},
-    )
+    if scope_type == "company":
+        projects_result = await db.execute(
+            text("select status, count(*) as n from projects where company_id = :scope_id and deleted_at is null group by status"),
+            {"scope_id": str(scope_id)},
+        )
+    else:
+        projects_result = await db.execute(
+            text("""
+                select status, count(*) as n from projects
+                where org_unit_id in (select descendant_unit_id from org_unit_closure where ancestor_unit_id = :scope_id)
+                  and deleted_at is null
+                group by status
+            """),
+            {"scope_id": str(scope_id)},
+        )
     projects = {row.status: row.n for row in projects_result.all()}
 
-    # project_ids_in_scope() (023) bypasses projects' own RLS for this
-    # lookup so scope resolution doesn't accidentally require projects_select
-    # visibility (a different permission axis from tasks_select's own
-    # assignee-subtree visibility, which is what should actually gate which
-    # tasks show up here) -- see that migration for the bug this fixed.
+    # project_ids_in_scope() (023, updated in 025) bypasses projects' own
+    # RLS for this lookup so scope resolution doesn't accidentally require
+    # projects_select visibility (a different permission axis from
+    # tasks_select's own assignee-subtree visibility, which is what should
+    # actually gate which tasks show up here) -- see 023 for the bug this fixed.
     tasks_result = await db.execute(
         text("""
             select status, count(*) as n
@@ -85,15 +87,21 @@ async def _build_dashboard(db: AsyncSession, scope_type: Literal["company", "dep
     )
     tasks = {row.status: row.n for row in tasks_result.all()}
 
-    goal_column = GOAL_SCOPE_COLUMN[scope_type]
-    goals_result = await db.execute(
-        text(f"""
-            select status, count(*) as n from goals
-            where {goal_column} = :scope_id and deleted_at is null
-            group by status
-        """),
-        {"scope_id": str(scope_id)},
-    )
+    if scope_type == "company":
+        goals_result = await db.execute(
+            text("select status, count(*) as n from goals where company_id = :scope_id and deleted_at is null group by status"),
+            {"scope_id": str(scope_id)},
+        )
+    else:
+        goals_result = await db.execute(
+            text("""
+                select status, count(*) as n from goals
+                where org_unit_id in (select descendant_unit_id from org_unit_closure where ancestor_unit_id = :scope_id)
+                  and deleted_at is null
+                group by status
+            """),
+            {"scope_id": str(scope_id)},
+        )
     goals = {row.status: row.n for row in goals_result.all()}
 
     score_result = await db.execute(
@@ -158,25 +166,18 @@ async def get_executive_dashboard(
     return await _build_dashboard(db, "company", company_id)
 
 
-@router.get("/department/{department_id}", response_model=Dashboard)
-async def get_department_dashboard(
-    department_id: uuid.UUID,
+@router.get("/org-unit/{org_unit_id}", response_model=Dashboard)
+async def get_org_unit_dashboard(
+    org_unit_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     _current: CurrentEmployee = Depends(get_current_employee),
 ) -> Dashboard:
     """No permission gate beyond authentication -- unlike the company-wide
-    executive view, this is scoped low enough (a single department) that
-    the underlying per-row RLS on employees/projects/tasks/goals is
-    sufficient: a caller with no visibility into this department's people
-    or work just gets an all-zero dashboard, not an error.
+    executive view, this is scoped to a single unit (and its subtree) that
+    the underlying per-row RLS on employees/projects/tasks/goals already
+    handles: a caller with no visibility into this unit's people or work
+    just gets an all-zero dashboard, not an error. Rolls up the whole
+    subtree under org_unit_id via org_unit_closure, so a Division-level
+    dashboard includes everything nested under it, not just direct children.
     """
-    return await _build_dashboard(db, "department", department_id)
-
-
-@router.get("/team/{team_id}", response_model=Dashboard)
-async def get_team_dashboard(
-    team_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    _current: CurrentEmployee = Depends(get_current_employee),
-) -> Dashboard:
-    return await _build_dashboard(db, "team", team_id)
+    return await _build_dashboard(db, "org_unit", org_unit_id)

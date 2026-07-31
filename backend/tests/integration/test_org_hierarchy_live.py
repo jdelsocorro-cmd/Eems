@@ -1,6 +1,6 @@
 """Integration test against a REAL Supabase database -- not mocked, not
 in-memory. Exercises the actual FastAPI endpoints for the org hierarchy
-CRUD + reparent flow (task 6) with a real Supabase Auth token, proving:
+CRUD + reparent flow with a real Supabase Auth token, proving:
 
 - JWT verification, RLS role-switching, and company-scoped visibility work
   end to end (app.employee_accessible_company_ids()).
@@ -10,11 +10,15 @@ CRUD + reparent flow (task 6) with a real Supabase Auth token, proving:
 - Attempting to create org-structure rows under a company you hold no
   scoped grant for is rejected with a clean 403 (not a raw 500) --
   app.has_permission_on_company() + core/error_handlers.py.
-- The position_closure subtree (GET /positions/{id}/subtree) reflects
+- org_units (024/025) support arbitrary depth AND a flat department ->
+  position structure with no intermediate unit at all -- the specific
+  capability the department/team -> org_units generalization exists for.
+- The org_unit_closure subtree (GET /org-units/{id}/subtree) and the
+  position_closure subtree (GET /positions/{id}/subtree) both reflect
   reality after create and after reparent.
-- Reparenting logs to position_hierarchy_history with the caller's reason,
-  and reparenting a position under its own descendant is rejected as a
-  cycle (400, not 500) -- app.maintain_position_closure().
+- Reparenting logs to history with the caller's reason, and reparenting a
+  node under its own descendant is rejected as a cycle (400, not 500), for
+  both org_units and positions.
 - Soft-delete: the row survives, the API just stops returning it.
 
 Skipped by default (needs live Supabase credentials + network + a real
@@ -23,7 +27,6 @@ auth user). Run explicitly with:
 backend/.env must be populated (see backend/.env.example).
 """
 
-import json
 import os
 import uuid
 
@@ -58,11 +61,6 @@ TEST_PASSWORD = "Test1234!Verify"
 
 
 def _admin_db_url() -> str:
-    """Admin-level (postgres) connection for test setup/teardown, kept
-    separate from the app's own restricted eems_app credential.
-    Requires supabase/.env (gitignored) with SUPABASE_DB_ADMIN_URL --
-    see supabase/.env.example.
-    """
     admin_env_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "supabase", ".env")
     with open(admin_env_path, encoding="utf-8-sig") as f:
         for line in f:
@@ -79,7 +77,7 @@ async def test_org_hierarchy_crud_and_reparent_flow():
     api_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
 
     suffix = uuid.uuid4().hex[:8]
-    test_email = f"eems-integration-test-{suffix}@eems-live-test.local"
+    test_email = f"eems-integration-test-{suffix}@eems-live-test.dev"
     auth_user_id = None
 
     try:
@@ -134,46 +132,93 @@ async def test_org_hierarchy_crud_and_reparent_flow():
             "insert into companies (name) values ($1) returning id", f"Unscoped Co {suffix}"
         )
         resp = await api_client.post(
-            "/api/v1/departments", headers=headers,
-            json={"company_id": str(unscoped_company_id), "name": "Should Fail", "code": f"FAIL{suffix}"},
+            "/api/v1/org-units", headers=headers,
+            json={"company_id": str(unscoped_company_id), "name": "Should Fail", "unit_type": "department"},
         )
         assert resp.status_code == 403, f"expected 403, got {resp.status_code}: {resp.text}"
 
-        # --- normal hierarchy build-out under the bootstrap company ---
+        # --- flat structure: department -> position directly, no team layer.
+        # This is the specific case the department/team -> org_units
+        # generalization exists for (see 024_org_units.sql).
         resp = await api_client.post(
-            "/api/v1/departments", headers=headers,
-            json={"company_id": str(bootstrap_company_id), "name": "Eng", "code": f"ENG{suffix}"},
+            "/api/v1/org-units", headers=headers,
+            json={"company_id": str(bootstrap_company_id), "name": "Finance", "unit_type": "department"},
         )
         assert resp.status_code == 201
-        department_id = resp.json()["id"]
-
-        resp = await api_client.post(
-            "/api/v1/teams", headers=headers,
-            json={"department_id": department_id, "name": "Backend", "code": f"BE{suffix}"},
-        )
-        assert resp.status_code == 201
-        team_id = resp.json()["id"]
+        finance_unit_id = resp.json()["id"]
 
         resp = await api_client.post(
             "/api/v1/positions", headers=headers,
-            json={"team_id": team_id, "title": "Eng Manager", "code": f"EM{suffix}"},
+            json={"org_unit_id": finance_unit_id, "title": "CFO", "code": f"CFO{suffix}"},
+        )
+        assert resp.status_code == 201, f"flat department-to-position failed: {resp.text}"
+
+        # --- nested structure: department -> team -> position, arbitrary depth. ---
+        resp = await api_client.post(
+            "/api/v1/org-units", headers=headers,
+            json={"company_id": str(bootstrap_company_id), "name": "Eng", "unit_type": "department"},
+        )
+        assert resp.status_code == 201
+        eng_unit_id = resp.json()["id"]
+
+        resp = await api_client.post(
+            "/api/v1/org-units", headers=headers,
+            json={"company_id": str(bootstrap_company_id), "name": "Backend", "unit_type": "team", "parent_unit_id": eng_unit_id},
+        )
+        assert resp.status_code == 201
+        backend_unit_id = resp.json()["id"]
+
+        # --- org_unit subtree reflects org_unit_closure ---
+        resp = await api_client.get(f"/api/v1/org-units/{eng_unit_id}/subtree", headers=headers)
+        assert resp.status_code == 200
+        assert {u["id"] for u in resp.json()} == {eng_unit_id, backend_unit_id}
+
+        # --- org_unit reparent: detach Backend, verify history, then attempt a cycle ---
+        resp = await api_client.post(
+            f"/api/v1/org-units/{backend_unit_id}/reparent", headers=headers,
+            json={"new_parent_unit_id": None, "reason": "integration test - detach"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["parent_unit_id"] is None
+
+        history_count = await admin_conn.fetchval(
+            "select count(*) from org_unit_hierarchy_history where org_unit_id = $1 and reason = $2",
+            uuid.UUID(backend_unit_id), "integration test - detach",
+        )
+        assert history_count == 1
+
+        resp = await api_client.post(
+            f"/api/v1/org-units/{backend_unit_id}/reparent", headers=headers,
+            json={"new_parent_unit_id": eng_unit_id},
+        )
+        assert resp.status_code == 200
+
+        resp = await api_client.post(
+            f"/api/v1/org-units/{eng_unit_id}/reparent", headers=headers,
+            json={"new_parent_unit_id": backend_unit_id},
+        )
+        assert resp.status_code == 400, f"expected 400 (cycle rejected), got {resp.status_code}: {resp.text}"
+        assert "cycle" in resp.text.lower()
+
+        # --- positions under the nested unit: same reparent/subtree/cycle mechanics as before ---
+        resp = await api_client.post(
+            "/api/v1/positions", headers=headers,
+            json={"org_unit_id": backend_unit_id, "title": "Eng Manager", "code": f"EM{suffix}"},
         )
         assert resp.status_code == 201
         manager_pos_id = resp.json()["id"]
 
         resp = await api_client.post(
             "/api/v1/positions", headers=headers,
-            json={"team_id": team_id, "title": "Eng II", "code": f"E2{suffix}", "reports_to_position_id": manager_pos_id},
+            json={"org_unit_id": backend_unit_id, "title": "Eng II", "code": f"E2{suffix}", "reports_to_position_id": manager_pos_id},
         )
         assert resp.status_code == 201
         report_pos_id = resp.json()["id"]
 
-        # --- subtree reflects the closure table ---
         resp = await api_client.get(f"/api/v1/positions/{manager_pos_id}/subtree", headers=headers)
         assert resp.status_code == 200
         assert {p["id"] for p in resp.json()} == {manager_pos_id, report_pos_id}
 
-        # --- reparent: detach, verify history + reason recorded ---
         resp = await api_client.post(
             f"/api/v1/positions/{report_pos_id}/reparent", headers=headers,
             json={"new_reports_to_position_id": None, "reason": "integration test - detach"},
@@ -187,7 +232,6 @@ async def test_org_hierarchy_crud_and_reparent_flow():
         )
         assert history_count == 1
 
-        # --- reparent back, then attempt a cycle: manager under its own report ---
         resp = await api_client.post(
             f"/api/v1/positions/{report_pos_id}/reparent", headers=headers,
             json={"new_reports_to_position_id": manager_pos_id},
@@ -222,9 +266,8 @@ async def test_org_hierarchy_crud_and_reparent_flow():
             )
             position_ids = await admin_conn.fetch(
                 """select p.id from positions p
-                   join teams t on t.id = p.team_id
-                   join departments d on d.id = t.department_id
-                   join companies c on c.id = d.company_id
+                   join org_units ou on ou.id = p.org_unit_id
+                   join companies c on c.id = ou.company_id
                    where c.name like $1""",
                 f"%{suffix}%",
             )
@@ -240,13 +283,24 @@ async def test_org_hierarchy_crud_and_reparent_flow():
                     position_ids,
                 )
                 await admin_conn.execute("delete from positions where id = any($1::uuid[])", position_ids)
-            await admin_conn.execute(
-                "delete from teams where department_id in (select d.id from departments d join companies c on c.id = d.company_id where c.name like $1)",
+
+            unit_ids = await admin_conn.fetch(
+                "select ou.id from org_units ou join companies c on c.id = ou.company_id where c.name like $1",
                 f"%{suffix}%",
             )
-            await admin_conn.execute(
-                "delete from departments where company_id in (select id from companies where name like $1)", f"%{suffix}%"
-            )
+            unit_ids = [r["id"] for r in unit_ids]
+            if unit_ids:
+                await admin_conn.execute(
+                    "delete from org_unit_closure where ancestor_unit_id = any($1::uuid[]) or descendant_unit_id = any($1::uuid[])",
+                    unit_ids,
+                )
+                await admin_conn.execute("update org_units set parent_unit_id = null where id = any($1::uuid[])", unit_ids)
+                await admin_conn.execute(
+                    "delete from org_unit_hierarchy_history where org_unit_id = any($1::uuid[]) or old_parent_unit_id = any($1::uuid[]) or new_parent_unit_id = any($1::uuid[])",
+                    unit_ids,
+                )
+                await admin_conn.execute("delete from org_units where id = any($1::uuid[])", unit_ids)
+
             await admin_conn.execute("delete from employees where work_email = $1", test_email)
             await admin_conn.execute("delete from companies where name like $1", f"%{suffix}%")
         finally:
