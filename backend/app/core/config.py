@@ -22,6 +22,10 @@ class Settings(BaseSettings):
 
     environment: str = "development"
     cors_origins: str = "http://localhost:5173"
+    # Where invite/recovery emails send the user to finish setup -- see
+    # services/supabase_admin.py. Distinct from cors_origins (which can list
+    # several origins); this is the one canonical frontend URL.
+    frontend_url: str = "http://localhost:5173"
 
     @property
     def cors_origin_list(self) -> list[str]:

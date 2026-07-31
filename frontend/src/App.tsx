@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import AppLayout from "@/components/layout/AppLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Login from "@/pages/Login";
+import AcceptInvite from "@/pages/AcceptInvite";
 import ExecutiveDashboard from "@/pages/ExecutiveDashboard";
 import OrgAdmin from "@/pages/OrgAdmin";
 import OrgChart from "@/pages/OrgChart";
@@ -18,6 +19,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route
           path="/*"
           element={

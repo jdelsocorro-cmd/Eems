@@ -25,6 +25,14 @@ async def invite_user_by_email(email: str) -> str:
                 "Authorization": f"Bearer {settings.supabase_service_role_key}",
                 "Content-Type": "application/json",
             },
+            # redirect_to must also be present in the Supabase project's
+            # Auth > URL Configuration > Redirect URLs allowlist, or
+            # Supabase silently falls back to the project's default Site
+            # URL instead -- found the hard way when the very first real
+            # invite (not a test fixture with email_confirm=true, which
+            # skips this path entirely) landed on an unrelated localhost
+            # app that happened to be running on the default Site URL's port.
+            params={"redirect_to": f"{settings.frontend_url}/accept-invite"},
             json={"email": email},
         )
     if resp.status_code >= 400:
