@@ -24,6 +24,8 @@ export default function OrgAdmin() {
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [addingChildOf, setAddingChildOf] = useState<string | null>(null);
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
+  const [editingPositionId, setEditingPositionId] = useState<string | null>(null);
 
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiClient.get<Company[]>("/companies") });
   const unitsQuery = useQuery({ queryKey: ["org-units"], queryFn: () => apiClient.get<OrgUnit[]>("/org-units") });
@@ -55,6 +57,23 @@ export default function OrgAdmin() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["org-units"] }),
   });
 
+  const updateUnit = useMutation({
+    mutationFn: ({ unitId, name, unitType }: { unitId: string; name: string; unitType: string }) =>
+      apiClient.patch<OrgUnit>(`/org-units/${unitId}`, { name, unit_type: unitType }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["org-units"] });
+      setEditingUnitId(null);
+    },
+  });
+
+  const deactivateUnit = useMutation({
+    mutationFn: (unitId: string) => apiClient.delete(`/org-units/${unitId}`),
+    onSuccess: (_data, unitId) => {
+      queryClient.invalidateQueries({ queryKey: ["org-units"] });
+      if (selectedUnitId === unitId) setSelectedUnitId(null);
+    },
+  });
+
   const createPosition = useMutation({
     mutationFn: (payload: { title: string; code: string; reports_to_position_id: string | null }) =>
       apiClient.post<Position>("/positions", { ...payload, org_unit_id: selectedUnitId }),
@@ -64,6 +83,20 @@ export default function OrgAdmin() {
   const reparentPosition = useMutation({
     mutationFn: ({ positionId, newParentId }: { positionId: string; newParentId: string | null }) =>
       apiClient.post<Position>(`/positions/${positionId}/reparent`, { new_reports_to_position_id: newParentId, reason: "Reparented via Org Admin" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["positions"] }),
+  });
+
+  const updatePosition = useMutation({
+    mutationFn: ({ positionId, title, code }: { positionId: string; title: string; code: string }) =>
+      apiClient.patch<Position>(`/positions/${positionId}`, { title, code }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["positions"] });
+      setEditingPositionId(null);
+    },
+  });
+
+  const deactivatePosition = useMutation({
+    mutationFn: (positionId: string) => apiClient.delete(`/positions/${positionId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["positions"] }),
   });
 
@@ -154,6 +187,17 @@ export default function OrgAdmin() {
               createError={createUnit.isError ? errorMessage(createUnit.error) : null}
               allUnits={unitsForCompany}
               onReparent={(unitId, newParentId) => reparentUnit.mutate({ unitId, newParentId })}
+              editingUnitId={editingUnitId}
+              onStartEdit={setEditingUnitId}
+              onSubmitEdit={(unitId, name, unitType) => updateUnit.mutate({ unitId, name, unitType })}
+              onCancelEdit={() => setEditingUnitId(null)}
+              editPending={updateUnit.isPending}
+              editError={updateUnit.isError ? errorMessage(updateUnit.error) : null}
+              onDeactivate={(unitId, name) => {
+                if (confirm(`Deactivate "${name}"? It will be hidden but its history is kept.`)) {
+                  deactivateUnit.mutate(unitId);
+                }
+              }}
             />
           ))}
           <div className="mt-2 border-t border-border pt-2">
@@ -186,36 +230,67 @@ export default function OrgAdmin() {
               </p>
               <ul className="mb-2 flex flex-col gap-1.5">
                 {positionsForUnit.length === 0 && <li className="text-xs text-text-dim">None yet.</li>}
-                {positionsForUnit.map((p) => (
-                  <li key={p.id} className="rounded-edge-sm border border-border bg-surface2 p-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-text">{p.title}</span>
-                      <span className="text-[10px] text-text-dim">{p.code}</span>
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-1.5">
-                      <span className="text-[10px] text-text-muted">
-                        Reports to:{" "}
-                        {p.reports_to_position_id
-                          ? positionsQuery.data?.find((x) => x.id === p.reports_to_position_id)?.title ?? "Unknown"
-                          : "(root)"}
-                      </span>
-                      <select
-                        className="ml-auto rounded-edge-sm border border-border bg-surface px-1 py-0.5 text-[10px] text-text"
-                        value={p.reports_to_position_id ?? ""}
-                        onChange={(e) => reparentPosition.mutate({ positionId: p.id, newParentId: e.target.value || null })}
-                      >
-                        <option value="">(root)</option>
-                        {(positionsQuery.data ?? [])
-                          .filter((candidate) => candidate.id !== p.id)
-                          .map((candidate) => (
-                            <option key={candidate.id} value={candidate.id}>
-                              {candidate.title}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                  </li>
-                ))}
+                {positionsForUnit.map((p) =>
+                  editingPositionId === p.id ? (
+                    <li key={p.id} className="rounded-edge-sm border border-border bg-surface2 p-1.5">
+                      <EditPositionForm
+                        initialTitle={p.title}
+                        initialCode={p.code}
+                        onSubmit={(title, code) => updatePosition.mutate({ positionId: p.id, title, code })}
+                        onCancel={() => setEditingPositionId(null)}
+                        pending={updatePosition.isPending}
+                        error={updatePosition.isError ? errorMessage(updatePosition.error) : null}
+                      />
+                    </li>
+                  ) : (
+                    <li key={p.id} className="rounded-edge-sm border border-border bg-surface2 p-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-text">{p.title}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-text-dim">{p.code}</span>
+                          <button
+                            onClick={() => setEditingPositionId(p.id)}
+                            className="text-[10px] text-edge-teal hover:underline"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Deactivate "${p.title}"? It will be hidden but its history is kept.`)) {
+                                deactivatePosition.mutate(p.id);
+                              }
+                            }}
+                            className="text-[10px] text-danger hover:underline"
+                          >
+                            Deactivate
+                          </button>
+                        </span>
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        <span className="text-[10px] text-text-muted">
+                          Reports to:{" "}
+                          {p.reports_to_position_id
+                            ? positionsQuery.data?.find((x) => x.id === p.reports_to_position_id)?.title ?? "Unknown"
+                            : "(root)"}
+                        </span>
+                        <select
+                          className="ml-auto rounded-edge-sm border border-border bg-surface px-1 py-0.5 text-[10px] text-text"
+                          value={p.reports_to_position_id ?? ""}
+                          onChange={(e) => reparentPosition.mutate({ positionId: p.id, newParentId: e.target.value || null })}
+                        >
+                          <option value="">(root)</option>
+                          {(positionsQuery.data ?? [])
+                            .filter((candidate) => candidate.id !== p.id)
+                            .map((candidate) => (
+                              <option key={candidate.id} value={candidate.id}>
+                                {candidate.title}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    </li>
+                  ),
+                )}
               </ul>
               {reparentPosition.isError && <ErrorBanner message={errorMessage(reparentPosition.error)} />}
               <NewPositionForm
@@ -246,6 +321,13 @@ function UnitRow({
   createError,
   allUnits,
   onReparent,
+  editingUnitId,
+  onStartEdit,
+  onSubmitEdit,
+  onCancelEdit,
+  editPending,
+  editError,
+  onDeactivate,
 }: {
   node: UnitNode;
   depth: number;
@@ -260,45 +342,72 @@ function UnitRow({
   createError: string | null;
   allUnits: OrgUnit[];
   onReparent: (unitId: string, newParentId: string | null) => void;
+  editingUnitId: string | null;
+  onStartEdit: (id: string) => void;
+  onSubmitEdit: (unitId: string, name: string, unitType: string) => void;
+  onCancelEdit: () => void;
+  editPending: boolean;
+  editError: string | null;
+  onDeactivate: (unitId: string, name: string) => void;
 }) {
   const isCollapsed = collapsed.has(node.unit.id);
   const hasChildren = node.children.length > 0;
   const isSelected = selectedUnitId === node.unit.id;
+  const isEditing = editingUnitId === node.unit.id;
 
   return (
     <div>
-      <div
-        style={{ paddingLeft: `${depth * 18 + 6}px` }}
-        className={`flex items-center gap-1.5 rounded-edge-sm py-1 pr-1.5 text-xs ${isSelected ? "bg-nav-active" : "hover:bg-surface2"}`}
-      >
-        <span
-          onClick={() => hasChildren && onToggle(node.unit.id)}
-          className={`w-3 text-text-dim ${hasChildren ? "cursor-pointer" : ""}`}
+      {isEditing ? (
+        <div style={{ paddingLeft: `${depth * 18 + 6}px` }} className="py-1">
+          <EditUnitForm
+            initialName={node.unit.name}
+            initialUnitType={node.unit.unit_type}
+            onSubmit={(name, unitType) => onSubmitEdit(node.unit.id, name, unitType)}
+            onCancel={onCancelEdit}
+            pending={editPending}
+            error={editError}
+          />
+        </div>
+      ) : (
+        <div
+          style={{ paddingLeft: `${depth * 18 + 6}px` }}
+          className={`flex items-center gap-1.5 rounded-edge-sm py-1 pr-1.5 text-xs ${isSelected ? "bg-nav-active" : "hover:bg-surface2"}`}
         >
-          {hasChildren ? (isCollapsed ? "▸" : "▾") : ""}
-        </span>
-        <span onClick={() => onSelect(node.unit.id)} className="cursor-pointer font-medium text-text">
-          {node.unit.name}
-        </span>
-        <span className="rounded-edge-sm bg-surface3 px-1 py-0.5 text-[10px] text-text-dim">{node.unit.unit_type}</span>
-        <select
-          className="ml-auto rounded-edge-sm border border-border bg-surface2 px-1 py-0.5 text-[10px] text-text"
-          value={node.unit.parent_unit_id ?? ""}
-          onChange={(e) => onReparent(node.unit.id, e.target.value || null)}
-        >
-          <option value="">Move under: (root)</option>
-          {allUnits
-            .filter((candidate) => candidate.id !== node.unit.id)
-            .map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>
-                Move under: {candidate.name}
-              </option>
-            ))}
-        </select>
-        <button onClick={() => onStartAddChild(node.unit.id)} className="text-[10px] text-edge-teal hover:underline">
-          + child
-        </button>
-      </div>
+          <span
+            onClick={() => hasChildren && onToggle(node.unit.id)}
+            className={`w-3 text-text-dim ${hasChildren ? "cursor-pointer" : ""}`}
+          >
+            {hasChildren ? (isCollapsed ? "▸" : "▾") : ""}
+          </span>
+          <span onClick={() => onSelect(node.unit.id)} className="cursor-pointer font-medium text-text">
+            {node.unit.name}
+          </span>
+          <span className="rounded-edge-sm bg-surface3 px-1 py-0.5 text-[10px] text-text-dim">{node.unit.unit_type}</span>
+          <select
+            className="ml-auto rounded-edge-sm border border-border bg-surface2 px-1 py-0.5 text-[10px] text-text"
+            value={node.unit.parent_unit_id ?? ""}
+            onChange={(e) => onReparent(node.unit.id, e.target.value || null)}
+          >
+            <option value="">Move under: (root)</option>
+            {allUnits
+              .filter((candidate) => candidate.id !== node.unit.id)
+              .map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  Move under: {candidate.name}
+                </option>
+              ))}
+          </select>
+          <button onClick={() => onStartAddChild(node.unit.id)} className="text-[10px] text-edge-teal hover:underline">
+            + child
+          </button>
+          <button onClick={() => onStartEdit(node.unit.id)} className="text-[10px] text-edge-teal hover:underline">
+            Edit
+          </button>
+          <button onClick={() => onDeactivate(node.unit.id, node.unit.name)} className="text-[10px] text-danger hover:underline">
+            Deactivate
+          </button>
+        </div>
+      )}
 
       {addingChildOf === node.unit.id && (
         <div style={{ paddingLeft: `${(depth + 1) * 18 + 6}px` }} className="py-1">
@@ -328,6 +437,13 @@ function UnitRow({
             createError={createError}
             allUnits={allUnits}
             onReparent={onReparent}
+            editingUnitId={editingUnitId}
+            onStartEdit={onStartEdit}
+            onSubmitEdit={onSubmitEdit}
+            onCancelEdit={onCancelEdit}
+            editPending={editPending}
+            editError={editError}
+            onDeactivate={onDeactivate}
           />
         ))}
     </div>
@@ -412,6 +528,60 @@ function NewUnitForm({
   );
 }
 
+function EditUnitForm({
+  initialName,
+  initialUnitType,
+  onSubmit,
+  onCancel,
+  pending,
+  error,
+}: {
+  initialName: string;
+  initialUnitType: string;
+  onSubmit: (name: string, unitType: string) => void;
+  onCancel: () => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const [name, setName] = useState(initialName);
+  const [unitType, setUnitType] = useState(initialUnitType);
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSubmit(name.trim(), unitType.trim() || "department");
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-center gap-1.5">
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Unit name"
+        autoFocus
+        className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
+      />
+      <input
+        value={unitType}
+        onChange={(e) => setUnitType(e.target.value)}
+        placeholder="Type (department, team, division...)"
+        className="w-40 rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
+      />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
+      >
+        {pending ? "Saving..." : "Save"}
+      </button>
+      <button type="button" onClick={onCancel} className="text-xs text-text-muted hover:underline">
+        Cancel
+      </button>
+      {error && <ErrorBanner message={error} />}
+    </form>
+  );
+}
+
 function NewPositionForm({
   positionsForUnit,
   onSubmit,
@@ -468,6 +638,60 @@ function NewPositionForm({
         className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
       >
         {pending ? "Adding..." : "+ Add position"}
+      </button>
+      {error && <ErrorBanner message={error} />}
+    </form>
+  );
+}
+
+function EditPositionForm({
+  initialTitle,
+  initialCode,
+  onSubmit,
+  onCancel,
+  pending,
+  error,
+}: {
+  initialTitle: string;
+  initialCode: string;
+  onSubmit: (title: string, code: string) => void;
+  onCancel: () => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const [title, setTitle] = useState(initialTitle);
+  const [code, setCode] = useState(initialCode);
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!title.trim() || !code.trim()) return;
+    onSubmit(title.trim(), code.trim());
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-center gap-1.5">
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Position title"
+        autoFocus
+        className="min-w-0 flex-1 rounded-edge-sm border border-border bg-surface px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
+      />
+      <input
+        value={code}
+        onChange={(e) => setCode(e.target.value.toUpperCase())}
+        placeholder="Code"
+        className="w-16 rounded-edge-sm border border-border bg-surface px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
+      />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
+      >
+        {pending ? "Saving..." : "Save"}
+      </button>
+      <button type="button" onClick={onCancel} className="text-xs text-text-muted hover:underline">
+        Cancel
       </button>
       {error && <ErrorBanner message={error} />}
     </form>
