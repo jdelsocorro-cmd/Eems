@@ -20,12 +20,12 @@ from app.api.v1.routers import (
     tasks,
 )
 from app.core.config import get_settings
-from app.core.error_handlers import rls_violation_handler
+from app.core.error_handlers import db_error_handler
 
 settings = get_settings()
 
 app = FastAPI(title="EEMS API", version="0.1.0")
-app.add_exception_handler(DBAPIError, rls_violation_handler)
+app.add_exception_handler(DBAPIError, db_error_handler)
 
 app.add_middleware(
     CORSMiddleware,

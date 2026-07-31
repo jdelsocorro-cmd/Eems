@@ -57,7 +57,7 @@ async def create_kpi(
     """No pre-check needed -- kpis_insert's RLS WITH CHECK requires
     kpi/update_target on the target employee for every field, since defining
     a target/weight/direction is inherently the sensitive action; a bare RLS
-    violation here already surfaces as a clean 403 via rls_violation_handler.
+    violation here already surfaces as a clean 403 via db_error_handler.
     """
     kpi = KpiModel(**payload.model_dump(), created_by=uuid.UUID(current.employee_id))
     db.add(kpi)

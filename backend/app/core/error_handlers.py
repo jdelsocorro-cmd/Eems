@@ -2,9 +2,34 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DBAPIError
 
+# Postgres deliberately withholds the specific key/value (the .detail text,
+# e.g. "Key (org_unit_id, code)=(<uuid>, AM4) already exists.") on tables
+# with row-level security when the querying role's grants wouldn't
+# otherwise let it see the conflicting row -- confirmed live: cause.detail
+# is None on every request through the real (RLS-restricted) app.db.session
+# role, even though the identical insert raises the full .detail text when
+# run directly as an unrestricted role. That's intentional Postgres/RLS
+# behavior (it stops error messages from leaking row data past RLS) and
+# shouldn't be worked around. cause.constraint_name is schema metadata, not
+# row data, so it isn't withheld -- mapped to a friendly, specific message
+# per known constraint; anything not in this map still gets a useful,
+# generic fallback instead of an opaque 500.
+_FRIENDLY_UNIQUE_CONSTRAINTS = {
+    "uq_positions_org_unit_code": "A position with that code already exists in this org unit.",
+    "employees_work_email_key": "An employee with that work email already exists.",
+    "employees_employee_number_key": "An employee with that employee number already exists.",
+}
 
-async def rls_violation_handler(request: Request, exc: DBAPIError) -> JSONResponse:
-    """Translates a raw RLS policy violation (Postgres SQLSTATE 42501,
+
+async def db_error_handler(request: Request, exc: DBAPIError) -> JSONResponse:
+    """Translates specific, expected Postgres errors into clean HTTP
+    responses. Registered as the app-wide DBAPIError handler
+    (app.add_exception_handler in main.py), so this is the single place
+    that decides which DB errors are "normal" business-rule rejections
+    (bad request / conflict) versus real bugs that should keep surfacing
+    as opaque 500s.
+
+    Translates a raw RLS policy violation (Postgres SQLSTATE 42501,
     "new row violates row-level security policy") into a clean 403.
 
     This is the correct, expected way company-scoped writes get rejected --
@@ -49,4 +74,18 @@ async def rls_violation_handler(request: Request, exc: DBAPIError) -> JSONRespon
             status_code=status.HTTP_403_FORBIDDEN,
             content={"detail": "Not authorized to perform this action on the specified resource."},
         )
+
+    # Postgres SQLSTATE 23505 (unique_violation) -- e.g. two positions in
+    # the same org unit sharing a code. Without this, a plain duplicate
+    # entry (an everyday data-entry mistake, not a bug) surfaced to the
+    # client as an opaque 500 with no indication of what was actually
+    # wrong. Same wrapping as the RLS case above: the real asyncpg
+    # exception (and its .constraint_name) is one level deeper, on
+    # exc.orig.__cause__.
+    cause = getattr(exc.orig, "__cause__", None)
+    if getattr(cause, "sqlstate", None) == "23505" or getattr(exc.orig, "sqlstate", None) == "23505":
+        constraint_name = getattr(cause, "constraint_name", None)
+        detail = _FRIENDLY_UNIQUE_CONSTRAINTS.get(constraint_name, "That value is already in use. Please choose a different one.")
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": detail})
+
     raise exc
