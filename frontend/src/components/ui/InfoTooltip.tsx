@@ -15,7 +15,7 @@ export function InfoTooltip({ content, side = "top" }: { content: ReactNode; sid
         i
       </span>
       <span
-        className={`pointer-events-none absolute left-1/2 z-20 w-64 -translate-x-1/2 rounded-edge-md bg-edge-navy p-3 text-xs leading-relaxed text-white opacity-0 shadow-edge-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${SIDE_CLASSES[side]}`}
+        className={`pointer-events-none absolute left-1/2 z-20 w-64 -translate-x-1/2 rounded-edge-md bg-edge-navy p-3 text-xs normal-case leading-relaxed text-white opacity-0 shadow-edge-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${SIDE_CLASSES[side]}`}
       >
         {content}
       </span>
