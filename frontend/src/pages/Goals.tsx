@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Company, Employee, Goal, GoalStatus, GoalType, Kpi, KpiDirection, OrgUnit } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip } from "@/components/ui";
 
 const GOAL_TYPES: GoalType[] = ["company", "org_unit", "individual"];
 const GOAL_STATUSES: GoalStatus[] = ["draft", "active", "completed", "archived"];
@@ -22,6 +22,24 @@ const GOAL_TYPE_LEGEND = (
     {GOAL_TYPES.map((t) => (
       <p key={t}>
         <span className="font-medium text-edge-teal">{t.replace("_", "-")}</span> — {GOAL_TYPE_DESCRIPTIONS[t]}
+      </p>
+    ))}
+  </div>
+);
+
+const GOAL_STATUS_DESCRIPTIONS: Record<GoalStatus, string> = {
+  draft: "Being set up — the default status for a new goal, before it's confirmed.",
+  active: "Confirmed and currently in progress.",
+  completed: "The goal has been achieved.",
+  archived: "No longer relevant, but kept for the historical record.",
+};
+
+const GOAL_STATUS_LEGEND = (
+  <div className="flex flex-col gap-1.5">
+    <p className="font-semibold text-white">Goal status</p>
+    {GOAL_STATUSES.map((s) => (
+      <p key={s}>
+        <span className="font-medium text-edge-teal">{s}</span> — {GOAL_STATUS_DESCRIPTIONS[s]}
       </p>
     ))}
   </div>
@@ -112,7 +130,12 @@ export default function Goals() {
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
                 <th className="px-4 py-2">Title</th>
                 <th className="px-4 py-2">Type</th>
-                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2">
+                  <span className="inline-flex items-center gap-1.5">
+                    Status
+                    <InfoTooltip content={GOAL_STATUS_LEGEND} side="bottom" />
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -159,7 +182,10 @@ export default function Goals() {
               </div>
 
               <div className="border-t border-border pt-3">
-                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Status</p>
+                <p className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
+                  Status
+                  <InfoTooltip content={GOAL_STATUS_LEGEND} side="bottom" />
+                </p>
                 <select
                   value={selectedGoal.status}
                   onChange={(e) => updateGoalStatus.mutate({ id: selectedGoal.id, status: e.target.value as GoalStatus })}
