@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import type { Company, OrgUnit, Position } from "@/lib/types";
+import { Button, Card, EmptyState, ErrorBanner } from "@/components/ui";
 
 interface UnitNode {
   unit: OrgUnit;
@@ -12,10 +13,6 @@ interface UnitNode {
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.detail;
   return "Something went wrong.";
-}
-
-function ErrorBanner({ message }: { message: string }) {
-  return <p className="mt-1 rounded-edge-sm bg-danger/10 px-2 py-1 text-xs text-danger">{message}</p>;
 }
 
 export default function OrgAdmin() {
@@ -172,10 +169,10 @@ export default function OrgAdmin() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.3fr_1fr]">
-        <div className="rounded-edge-lg border border-border bg-surface p-2">
+        <Card className="p-2">
           {unitsQuery.isLoading && <p className="p-3 text-xs text-text-muted">Loading...</p>}
           {!unitsQuery.isLoading && tree.length === 0 && (
-            <p className="p-3 text-xs text-text-dim">No org units yet -- add the first one below.</p>
+            <EmptyState message="No org units yet -- add the first one below." />
           )}
           {tree.map((node) => (
             <UnitRow
@@ -215,20 +212,17 @@ export default function OrgAdmin() {
                 error={createUnit.isError ? errorMessage(createUnit.error) : null}
               />
             ) : (
-              <button
-                onClick={() => setAddingChildOf("root")}
-                className="rounded-edge-sm px-2 py-1 text-xs text-edge-teal hover:bg-surface2"
-              >
+              <Button variant="ghost" size="sm" onClick={() => setAddingChildOf("root")}>
                 + Add top-level unit
-              </button>
+              </Button>
             )}
           </div>
-        </div>
+        </Card>
 
-        <div className="rounded-edge-lg border border-border bg-surface p-3">
+        <Card className="p-3">
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Positions</h2>
           {!selectedUnit ? (
-            <p className="text-xs text-text-dim">Select a unit to see and manage its positions.</p>
+            <EmptyState message="Select a unit to see and manage its positions." />
           ) : (
             <>
               <p className="mb-2 text-xs text-text-muted">
@@ -238,7 +232,7 @@ export default function OrgAdmin() {
                 {positionsForUnit.length === 0 && <li className="text-xs text-text-dim">None yet.</li>}
                 {positionsForUnit.map((p) =>
                   editingPositionId === p.id ? (
-                    <li key={p.id} className="rounded-edge-sm border border-border bg-surface2 p-1.5">
+                    <li key={p.id} className="rounded-edge-sm bg-surface2 p-1.5">
                       <EditPositionForm
                         initialTitle={p.title}
                         initialCode={p.code}
@@ -249,7 +243,7 @@ export default function OrgAdmin() {
                       />
                     </li>
                   ) : (
-                    <li key={p.id} className="rounded-edge-sm border border-border bg-surface2 p-1.5">
+                    <li key={p.id} className="rounded-edge-sm bg-surface2 p-1.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-medium text-text">{p.title}</span>
                         <span className="flex items-center gap-1.5">
@@ -328,7 +322,7 @@ export default function OrgAdmin() {
               />
             </>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );
@@ -493,13 +487,9 @@ function NewCompanyForm({ onSubmit, pending }: { onSubmit: (name: string) => voi
         placeholder="New company name"
         className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
       />
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-      >
+      <Button type="submit" size="sm" disabled={pending}>
         + Add
-      </button>
+      </Button>
     </form>
   );
 }
@@ -540,16 +530,12 @@ function NewUnitForm({
         placeholder="Type (department, team, division...)"
         className="w-40 rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
       />
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-      >
+      <Button type="submit" size="sm" disabled={pending}>
         Add
-      </button>
-      <button type="button" onClick={onCancel} className="text-xs text-text-muted hover:underline">
+      </Button>
+      <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
         Cancel
-      </button>
+      </Button>
       {error && <ErrorBanner message={error} />}
     </form>
   );
@@ -594,16 +580,12 @@ function EditUnitForm({
         placeholder="Type (department, team, division...)"
         className="w-40 rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
       />
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-      >
+      <Button type="submit" size="sm" disabled={pending}>
         {pending ? "Saving..." : "Save"}
-      </button>
-      <button type="button" onClick={onCancel} className="text-xs text-text-muted hover:underline">
+      </Button>
+      <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
         Cancel
-      </button>
+      </Button>
       {error && <ErrorBanner message={error} />}
     </form>
   );
@@ -659,13 +641,9 @@ function NewPositionForm({
           </option>
         ))}
       </select>
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-      >
+      <Button type="submit" size="sm" disabled={pending}>
         {pending ? "Adding..." : "+ Add position"}
-      </button>
+      </Button>
       {error && <ErrorBanner message={error} />}
     </form>
   );
@@ -710,16 +688,12 @@ function EditPositionForm({
         placeholder="Code"
         className="w-16 rounded-edge-sm border border-border bg-surface px-2 py-1 text-xs text-text outline-none focus:border-border-hover"
       />
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-      >
+      <Button type="submit" size="sm" disabled={pending}>
         {pending ? "Saving..." : "Save"}
-      </button>
-      <button type="button" onClick={onCancel} className="text-xs text-text-muted hover:underline">
+      </Button>
+      <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
         Cancel
-      </button>
+      </Button>
       {error && <ErrorBanner message={error} />}
     </form>
   );

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Company, DashboardData, OrgUnit } from "@/lib/types";
+import { Card, ErrorBanner } from "@/components/ui";
 
 type ScopeType = "company" | "org_unit";
 
@@ -12,14 +13,10 @@ function errorMessage(error: unknown): string {
   return "Something went wrong.";
 }
 
-function ErrorBanner({ message }: { message: string }) {
-  return <p className="mt-2 rounded-edge-sm bg-danger/10 px-3 py-2 text-sm text-danger">{message}</p>;
-}
-
 function StatusCard({ title, counts }: { title: string; counts: Record<string, number> }) {
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   return (
-    <div className="rounded-edge-lg border border-border bg-surface p-4">
+    <Card className="p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-text-muted">{title}</p>
       <p className="mt-1 text-3xl font-semibold text-text">{total}</p>
       <ul className="mt-2 flex flex-col gap-0.5 text-xs text-text-muted">
@@ -31,7 +28,7 @@ function StatusCard({ title, counts }: { title: string; counts: Record<string, n
         ))}
         {total === 0 && <li className="text-text-dim">No data in scope.</li>}
       </ul>
-    </div>
+    </Card>
   );
 }
 
@@ -101,7 +98,7 @@ export default function ExecutiveDashboard() {
             <StatusCard title="Goals" counts={dashboardQuery.data.goals.counts} />
           </div>
 
-          <div className="rounded-edge-lg border border-border bg-surface p-4">
+          <Card className="p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Average KPI score</p>
             <p className="mt-1 text-3xl font-semibold text-text">
               {dashboardQuery.data.average_score === null ? "--" : `${dashboardQuery.data.average_score}%`}
@@ -110,7 +107,7 @@ export default function ExecutiveDashboard() {
               Based on the latest computed score for {dashboardQuery.data.scored_employee_count} employee
               {dashboardQuery.data.scored_employee_count === 1 ? "" : "s"} in scope.
             </p>
-          </div>
+          </Card>
         </>
       )}
     </div>

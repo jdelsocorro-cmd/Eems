@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import type { Company, Employee, EmployeeRole, OrgUnit, Permission, Position, Role, ScopeType } from "@/lib/types";
+import { Button, Card, ErrorBanner } from "@/components/ui";
 
 const SCOPE_TYPES: ScopeType[] = ["company", "org_unit", "position_subtree", "self"];
 
@@ -16,10 +17,6 @@ const SCOPE_DESCRIPTIONS: Record<ScopeType, string> = {
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.detail;
   return "Something went wrong.";
-}
-
-function ErrorBanner({ message }: { message: string }) {
-  return <p className="mt-2 rounded-edge-sm bg-danger/10 px-3 py-2 text-sm text-danger">{message}</p>;
 }
 
 export default function RbacAdmin() {
@@ -95,7 +92,7 @@ export default function RbacAdmin() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-edge-lg border border-border bg-surface p-4">
+        <Card className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Roles</h2>
           <ul className="mb-3 flex flex-col gap-1">
             {(rolesQuery.data ?? []).map((role) => (
@@ -151,9 +148,9 @@ export default function RbacAdmin() {
               )}
             </div>
           )}
-        </div>
+        </Card>
 
-        <div className="rounded-edge-lg border border-border bg-surface p-4">
+        <Card className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Employee grants</h2>
           <select
             value={selectedEmployeeId ?? ""}
@@ -175,7 +172,7 @@ export default function RbacAdmin() {
                   const role = rolesQuery.data?.find((r) => r.id === grant.role_id);
                   const targetLabel = scopeTargetLabel(grant.scope_type, grant.scope_id);
                   return (
-                    <li key={grant.id} className="flex items-center justify-between rounded-edge-sm border border-border bg-surface2 p-2 text-sm">
+                    <li key={grant.id} className="flex items-center justify-between rounded-edge-sm bg-surface2 p-2 text-sm">
                       <span className="text-text">
                         {role?.name ?? grant.role_id}{" "}
                         <span className="text-text-dim">
@@ -207,7 +204,7 @@ export default function RbacAdmin() {
               {grantRole.isError && <ErrorBanner message={errorMessage(grantRole.error)} />}
             </>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );
@@ -252,13 +249,9 @@ function CreateRoleForm({
           </option>
         ))}
       </select>
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-      >
+      <Button type="submit" disabled={pending}>
         {pending ? "Creating..." : "+ New role"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -357,13 +350,9 @@ function GrantRoleForm({
         <PositionScopePicker positions={positions} units={units} value={scopeId} onChange={setScopeId} />
       )}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-      >
+      <Button type="submit" disabled={pending}>
         {pending ? "Granting..." : "+ Grant role"}
-      </button>
+      </Button>
     </form>
   );
 }

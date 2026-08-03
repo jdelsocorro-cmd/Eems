@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/apiClient";
 import type { Company, Employee, OrgUnit, Position, PositionAssignment } from "@/lib/types";
+import { Button, Card, EmptyState, Toolbar, ToolbarDivider } from "@/components/ui";
 import "./OrgChart.css";
 
 interface TreeNode {
@@ -222,58 +223,48 @@ export default function OrgChart() {
           placeholder="Search by name or title..."
           className="flex-1 rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
         />
-        <div className="flex rounded-edge-sm border border-border overflow-hidden">
-          <button
-            onClick={() => setViewMode("chart")}
-            className={`px-2.5 py-1.5 text-xs font-medium ${viewMode === "chart" ? "bg-edge-teal text-edge-navy" : "bg-surface2 text-text-muted hover:text-text"}`}
-          >
+        <Toolbar>
+          <Button variant="toolbar" size="sm" active={viewMode === "chart"} onClick={() => setViewMode("chart")}>
             Chart
-          </button>
-          <button
-            onClick={() => setViewMode("list")}
-            className={`px-2.5 py-1.5 text-xs font-medium ${viewMode === "list" ? "bg-edge-teal text-edge-navy" : "bg-surface2 text-text-muted hover:text-text"}`}
-          >
+          </Button>
+          <Button variant="toolbar" size="sm" active={viewMode === "list"} onClick={() => setViewMode("list")}>
             List
-          </button>
-        </div>
+          </Button>
+        </Toolbar>
       </div>
 
       {viewMode === "chart" && (
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <button onClick={expandAll} className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-text-muted hover:text-text">
+        <Toolbar>
+          <Button variant="toolbar" size="sm" onClick={expandAll}>
             Expand all
-          </button>
-          <button onClick={collapseAll} className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-text-muted hover:text-text">
+          </Button>
+          <Button variant="toolbar" size="sm" onClick={collapseAll}>
             Collapse all
-          </button>
-          <div className="mx-1 h-4 w-px bg-border" />
-          <button onClick={() => zoomBy(-ZOOM_STEP)} className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-text-muted hover:text-text">
+          </Button>
+          <ToolbarDivider />
+          <Button variant="toolbar" size="sm" onClick={() => zoomBy(-ZOOM_STEP)}>
             Zoom out
-          </button>
+          </Button>
           <span className="w-10 text-center text-text-dim">{Math.round(zoom * 100)}%</span>
-          <button onClick={() => zoomBy(ZOOM_STEP)} className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-text-muted hover:text-text">
+          <Button variant="toolbar" size="sm" onClick={() => zoomBy(ZOOM_STEP)}>
             Zoom in
-          </button>
-          <button onClick={fitToScreen} className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-text-muted hover:text-text">
+          </Button>
+          <Button variant="toolbar" size="sm" onClick={fitToScreen}>
             Fit to screen
-          </button>
-          <button onClick={() => setZoom(1)} className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-text-muted hover:text-text">
+          </Button>
+          <Button variant="toolbar" size="sm" onClick={() => setZoom(1)}>
             Reset
-          </button>
-          <div className="mx-1 h-4 w-px bg-border" />
-          <button
-            onClick={exportPng}
-            disabled={isExporting || visibleRoots.length === 0}
-            className="rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-text-muted hover:text-text disabled:opacity-50"
-          >
+          </Button>
+          <ToolbarDivider />
+          <Button variant="toolbar" size="sm" onClick={exportPng} disabled={isExporting || visibleRoots.length === 0}>
             {isExporting ? "Exporting..." : "Export as PNG"}
-          </button>
-        </div>
+          </Button>
+        </Toolbar>
       )}
 
-      <div ref={viewportRef} className="rounded-edge-lg border border-border bg-surface p-6" style={{ maxHeight: "75vh", overflow: "auto" }}>
+      <Card ref={viewportRef} className="p-6" style={{ maxHeight: "75vh", overflow: "auto" }}>
         {isLoading && <p className="p-4 text-sm text-text-muted">Loading...</p>}
-        {!isLoading && tree.length === 0 && <p className="p-4 text-sm text-text-dim">No positions in this company yet.</p>}
+        {!isLoading && tree.length === 0 && <EmptyState message="No positions in this company yet." />}
 
         {viewMode === "list" && visibleRoots.length > 0 && (
           <div>
@@ -305,17 +296,17 @@ export default function OrgChart() {
               {chartNodes}
             </div>
           ))}
-      </div>
+      </Card>
     </div>
   );
 }
 
-const TIER_ROOT_STYLE = "border border-edge-teal/40 bg-edge-navy text-white shadow-edge-md";
+const TIER_ROOT_STYLE = "bg-edge-navy text-white shadow-edge-md";
 
 function tierStyle(depth: number, branchClass: string): string {
   if (depth === 0) return TIER_ROOT_STYLE;
-  if (depth === 1) return `border border-border ${branchClass} border-l-4 bg-surface shadow-edge-sm`;
-  return `border border-border ${branchClass} border-l-4 bg-surface2`;
+  if (depth === 1) return `${branchClass} border-l-4 bg-surface shadow-edge-md`;
+  return `${branchClass} border-l-4 bg-surface2 shadow-edge-sm`;
 }
 
 function OrgNode({

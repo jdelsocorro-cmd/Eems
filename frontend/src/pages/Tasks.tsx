@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Employee, Project, Task, TaskComment, TaskStatus, TaskStatusHistoryEntry } from "@/lib/types";
+import { Button, Card, EmptyState, ErrorBanner } from "@/components/ui";
 
 const TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 
@@ -19,10 +20,6 @@ const TASK_STATUS_STYLES: Record<TaskStatus, string> = {
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.detail;
   return "Something went wrong.";
-}
-
-function ErrorBanner({ message }: { message: string }) {
-  return <p className="mt-2 rounded-edge-sm bg-danger/10 px-3 py-2 text-sm text-danger">{message}</p>;
 }
 
 export default function Tasks() {
@@ -99,12 +96,7 @@ export default function Tasks() {
           <h1 className="text-xl font-semibold text-text">My Tasks</h1>
           <p className="mt-1 text-sm text-text-muted">Tasks assigned to you, across every project and standalone.</p>
         </div>
-        <button
-          onClick={() => setShowCreateForm((v) => !v)}
-          className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark"
-        >
-          + New task
-        </button>
+        <Button onClick={() => setShowCreateForm((v) => !v)}>+ New task</Button>
       </div>
 
       {showCreateForm && (
@@ -117,7 +109,7 @@ export default function Tasks() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-edge-lg border border-border bg-surface">
+        <Card className="lg:col-span-2">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
@@ -155,12 +147,12 @@ export default function Tasks() {
               )}
             </tbody>
           </table>
-        </div>
+        </Card>
 
-        <div className="rounded-edge-lg border border-border bg-surface p-4">
+        <Card className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Details</h2>
           {!selectedTask ? (
-            <p className="text-sm text-text-dim">Select a task to see details.</p>
+            <EmptyState message="Select a task to see details." />
           ) : (
             <div className="flex flex-col gap-3">
               <div>
@@ -213,19 +205,15 @@ export default function Tasks() {
                     placeholder="Add a comment..."
                     className="flex-1 rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
                   />
-                  <button
-                    type="submit"
-                    disabled={addComment.isPending}
-                    className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-                  >
+                  <Button type="submit" disabled={addComment.isPending}>
                     Post
-                  </button>
+                  </Button>
                 </form>
                 {addComment.isError && <ErrorBanner message={errorMessage(addComment.error)} />}
               </div>
             </div>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );
@@ -253,7 +241,7 @@ function CreateTaskForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-edge-lg border border-border bg-surface p-4">
+    <form onSubmit={handleSubmit} className="rounded-edge-lg bg-surface p-4 shadow-edge-sm">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <input
           value={title}
@@ -274,13 +262,9 @@ function CreateTaskForm({
           ))}
         </select>
       </div>
-      <button
-        type="submit"
-        disabled={pending}
-        className="mt-3 rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-      >
+      <Button type="submit" disabled={pending} className="mt-3">
         {pending ? "Creating..." : "Create task"}
-      </button>
+      </Button>
       {error && <ErrorBanner message={error} />}
     </form>
   );

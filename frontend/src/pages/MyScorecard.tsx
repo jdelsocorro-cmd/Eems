@@ -4,14 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Employee, Kpi, KpiScore } from "@/lib/types";
+import { Button, Card, ErrorBanner } from "@/components/ui";
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.detail;
   return "Something went wrong.";
-}
-
-function ErrorBanner({ message }: { message: string }) {
-  return <p className="mt-2 rounded-edge-sm bg-danger/10 px-3 py-2 text-sm text-danger">{message}</p>;
 }
 
 function ratio(kpi: Kpi): number {
@@ -76,7 +73,7 @@ export default function MyScorecard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-edge-lg border border-border bg-surface">
+        <Card className="lg:col-span-2">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
@@ -116,9 +113,9 @@ export default function MyScorecard() {
             </tbody>
           </table>
           {logProgress.isError && <ErrorBanner message={errorMessage(logProgress.error)} />}
-        </div>
+        </Card>
 
-        <div className="rounded-edge-lg border border-border bg-surface p-4">
+        <Card className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Score</h2>
 
           {latestScore ? (
@@ -147,13 +144,9 @@ export default function MyScorecard() {
               onChange={(e) => setPeriodEnd(e.target.value)}
               className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
             />
-            <button
-              type="submit"
-              disabled={computeScore.isPending}
-              className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-            >
+            <Button type="submit" disabled={computeScore.isPending}>
               {computeScore.isPending ? "Computing..." : "Compute score for period"}
-            </button>
+            </Button>
             {computeScore.isError && <ErrorBanner message={errorMessage(computeScore.error)} />}
           </form>
 
@@ -169,7 +162,7 @@ export default function MyScorecard() {
               </ul>
             </div>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );
@@ -194,13 +187,9 @@ function ProgressLogCell({ kpi, onSave, pending }: { kpi: Kpi; onSave: (value: n
         onChange={(e) => setValue(e.target.value)}
         className="w-16 rounded-edge-sm border border-border bg-surface2 px-2 py-1 text-xs text-text"
       />
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-edge-sm bg-edge-teal px-2 py-1 text-xs font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-      >
+      <Button type="submit" size="sm" disabled={pending}>
         Save
-      </button>
+      </Button>
     </form>
   );
 }

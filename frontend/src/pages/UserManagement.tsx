@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import type { Employee, EmploymentType, OrgUnit, Position, PositionAssignment } from "@/lib/types";
+import { Button, Card, EmptyState, ErrorBanner } from "@/components/ui";
 
 const STATUS_STYLES: Record<Employee["status"], string> = {
   active: "bg-success-soft text-success",
@@ -119,12 +120,7 @@ export default function UserManagement() {
           <h1 className="text-xl font-semibold text-text">Users</h1>
           <p className="mt-1 text-sm text-text-muted">Manage employee records, position assignments, and offboarding.</p>
         </div>
-        <button
-          onClick={() => setShowCreateForm((v) => !v)}
-          className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark"
-        >
-          + New employee
-        </button>
+        <Button onClick={() => setShowCreateForm((v) => !v)}>+ New employee</Button>
       </div>
 
       {showCreateForm && (
@@ -138,7 +134,7 @@ export default function UserManagement() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-edge-lg border border-border bg-surface shadow-edge-sm">
+        <Card className="lg:col-span-2">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
@@ -179,12 +175,12 @@ export default function UserManagement() {
               )}
             </tbody>
           </table>
-        </div>
+        </Card>
 
-        <div className="rounded-edge-lg border border-border bg-surface p-4 shadow-edge-sm">
+        <Card className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Consultant Profile</h2>
           {!selectedEmployee ? (
-            <p className="text-sm text-text-dim">Select an employee to see their profile.</p>
+            <EmptyState message="Select an employee to see their profile." />
           ) : (
             <div className="flex flex-col gap-3">
               <div>
@@ -249,23 +245,24 @@ export default function UserManagement() {
 
               {selectedEmployee.status !== "offboarded" && (
                 <div className="border-t border-border pt-3">
-                  <button
+                  <Button
+                    variant="danger"
+                    className="w-full border border-danger"
                     onClick={() => {
                       if (confirm(`Offboard ${selectedEmployee.first_name} ${selectedEmployee.last_name}?`)) {
                         offboardEmployee.mutate(selectedEmployee.id);
                       }
                     }}
                     disabled={offboardEmployee.isPending}
-                    className="w-full rounded-edge-sm border border-danger px-3 py-1.5 text-sm font-medium text-danger transition hover:bg-danger/10 disabled:opacity-50"
                   >
                     {offboardEmployee.isPending ? "Offboarding..." : "Offboard"}
-                  </button>
+                  </Button>
                   {offboardEmployee.isError && <ErrorBanner message={errorMessage(offboardEmployee.error)} />}
                 </div>
               )}
             </div>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );
@@ -370,16 +367,12 @@ function ConsultantProfileEditForm({
         ))}
       </select>
       <div className="flex items-center gap-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-        >
+        <Button type="submit" disabled={pending}>
           {pending ? "Saving..." : "Save"}
-        </button>
-        <button type="button" onClick={onCancel} className="text-sm text-text-muted hover:underline">
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
       {error && <ErrorBanner message={error} />}
     </form>
@@ -389,10 +382,6 @@ function ConsultantProfileEditForm({
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.detail;
   return "Something went wrong.";
-}
-
-function ErrorBanner({ message }: { message: string }) {
-  return <p className="mt-2 rounded-edge-sm bg-danger/10 px-3 py-2 text-sm text-danger">{message}</p>;
 }
 
 function CreateEmployeeForm({
@@ -441,7 +430,7 @@ function CreateEmployeeForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-edge-lg border border-border bg-surface p-4">
+    <form onSubmit={handleSubmit} className="rounded-edge-lg bg-surface p-4 shadow-edge-sm">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <input
           value={firstName}
@@ -514,13 +503,9 @@ function CreateEmployeeForm({
         <input type="checkbox" checked={sendInvite} onChange={(e) => setSendInvite(e.target.checked)} />
         Send an email invite now (uncheck to pre-provision without inviting yet)
       </label>
-      <button
-        type="submit"
-        disabled={pending}
-        className="mt-3 rounded-edge-sm bg-edge-teal px-3 py-1.5 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-      >
+      <Button type="submit" disabled={pending} className="mt-3">
         {pending ? "Creating..." : "Create employee"}
-      </button>
+      </Button>
       {error && <ErrorBanner message={error} />}
     </form>
   );

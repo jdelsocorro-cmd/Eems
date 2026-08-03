@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
+import { Button, Card } from "@/components/ui";
 
 interface EmployeeMe {
   first_name: string;
@@ -65,7 +66,7 @@ export default function AccountSettings() {
         <p className="mt-1 text-sm text-text-muted">Manage your own account.</p>
       </div>
 
-      <div className="max-w-md rounded-edge-lg border border-border bg-surface p-4">
+      <Card className="max-w-md p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Profile</h2>
         {meQuery.data && (
           <div className="text-sm text-text">
@@ -76,9 +77,9 @@ export default function AccountSettings() {
           </div>
         )}
         {meQuery.isError && <p className="text-sm text-danger">{errorMessage(meQuery.error)}</p>}
-      </div>
+      </Card>
 
-      <div className="max-w-md rounded-edge-lg border border-border bg-surface p-4">
+      <Card className="max-w-md p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Change password</h2>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
@@ -116,15 +117,11 @@ export default function AccountSettings() {
           {error && <p className="text-sm text-danger">{error}</p>}
           {success && <p className="text-sm text-success">Password updated.</p>}
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-edge-md bg-edge-teal px-4 py-2 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-          >
+          <Button type="submit" disabled={submitting}>
             {submitting ? "Updating..." : "Update password"}
-          </button>
+          </Button>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }

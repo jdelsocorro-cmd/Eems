@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui";
 
 export default function AcceptInvite() {
   const { session, loading } = useAuth();
@@ -42,7 +43,7 @@ export default function AcceptInvite() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg font-ui text-text">
-      <div className="w-full max-w-sm rounded-edge-lg border border-border bg-surface p-8 shadow-edge-md">
+      <div className="w-full max-w-sm rounded-edge-lg bg-surface p-8 shadow-edge-lg">
         <div className="mb-6 text-center">
           <span className="text-2xl font-semibold text-text">
             EEMS<span className="text-edge-teal">.</span>
@@ -90,13 +91,9 @@ export default function AcceptInvite() {
 
             {error && <p className="text-sm text-danger">{error}</p>}
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="mt-2 rounded-edge-md bg-edge-teal px-4 py-2 text-sm font-medium text-edge-navy transition hover:bg-edge-teal-dark disabled:opacity-50"
-            >
+            <Button type="submit" disabled={submitting} className="mt-2 w-full">
               {submitting ? "Setting password..." : "Set password and continue"}
-            </button>
+            </Button>
           </form>
         )}
       </div>
