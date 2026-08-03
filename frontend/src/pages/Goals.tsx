@@ -276,7 +276,9 @@ function CreateGoalForm({
         </div>
 
         <div>
-          <FieldLabel tooltip={GOAL_TYPE_LEGEND}>Goal type</FieldLabel>
+          <FieldLabel tooltip={GOAL_TYPE_LEGEND} tooltipSide="bottom">
+            Goal type
+          </FieldLabel>
           <select
             value={goalType}
             onChange={(e) => setGoalType(e.target.value as GoalType)}
