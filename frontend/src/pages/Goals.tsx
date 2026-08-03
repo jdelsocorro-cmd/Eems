@@ -4,11 +4,28 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Company, Employee, Goal, GoalStatus, GoalType, Kpi, KpiDirection, OrgUnit } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel } from "@/components/ui";
 
 const GOAL_TYPES: GoalType[] = ["company", "org_unit", "individual"];
 const GOAL_STATUSES: GoalStatus[] = ["draft", "active", "completed", "archived"];
 const KPI_DIRECTIONS: KpiDirection[] = ["higher_is_better", "lower_is_better", "target_is_exact"];
+
+const GOAL_TYPE_DESCRIPTIONS: Record<GoalType, string> = {
+  company: "Applies to the whole organization — the top-level target that org-unit and individual goals can roll up into.",
+  org_unit: "Applies to one org unit (a department or team) and everyone in it.",
+  individual: "Applies to a single employee's personal goal.",
+};
+
+const GOAL_TYPE_LEGEND = (
+  <div className="flex flex-col gap-1.5">
+    <p className="font-semibold text-white">Goal scope</p>
+    {GOAL_TYPES.map((t) => (
+      <p key={t}>
+        <span className="font-medium text-edge-teal">{t.replace("_", "-")}</span> — {GOAL_TYPE_DESCRIPTIONS[t]}
+      </p>
+    ))}
+  </div>
+);
 
 const GOAL_STATUS_STYLES: Record<GoalStatus, string> = {
   draft: "bg-surface2 text-text-muted",
@@ -228,79 +245,108 @@ function CreateGoalForm({
 
   return (
     <form onSubmit={handleSubmit} className="rounded-edge-lg bg-surface p-4 shadow-edge-sm">
+      <h3 className="mb-3 text-sm font-semibold text-text">New goal</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Goal title"
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
-        />
-        <select
-          value={companyId}
-          onChange={(e) => setCompanyId(e.target.value)}
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
-        >
-          <option value="" disabled>
-            Choose a company...
-          </option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={goalType}
-          onChange={(e) => setGoalType(e.target.value as GoalType)}
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
-        >
-          {GOAL_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-        {goalType === "individual" && (
+        <div>
+          <FieldLabel>Goal title</FieldLabel>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Expand account hours"
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
+          />
+        </div>
+
+        <div>
+          <FieldLabel>Company</FieldLabel>
           <select
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
-            className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
-          >
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.first_name} {emp.last_name}
-              </option>
-            ))}
-          </select>
-        )}
-        {goalType === "org_unit" && (
-          <select
-            value={orgUnitId}
-            onChange={(e) => setOrgUnitId(e.target.value)}
-            className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
           >
             <option value="" disabled>
-              Choose a unit...
+              Choose a company...
             </option>
-            {units.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} ({u.unit_type})
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <FieldLabel tooltip={GOAL_TYPE_LEGEND}>Goal type</FieldLabel>
+          <select
+            value={goalType}
+            onChange={(e) => setGoalType(e.target.value as GoalType)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+          >
+            {GOAL_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t.replace("_", "-")}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-[11px] leading-snug text-text-dim">{GOAL_TYPE_DESCRIPTIONS[goalType]}</p>
+        </div>
+
+        {goalType === "individual" && (
+          <div>
+            <FieldLabel>Employee</FieldLabel>
+            <select
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
+              className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+            >
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.first_name} {emp.last_name}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
-        <input
-          type="date"
-          value={periodStart}
-          onChange={(e) => setPeriodStart(e.target.value)}
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
-        />
-        <input
-          type="date"
-          value={periodEnd}
-          onChange={(e) => setPeriodEnd(e.target.value)}
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
-        />
+
+        {goalType === "org_unit" && (
+          <div>
+            <FieldLabel>Org unit</FieldLabel>
+            <select
+              value={orgUnitId}
+              onChange={(e) => setOrgUnitId(e.target.value)}
+              className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+            >
+              <option value="" disabled>
+                Choose a unit...
+              </option>
+              {units.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.unit_type})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div>
+          <FieldLabel>Start date</FieldLabel>
+          <input
+            type="date"
+            value={periodStart}
+            onChange={(e) => setPeriodStart(e.target.value)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+          />
+        </div>
+
+        <div>
+          <FieldLabel>End date</FieldLabel>
+          <input
+            type="date"
+            value={periodEnd}
+            onChange={(e) => setPeriodEnd(e.target.value)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+          />
+        </div>
       </div>
       <Button type="submit" disabled={pending} className="mt-3">
         {pending ? "Creating..." : "Create goal"}
