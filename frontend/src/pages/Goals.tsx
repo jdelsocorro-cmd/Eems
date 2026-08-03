@@ -45,6 +45,35 @@ const GOAL_STATUS_LEGEND = (
   </div>
 );
 
+const KPI_UNIT_LEGEND = (
+  <div className="flex flex-col gap-1.5">
+    <p className="font-semibold text-white">Unit</p>
+    <p>
+      A free-text label for what the target and current values are measured in — e.g.{" "}
+      <span className="font-medium text-edge-teal">count</span>, <span className="font-medium text-edge-teal">%</span>,{" "}
+      <span className="font-medium text-edge-teal">hours</span>, <span className="font-medium text-edge-teal">$</span>. It's
+      only a display label — the score is computed from the numeric values, not this text.
+    </p>
+  </div>
+);
+
+const KPI_DIRECTION_DESCRIPTIONS: Record<KpiDirection, string> = {
+  higher_is_better: "Progress is good when the current value goes up (e.g. revenue, sessions completed).",
+  lower_is_better: "Progress is good when the current value goes down (e.g. churn, error count).",
+  target_is_exact: "Progress is best when the current value matches the target exactly.",
+};
+
+const KPI_DIRECTION_LEGEND = (
+  <div className="flex flex-col gap-1.5">
+    <p className="font-semibold text-white">Direction</p>
+    {KPI_DIRECTIONS.map((d) => (
+      <p key={d}>
+        <span className="font-medium text-edge-teal">{d.replace(/_/g, " ")}</span> — {KPI_DIRECTION_DESCRIPTIONS[d]}
+      </p>
+    ))}
+  </div>
+);
+
 const GOAL_STATUS_STYLES: Record<GoalStatus, string> = {
   draft: "bg-surface2 text-text-muted",
   active: "bg-success-soft text-success",
@@ -422,57 +451,80 @@ function NewKpiForm({
   return (
     <form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-2">
       <div className="grid grid-cols-2 gap-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="KPI name"
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
-        />
-        <select
-          value={employeeId}
-          onChange={(e) => setEmployeeId(e.target.value)}
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text"
-        >
-          <option value="" disabled>
-            Owning employee...
-          </option>
-          {employees.map((emp) => (
-            <option key={emp.id} value={emp.id}>
-              {emp.first_name} {emp.last_name}
+        <div>
+          <FieldLabel>KPI name</FieldLabel>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Monthly booked hours"
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
+          />
+        </div>
+
+        <div>
+          <FieldLabel>Owning employee</FieldLabel>
+          <select
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text"
+          >
+            <option value="" disabled>
+              Choose an employee...
             </option>
-          ))}
-        </select>
-        <input
-          value={unit}
-          onChange={(e) => setUnit(e.target.value)}
-          placeholder="Unit (e.g. count)"
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
-        />
-        <select
-          value={direction}
-          onChange={(e) => setDirection(e.target.value as KpiDirection)}
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text"
-        >
-          {KPI_DIRECTIONS.map((d) => (
-            <option key={d} value={d}>
-              {d.replace(/_/g, " ")}
-            </option>
-          ))}
-        </select>
-        <input
-          type="number"
-          value={targetValue}
-          onChange={(e) => setTargetValue(e.target.value)}
-          placeholder="Target value"
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
-        />
-        <input
-          type="number"
-          value={weight}
-          onChange={(e) => setWeight(e.target.value)}
-          placeholder="Weight (0-100)"
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
-        />
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {emp.first_name} {emp.last_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <FieldLabel tooltip={KPI_UNIT_LEGEND}>Unit</FieldLabel>
+          <input
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            placeholder="e.g. count, %, hours"
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
+          />
+        </div>
+
+        <div>
+          <FieldLabel tooltip={KPI_DIRECTION_LEGEND}>Direction</FieldLabel>
+          <select
+            value={direction}
+            onChange={(e) => setDirection(e.target.value as KpiDirection)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text"
+          >
+            {KPI_DIRECTIONS.map((d) => (
+              <option key={d} value={d}>
+                {d.replace(/_/g, " ")}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <FieldLabel>Target value</FieldLabel>
+          <input
+            type="number"
+            value={targetValue}
+            onChange={(e) => setTargetValue(e.target.value)}
+            placeholder="e.g. 100"
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
+          />
+        </div>
+
+        <div>
+          <FieldLabel>Weight (0-100)</FieldLabel>
+          <input
+            type="number"
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+            placeholder="e.g. 25"
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text outline-none focus:border-border-hover"
+          />
+        </div>
       </div>
       <Button type="submit" disabled={pending}>
         {pending ? "Adding..." : "Add KPI"}
