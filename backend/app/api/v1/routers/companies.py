@@ -6,7 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentEmployee, get_current_employee, get_db, require_permission
 from app.models.org import Company as CompanyModel
+from app.models.project import TaskCategory as TaskCategoryModel
 from app.schemas.org import Company, CompanyCreate, CompanyUpdate
+
+DEFAULT_TASK_CATEGORIES = ["Adhoc", "Support", "Reporting", "BAU", "Data Management", "Other"]
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -49,6 +52,14 @@ async def create_company(
     db.add(company)
     await db.flush()
     await db.refresh(company)
+
+    # New companies get the same starter task categories the 027 migration
+    # backfilled onto existing ones -- so this list only needs to be
+    # maintained in one place, not re-seeded manually per company.
+    for name in DEFAULT_TASK_CATEGORIES:
+        db.add(TaskCategoryModel(company_id=company.id, name=name))
+    await db.flush()
+
     return company
 
 

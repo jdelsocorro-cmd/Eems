@@ -17,6 +17,7 @@ from app.api.v1.routers import (
     projects,
     roles,
     scores,
+    task_categories,
     tasks,
 )
 from app.core.config import get_settings
@@ -45,6 +46,7 @@ app.include_router(roles.router, prefix="/api/v1")
 app.include_router(employee_roles.router, prefix="/api/v1")
 app.include_router(projects.router, prefix="/api/v1")
 app.include_router(tasks.router, prefix="/api/v1")
+app.include_router(task_categories.router, prefix="/api/v1")
 app.include_router(goals.router, prefix="/api/v1")
 app.include_router(kpi_templates.router, prefix="/api/v1")
 app.include_router(kpis.router, prefix="/api/v1")

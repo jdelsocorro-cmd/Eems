@@ -119,10 +119,18 @@ export interface ProjectMember {
   added_at: string;
 }
 
+export interface TaskCategory {
+  id: string;
+  company_id: string;
+  name: string;
+  is_active: boolean;
+}
+
 export interface Task {
   id: string;
   project_id: string | null;
   parent_task_id: string | null;
+  task_category_id: string | null;
   title: string;
   description: string | null;
   status: TaskStatus;

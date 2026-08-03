@@ -69,9 +69,31 @@ class ProjectMember(BaseModel):
     added_at: datetime
 
 
+class TaskCategoryBase(BaseModel):
+    company_id: uuid.UUID
+    name: str
+    is_active: bool = True
+
+
+class TaskCategoryCreate(TaskCategoryBase):
+    pass
+
+
+class TaskCategoryUpdate(BaseModel):
+    name: str | None = None
+    is_active: bool | None = None
+
+
+class TaskCategory(TaskCategoryBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+
+
 class TaskBase(BaseModel):
     project_id: uuid.UUID | None = None
     parent_task_id: uuid.UUID | None = None
+    task_category_id: uuid.UUID | None = None
     title: str
     description: str | None = None
     priority: PriorityLevel = "medium"
@@ -89,6 +111,7 @@ class TaskCreate(TaskBase):
 class TaskUpdate(BaseModel):
     project_id: uuid.UUID | None = None
     parent_task_id: uuid.UUID | None = None
+    task_category_id: uuid.UUID | None = None
     title: str | None = None
     description: str | None = None
     status: TaskStatus | None = None
