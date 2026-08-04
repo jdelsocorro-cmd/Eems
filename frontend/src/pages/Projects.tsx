@@ -100,7 +100,7 @@ export default function Projects() {
   });
 
   const createTask = useMutation({
-    mutationFn: (payload: { title: string; assignee_employee_id: string | null }) =>
+    mutationFn: (payload: { title: string; assignee_employee_id: string }) =>
       apiClient.post<Task>("/tasks", { project_id: selectedProjectId, ...payload }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", "project", selectedProjectId] }),
   });
@@ -271,7 +271,10 @@ export default function Projects() {
                 <ul className="flex flex-col gap-1">
                   {(tasksQuery.data ?? []).map((task) => (
                     <li key={task.id} className="flex items-center justify-between gap-2 text-sm text-text">
-                      <span className="truncate">{task.title}</span>
+                      <span className="min-w-0 flex-1 truncate">{task.title}</span>
+                      <span className="shrink-0 text-xs text-text-dim">
+                        {employeeName(employeesQuery.data, task.assignee_employee_id)}
+                      </span>
                       <select
                         value={task.status}
                         onChange={(e) => updateTaskStatus.mutate({ id: task.id, status: e.target.value as TaskStatus })}
@@ -289,9 +292,11 @@ export default function Projects() {
                 </ul>
                 {updateTaskStatus.isError && <ErrorBanner message={errorMessage(updateTaskStatus.error)} />}
                 <NewTaskForm
+                  employees={employeesQuery.data ?? []}
+                  defaultAssigneeId={meQuery.data?.id ?? ""}
                   pending={createTask.isPending}
                   error={createTask.isError ? errorMessage(createTask.error) : null}
-                  onSubmit={(title) => createTask.mutate({ title, assignee_employee_id: meQuery.data?.id ?? null })}
+                  onSubmit={(title, assigneeId) => createTask.mutate({ title, assignee_employee_id: assigneeId })}
                 />
               </div>
             </div>
@@ -400,20 +405,25 @@ function CreateProjectForm({
 }
 
 function NewTaskForm({
+  employees,
+  defaultAssigneeId,
   onSubmit,
   pending,
   error,
 }: {
-  onSubmit: (title: string) => void;
+  employees: Employee[];
+  defaultAssigneeId: string;
+  onSubmit: (title: string, assigneeId: string) => void;
   pending: boolean;
   error: string | null;
 }) {
   const [title, setTitle] = useState("");
+  const [assigneeId, setAssigneeId] = useState(defaultAssigneeId);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
-    onSubmit(title.trim());
+    if (!title.trim() || !assigneeId) return;
+    onSubmit(title.trim(), assigneeId);
     setTitle("");
   }
 
@@ -422,9 +432,20 @@ function NewTaskForm({
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="New task title (assigned to you)"
+        placeholder="New task title"
         className="flex-1 rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
       />
+      <select
+        value={assigneeId}
+        onChange={(e) => setAssigneeId(e.target.value)}
+        className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+      >
+        {employees.map((emp) => (
+          <option key={emp.id} value={emp.id}>
+            {emp.first_name} {emp.last_name}
+          </option>
+        ))}
+      </select>
       <Button type="submit" disabled={pending}>
         {pending ? "Adding..." : "Add"}
       </Button>
