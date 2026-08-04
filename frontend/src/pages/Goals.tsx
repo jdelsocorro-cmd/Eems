@@ -7,7 +7,7 @@ import type { Company, Employee, Goal, GoalStatus, GoalType, Kpi, KpiDirection, 
 import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip } from "@/components/ui";
 
 const GOAL_TYPES: GoalType[] = ["company", "org_unit", "individual"];
-const GOAL_STATUSES: GoalStatus[] = ["draft", "active", "completed", "archived"];
+const GOAL_STATUSES: GoalStatus[] = ["draft", "active", "completed", "archived", "cancelled"];
 const KPI_DIRECTIONS: KpiDirection[] = ["higher_is_better", "lower_is_better", "target_is_exact"];
 
 const GOAL_TYPE_DESCRIPTIONS: Record<GoalType, string> = {
@@ -32,7 +32,17 @@ const GOAL_STATUS_DESCRIPTIONS: Record<GoalStatus, string> = {
   active: "Confirmed and currently in progress.",
   completed: "The goal has been achieved.",
   archived: "No longer relevant, but kept for the historical record.",
+  cancelled: "Called off before completion.",
 };
+
+const GOAL_OWNER_TOOLTIP = (
+  <p>
+    The employee accountable for driving this goal forward. This is separate from the goal's{" "}
+    <span className="font-medium text-edge-teal">type</span> — a company or org-unit goal has no natural single
+    "target," but can still have an owner responsible for it. For individual goals, this usually matches the employee
+    the goal is about, but doesn't have to.
+  </p>
+);
 
 const GOAL_STATUS_LEGEND = (
   <div className="flex flex-col gap-1.5">
@@ -79,7 +89,14 @@ const GOAL_STATUS_STYLES: Record<GoalStatus, string> = {
   active: "bg-success-soft text-success",
   completed: "bg-edge-teal/10 text-edge-teal",
   archived: "bg-surface2 text-text-dim",
+  cancelled: "bg-danger/10 text-danger",
 };
+
+function employeeName(employees: Employee[] | undefined, id: string | null): string {
+  if (!id) return "Unassigned";
+  const emp = employees?.find((e) => e.id === id);
+  return emp ? `${emp.first_name} ${emp.last_name}` : id;
+}
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.detail;
@@ -125,6 +142,12 @@ export default function Goals() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["goals"] }),
   });
 
+  const updateGoalOwner = useMutation({
+    mutationFn: ({ id, owner_employee_id }: { id: string; owner_employee_id: string | null }) =>
+      apiClient.patch<Goal>(`/goals/${id}`, { owner_employee_id }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["goals"] }),
+  });
+
   const createKpi = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiClient.post<Kpi>("/kpis", { ...payload, goal_id: selectedGoalId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["kpis", "goal", selectedGoalId] }),
@@ -159,6 +182,7 @@ export default function Goals() {
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
                 <th className="px-4 py-2">Title</th>
                 <th className="px-4 py-2">Type</th>
+                <th className="px-4 py-2">Owner</th>
                 <th className="px-4 py-2">
                   <span className="inline-flex items-center gap-1.5">
                     Status
@@ -178,6 +202,9 @@ export default function Goals() {
                 >
                   <td className="px-4 py-2 text-text">{goal.title}</td>
                   <td className="px-4 py-2 text-text-muted">{goal.goal_type}</td>
+                  <td className="px-4 py-2 text-text-muted">
+                    {employeeName(employeesQuery.data, goal.owner_employee_id)}
+                  </td>
                   <td className="px-4 py-2">
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${GOAL_STATUS_STYLES[goal.status]}`}>
                       {goal.status}
@@ -187,7 +214,7 @@ export default function Goals() {
               ))}
               {goalsQuery.data?.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-text-dim">
+                  <td colSpan={4} className="px-4 py-6 text-center text-text-dim">
                     No goals yet.
                   </td>
                 </tr>
@@ -227,6 +254,28 @@ export default function Goals() {
                   ))}
                 </select>
                 {updateGoalStatus.isError && <ErrorBanner message={errorMessage(updateGoalStatus.error)} />}
+              </div>
+
+              <div className="border-t border-border pt-3">
+                <p className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
+                  Owner
+                  <InfoTooltip content={GOAL_OWNER_TOOLTIP} side="bottom" />
+                </p>
+                <select
+                  value={selectedGoal.owner_employee_id ?? ""}
+                  onChange={(e) =>
+                    updateGoalOwner.mutate({ id: selectedGoal.id, owner_employee_id: e.target.value || null })
+                  }
+                  className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+                >
+                  <option value="">Unassigned</option>
+                  {(employeesQuery.data ?? []).map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.first_name} {emp.last_name}
+                    </option>
+                  ))}
+                </select>
+                {updateGoalOwner.isError && <ErrorBanner message={errorMessage(updateGoalOwner.error)} />}
               </div>
 
               <div className="border-t border-border pt-3">
@@ -278,6 +327,7 @@ function CreateGoalForm({
   const [companyId, setCompanyId] = useState("");
   const [goalType, setGoalType] = useState<GoalType>("individual");
   const [employeeId, setEmployeeId] = useState(defaultEmployeeId);
+  const [ownerEmployeeId, setOwnerEmployeeId] = useState(defaultEmployeeId);
   const [orgUnitId, setOrgUnitId] = useState("");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
@@ -290,6 +340,7 @@ function CreateGoalForm({
       title: title.trim(),
       company_id: companyId,
       goal_type: goalType,
+      owner_employee_id: ownerEmployeeId || null,
       period_start: periodStart,
       period_end: periodEnd,
     };
@@ -346,6 +397,24 @@ function CreateGoalForm({
             ))}
           </select>
           <p className="mt-1 text-[11px] leading-snug text-text-dim">{GOAL_TYPE_DESCRIPTIONS[goalType]}</p>
+        </div>
+
+        <div>
+          <FieldLabel tooltip={GOAL_OWNER_TOOLTIP} tooltipSide="bottom">
+            Owning employee
+          </FieldLabel>
+          <select
+            value={ownerEmployeeId}
+            onChange={(e) => setOwnerEmployeeId(e.target.value)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+          >
+            <option value="">Unassigned</option>
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {emp.first_name} {emp.last_name}
+              </option>
+            ))}
+          </select>
         </div>
 
         {goalType === "individual" && (

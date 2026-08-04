@@ -166,7 +166,7 @@ export interface TaskComment {
 }
 
 export type GoalType = "company" | "org_unit" | "individual";
-export type GoalStatus = "draft" | "active" | "completed" | "archived";
+export type GoalStatus = "draft" | "active" | "completed" | "archived" | "cancelled";
 export type KpiDirection = "higher_is_better" | "lower_is_better" | "target_is_exact";
 export type KpiStatus = "active" | "completed" | "archived";
 export type ScoreComputedBy = "system" | "manual";
@@ -179,6 +179,7 @@ export interface Goal {
   goal_type: GoalType;
   org_unit_id: string | null;
   employee_id: string | null;
+  owner_employee_id: string | null;
   parent_goal_id: string | null;
   period_start: string;
   period_end: string;

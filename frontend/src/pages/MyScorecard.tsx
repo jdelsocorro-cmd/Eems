@@ -3,8 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
-import type { Employee, Kpi, KpiScore } from "@/lib/types";
-import { Button, Card, ErrorBanner } from "@/components/ui";
+import type { Employee, Goal, Kpi, KpiScore, Project } from "@/lib/types";
+import { Button, Card, EmptyState, ErrorBanner } from "@/components/ui";
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.detail;
@@ -38,6 +38,18 @@ export default function MyScorecard() {
   const scoresQuery = useQuery({
     queryKey: ["scores", meQuery.data?.id],
     queryFn: () => apiClient.get<KpiScore[]>(`/scores?employee_id=${meQuery.data?.id}`),
+    enabled: !!meQuery.data,
+  });
+
+  const ownedGoalsQuery = useQuery({
+    queryKey: ["goals", "owner", meQuery.data?.id],
+    queryFn: () => apiClient.get<Goal[]>(`/goals?owner_employee_id=${meQuery.data?.id}`),
+    enabled: !!meQuery.data,
+  });
+
+  const ownedProjectsQuery = useQuery({
+    queryKey: ["projects", "owner", meQuery.data?.id],
+    queryFn: () => apiClient.get<Project[]>(`/projects?owner_employee_id=${meQuery.data?.id}`),
     enabled: !!meQuery.data,
   });
 
@@ -161,6 +173,44 @@ export default function MyScorecard() {
                 ))}
               </ul>
             </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card className="p-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Goals I own</h2>
+          {(ownedGoalsQuery.data ?? []).length === 0 ? (
+            <EmptyState message="You don't own any goals yet." />
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {(ownedGoalsQuery.data ?? []).map((goal) => (
+                <li key={goal.id} className="flex items-center justify-between gap-2 text-sm text-text">
+                  <span className="truncate">{goal.title}</span>
+                  <span className="shrink-0 rounded-edge-sm bg-surface2 px-2 py-0.5 text-xs font-medium text-text-muted">
+                    {goal.status}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card className="p-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Projects I own</h2>
+          {(ownedProjectsQuery.data ?? []).length === 0 ? (
+            <EmptyState message="You don't own any projects yet." />
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {(ownedProjectsQuery.data ?? []).map((project) => (
+                <li key={project.id} className="flex items-center justify-between gap-2 text-sm text-text">
+                  <span className="truncate">{project.name}</span>
+                  <span className="shrink-0 rounded-edge-sm bg-surface2 px-2 py-0.5 text-xs font-medium text-text-muted">
+                    {project.status.replace("_", " ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </Card>
       </div>

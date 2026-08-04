@@ -16,6 +16,7 @@ router = APIRouter(prefix="/goals", tags=["goals"])
 async def list_goals(
     company_id: uuid.UUID | None = Query(default=None),
     employee_id: uuid.UUID | None = Query(default=None),
+    owner_employee_id: uuid.UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _current: CurrentEmployee = Depends(get_current_employee),
 ) -> list[GoalModel]:
@@ -24,6 +25,8 @@ async def list_goals(
         stmt = stmt.where(GoalModel.company_id == company_id)
     if employee_id is not None:
         stmt = stmt.where(GoalModel.employee_id == employee_id)
+    if owner_employee_id is not None:
+        stmt = stmt.where(GoalModel.owner_employee_id == owner_employee_id)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

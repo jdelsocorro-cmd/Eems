@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Company, Employee, Project, ProjectMember, ProjectStatus, Task, TaskStatus } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip } from "@/components/ui";
 
 const PROJECT_STATUSES: ProjectStatus[] = ["planning", "active", "on_hold", "completed", "cancelled"];
 const TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
@@ -27,6 +27,14 @@ function employeeName(employees: Employee[] | undefined, id: string | null): str
   const emp = employees?.find((e) => e.id === id);
   return emp ? `${emp.first_name} ${emp.last_name}` : id;
 }
+
+const PROJECT_OWNER_TOOLTIP = (
+  <p>
+    The employee accountable for this project. Separate from <span className="font-medium text-edge-teal">members</span>{" "}
+    below — owner is one person responsible for the project overall; members are everyone collaborating on it.
+    Defaults to you if left unassigned.
+  </p>
+);
 
 export default function Projects() {
   const { session } = useAuth();
@@ -59,7 +67,7 @@ export default function Projects() {
   });
 
   const createProject = useMutation({
-    mutationFn: (payload: { company_id: string; name: string; priority: string }) =>
+    mutationFn: (payload: { company_id: string; name: string; priority: string; owner_employee_id: string | null }) =>
       apiClient.post<Project>("/projects", payload),
     onSuccess: (project) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
@@ -71,6 +79,12 @@ export default function Projects() {
   const updateProjectStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: ProjectStatus }) =>
       apiClient.patch<Project>(`/projects/${id}`, { status }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+  });
+
+  const updateProjectOwner = useMutation({
+    mutationFn: ({ id, owner_employee_id }: { id: string; owner_employee_id: string }) =>
+      apiClient.patch<Project>(`/projects/${id}`, { owner_employee_id }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
 
@@ -109,6 +123,8 @@ export default function Projects() {
       {showCreateForm && (
         <CreateProjectForm
           companies={companiesQuery.data ?? []}
+          employees={employeesQuery.data ?? []}
+          defaultOwnerId={meQuery.data?.id ?? ""}
           onSubmit={(payload) => createProject.mutate(payload)}
           pending={createProject.isPending}
           error={createProject.isError ? errorMessage(createProject.error) : null}
@@ -163,6 +179,25 @@ export default function Projects() {
               <div>
                 <p className="text-base font-medium text-text">{selectedProject.name}</p>
                 {selectedProject.description && <p className="mt-1 text-sm text-text-muted">{selectedProject.description}</p>}
+              </div>
+
+              <div className="border-t border-border pt-3">
+                <p className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
+                  Owner
+                  <InfoTooltip content={PROJECT_OWNER_TOOLTIP} side="bottom" />
+                </p>
+                <select
+                  value={selectedProject.owner_employee_id}
+                  onChange={(e) => updateProjectOwner.mutate({ id: selectedProject.id, owner_employee_id: e.target.value })}
+                  className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+                >
+                  {(employeesQuery.data ?? []).map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.first_name} {emp.last_name}
+                    </option>
+                  ))}
+                </select>
+                {updateProjectOwner.isError && <ErrorBanner message={errorMessage(updateProjectOwner.error)} />}
               </div>
 
               <div className="border-t border-border pt-3">
@@ -262,59 +297,92 @@ export default function Projects() {
 
 function CreateProjectForm({
   companies,
+  employees,
+  defaultOwnerId,
   onSubmit,
   pending,
   error,
 }: {
   companies: Company[];
-  onSubmit: (payload: { company_id: string; name: string; priority: string }) => void;
+  employees: Employee[];
+  defaultOwnerId: string;
+  onSubmit: (payload: { company_id: string; name: string; priority: string; owner_employee_id: string | null }) => void;
   pending: boolean;
   error: string | null;
 }) {
   const [name, setName] = useState("");
   const [companyId, setCompanyId] = useState("");
   const [priority, setPriority] = useState("medium");
+  const [ownerId, setOwnerId] = useState(defaultOwnerId);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim() || !companyId) return;
-    onSubmit({ name: name.trim(), company_id: companyId, priority });
+    onSubmit({ name: name.trim(), company_id: companyId, priority, owner_employee_id: ownerId || null });
   }
 
   return (
     <form onSubmit={handleSubmit} className="rounded-edge-lg bg-surface p-4 shadow-edge-sm">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Project name"
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
-        />
-        <select
-          value={companyId}
-          onChange={(e) => setCompanyId(e.target.value)}
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
-        >
-          <option value="" disabled>
-            Choose a company...
-          </option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <div>
+          <FieldLabel>Project name</FieldLabel>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Q3 onboarding revamp"
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
+          />
+        </div>
+
+        <div>
+          <FieldLabel>Company</FieldLabel>
+          <select
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+          >
+            <option value="" disabled>
+              Choose a company...
             </option>
-          ))}
-        </select>
-        <select
-          value={priority}
-          onChange={(e) => setPriority(e.target.value)}
-          className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
-        >
-          {["low", "medium", "high", "critical"].map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <FieldLabel tooltip={PROJECT_OWNER_TOOLTIP} tooltipSide="bottom">
+            Owner
+          </FieldLabel>
+          <select
+            value={ownerId}
+            onChange={(e) => setOwnerId(e.target.value)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+          >
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {emp.first_name} {emp.last_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <FieldLabel>Priority</FieldLabel>
+          <select
+            value={priority}
+            onChange={(e) => setPriority(e.target.value)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+          >
+            {["low", "medium", "high", "critical"].map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <Button type="submit" disabled={pending} className="mt-3">
         {pending ? "Creating..." : "Create project"}

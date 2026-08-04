@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, model_validator
 
 GoalType = Literal["company", "org_unit", "individual"]
-GoalStatus = Literal["draft", "active", "completed", "archived"]
+GoalStatus = Literal["draft", "active", "completed", "archived", "cancelled"]
 KpiDirection = Literal["higher_is_better", "lower_is_better", "target_is_exact"]
 KpiStatus = Literal["active", "completed", "archived"]
 ScoreComputedBy = Literal["system", "manual"]
@@ -18,6 +18,7 @@ class GoalBase(BaseModel):
     goal_type: GoalType
     org_unit_id: uuid.UUID | None = None
     employee_id: uuid.UUID | None = None
+    owner_employee_id: uuid.UUID | None = None
     parent_goal_id: uuid.UUID | None = None
     period_start: date
     period_end: date
@@ -46,6 +47,7 @@ class GoalUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     status: GoalStatus | None = None
+    owner_employee_id: uuid.UUID | None = None
     period_start: date | None = None
     period_end: date | None = None
 

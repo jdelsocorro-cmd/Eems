@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 GoalType = PgEnum("company", "org_unit", "individual", name="goal_type", create_type=False)
-GoalStatus = PgEnum("draft", "active", "completed", "archived", name="goal_status", create_type=False)
+GoalStatus = PgEnum("draft", "active", "completed", "archived", "cancelled", name="goal_status", create_type=False)
 KpiDirection = PgEnum("higher_is_better", "lower_is_better", "target_is_exact", name="kpi_direction", create_type=False)
 KpiStatus = PgEnum("active", "completed", "archived", name="kpi_status", create_type=False)
 ScoreComputedBy = PgEnum("system", "manual", name="score_computed_by", create_type=False)
@@ -25,6 +25,7 @@ class Goal(Base):
     goal_type: Mapped[str] = mapped_column(GoalType, nullable=False)
     org_unit_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("org_units.id"))
     employee_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("employees.id"))
+    owner_employee_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("employees.id"))
     parent_goal_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("goals.id"))
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)

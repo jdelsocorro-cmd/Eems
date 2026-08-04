@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,10 +15,14 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 @router.get("", response_model=list[Project])
 async def list_projects(
+    owner_employee_id: uuid.UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _current: CurrentEmployee = Depends(get_current_employee),
 ) -> list[ProjectModel]:
-    result = await db.execute(select(ProjectModel).where(ProjectModel.deleted_at.is_(None)))
+    stmt = select(ProjectModel).where(ProjectModel.deleted_at.is_(None))
+    if owner_employee_id is not None:
+        stmt = stmt.where(ProjectModel.owner_employee_id == owner_employee_id)
+    result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
