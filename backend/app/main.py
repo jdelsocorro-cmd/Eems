@@ -10,6 +10,7 @@ from app.api.v1.routers import (
     employees,
     goals,
     health,
+    help,
     kpi_links,
     kpi_templates,
     kpis,
@@ -21,6 +22,7 @@ from app.api.v1.routers import (
     recognitions,
     roles,
     scores,
+    support,
     task_categories,
     tasks,
 )
@@ -60,3 +62,5 @@ app.include_router(kpi_links.router, prefix="/api/v1")
 app.include_router(recognitions.router, prefix="/api/v1")
 app.include_router(scores.router, prefix="/api/v1")
 app.include_router(dashboards.router, prefix="/api/v1")
+app.include_router(help.router, prefix="/api/v1")
+app.include_router(support.router, prefix="/api/v1")

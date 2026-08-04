@@ -14,6 +14,9 @@ import Tasks from "@/pages/Tasks";
 import Goals from "@/pages/Goals";
 import MyScorecard from "@/pages/MyScorecard";
 import LeadershipScorecard from "@/pages/LeadershipScorecard";
+import HelpCenter from "@/pages/HelpCenter";
+import HelpAdmin from "@/pages/HelpAdmin";
+import SupportAdmin from "@/pages/SupportAdmin";
 import AccountSettings from "@/pages/AccountSettings";
 
 export default function App() {
@@ -38,6 +41,9 @@ export default function App() {
                   <Route path="/admin/org" element={<OrgAdmin />} />
                   <Route path="/admin/rbac" element={<RbacAdmin />} />
                   <Route path="/admin/users" element={<UserManagement />} />
+                  <Route path="/help" element={<HelpCenter />} />
+                  <Route path="/admin/help" element={<HelpAdmin />} />
+                  <Route path="/admin/support" element={<SupportAdmin />} />
                   <Route path="/settings" element={<AccountSettings />} />
                 </Routes>
               </AppLayout>

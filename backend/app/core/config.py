@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # services/supabase_admin.py. Distinct from cors_origins (which can list
     # several origins); this is the one canonical frontend URL.
     frontend_url: str = "http://localhost:5173"
+    # Optional -- if unset, notify_support_ticket_created() logs a warning
+    # and no-ops rather than failing ticket creation. See services/slack_notify.py.
+    slack_support_webhook_url: str | None = None
 
     @property
     def cors_origin_list(self) -> list[str]:

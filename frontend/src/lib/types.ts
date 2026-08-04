@@ -351,3 +351,73 @@ export interface PositionScore {
   computed_score: number | null;
   computed_at: string;
 }
+
+export type HelpArticleStatus = "draft" | "published" | "archived";
+
+export interface HelpCategory {
+  id: string;
+  company_id: string;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HelpArticle {
+  id: string;
+  company_id: string;
+  category_id: string | null;
+  title: string;
+  body_markdown: string;
+  tags: string[];
+  status: HelpArticleStatus;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HelpArticleRole {
+  article_id: string;
+  role_id: string;
+  created_at: string;
+}
+
+export interface HelpArticleVersion {
+  id: string;
+  article_id: string;
+  version_no: number;
+  title: string;
+  body_markdown: string;
+  edited_by: string | null;
+  edited_at: string;
+}
+
+export type SupportCategory = "bug" | "ux_issue" | "performance" | "data_issue" | "feature_request" | "question" | "other";
+export type SupportTicketStatus = "new" | "acknowledged" | "in_progress" | "resolved" | "closed";
+
+export interface SupportTicket {
+  id: string;
+  company_id: string;
+  reported_by: string;
+  title: string;
+  description: string;
+  category: SupportCategory;
+  severity: PriorityLevel;
+  status: SupportTicketStatus;
+  page_url: string | null;
+  user_agent: string | null;
+  screenshot_path: string | null;
+  assigned_to: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupportTicketNote {
+  id: string;
+  ticket_id: string;
+  employee_id: string;
+  note: string;
+  created_at: string;
+}

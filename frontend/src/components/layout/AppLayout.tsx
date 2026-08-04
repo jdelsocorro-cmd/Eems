@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 
 import { supabase } from "@/lib/supabaseClient";
+import { ReportProblemButton } from "@/components/support/ReportProblemButton";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard" },
@@ -11,9 +12,12 @@ const NAV_ITEMS = [
   { to: "/scorecard", label: "My Scorecard" },
   { to: "/leadership-scorecard", label: "Leadership Scorecard" },
   { to: "/goals", label: "Goals & Performance" },
+  { to: "/help", label: "Help Center" },
   { to: "/admin/org", label: "Org Admin" },
   { to: "/admin/rbac", label: "RBAC Admin" },
   { to: "/admin/users", label: "Users" },
+  { to: "/admin/help", label: "Help Admin" },
+  { to: "/admin/support", label: "Support Tickets" },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -55,6 +59,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto p-6">{children}</main>
+      <ReportProblemButton />
     </div>
   );
 }

@@ -40,6 +40,31 @@ async def invite_user_by_email(email: str) -> str:
     return resp.json()["id"]
 
 
+async def generate_screenshot_signed_url(object_path: str, expires_in: int = 300) -> str:
+    """Short-lived signed URL for a support-ticket screenshot in the private
+    support-screenshots bucket (035_support_tickets.sql) -- the bucket has no
+    select policy at all, so this service-role call (bypasses RLS, same as
+    every other use of the service_role key in this module) is the only way
+    to ever read one back, and only a caller who already passed the
+    support_tickets.review permission check gets to call it.
+    """
+    settings = get_settings()
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{settings.supabase_url}/storage/v1/object/sign/support-screenshots/{object_path}",
+            headers={
+                "apikey": settings.supabase_service_role_key,
+                "Authorization": f"Bearer {settings.supabase_service_role_key}",
+                "Content-Type": "application/json",
+            },
+            json={"expiresIn": expires_in},
+        )
+    if resp.status_code >= 400:
+        raise SupabaseAdminError(f"Failed to sign screenshot URL for {object_path}: {resp.status_code} {resp.text}")
+    signed_path = resp.json()["signedURL"]
+    return f"{settings.supabase_url}/storage/v1{signed_path}"
+
+
 async def ban_auth_user(auth_user_id: str) -> None:
     """Disables sign-in for an offboarded employee's auth account, without
     deleting it -- deleting would cascade-orphan anything still referencing
