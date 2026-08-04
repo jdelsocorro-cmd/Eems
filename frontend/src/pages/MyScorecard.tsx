@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
-import type { Employee, Goal, Kpi, KpiScore, Project } from "@/lib/types";
+import type { Employee, Goal, Kpi, KpiScore, Project, Recognition } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
 
 function errorMessage(error: unknown): string {
@@ -50,6 +50,14 @@ export default function MyScorecard() {
   const ownedProjectsQuery = useQuery({
     queryKey: ["projects", "owner", meQuery.data?.id],
     queryFn: () => apiClient.get<Project[]>(`/projects?owner_employee_id=${meQuery.data?.id}`),
+    enabled: !!meQuery.data,
+  });
+
+  const employeesQuery = useQuery({ queryKey: ["employees"], queryFn: () => apiClient.get<Employee[]>("/employees") });
+
+  const recognitionsQuery = useQuery({
+    queryKey: ["recognitions", meQuery.data?.id],
+    queryFn: () => apiClient.get<Recognition[]>(`/recognitions?employee_id=${meQuery.data?.id}`),
     enabled: !!meQuery.data,
   });
 
@@ -225,8 +233,36 @@ export default function MyScorecard() {
           )}
         </Card>
       </div>
+
+      <Card className="p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Recognition received</h2>
+        {recognitionsQuery.isLoading ? (
+          <LoadingState label="Loading..." />
+        ) : (recognitionsQuery.data ?? []).length === 0 ? (
+          <EmptyState message="No recognitions yet." />
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {(recognitionsQuery.data ?? []).map((r) => (
+              <li key={r.id} className="rounded-edge-sm bg-surface2 p-2.5 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="rounded-edge-sm bg-edge-teal/10 px-2 py-0.5 text-xs font-medium text-edge-teal">{r.category}</span>
+                  <span className="text-xs text-text-dim">
+                    from {employeeName(employeesQuery.data, r.given_by)} &middot; {new Date(r.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <p className="mt-1 text-text">{r.message}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   );
+}
+
+function employeeName(employees: Employee[] | undefined, id: string): string {
+  const emp = employees?.find((e) => e.id === id);
+  return emp ? `${emp.first_name} ${emp.last_name}` : id;
 }
 
 function ProgressLogCell({ kpi, onSave, pending }: { kpi: Kpi; onSave: (value: number) => void; pending: boolean }) {

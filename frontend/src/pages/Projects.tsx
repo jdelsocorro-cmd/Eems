@@ -3,11 +3,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
-import type { Company, Employee, Project, ProjectMember, ProjectStatus, Task, TaskStatus } from "@/lib/types";
+import type { Company, Employee, Milestone, MilestoneStatus, Project, ProjectMember, ProjectStatus, Task, TaskStatus } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState } from "@/components/ui";
+import { CompletionWorkflow } from "@/components/completion/CompletionWorkflow";
 
 const PROJECT_STATUSES: ProjectStatus[] = ["planning", "active", "on_hold", "completed", "cancelled"];
 const TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
+const MILESTONE_STATUSES: MilestoneStatus[] = ["not_started", "in_progress", "done"];
+
+const MILESTONE_STATUS_STYLES: Record<MilestoneStatus, string> = {
+  not_started: "bg-surface2 text-text-muted",
+  in_progress: "bg-warning-soft text-warning",
+  done: "bg-success-soft text-success",
+};
 
 const PROJECT_STATUS_STYLES: Record<ProjectStatus, string> = {
   planning: "bg-surface2 text-text-muted",
@@ -66,6 +74,12 @@ export default function Projects() {
     enabled: !!selectedProjectId,
   });
 
+  const milestonesQuery = useQuery({
+    queryKey: ["milestones", "project", selectedProjectId],
+    queryFn: () => apiClient.get<Milestone[]>(`/milestones?project_id=${selectedProjectId}`),
+    enabled: !!selectedProjectId,
+  });
+
   const createProject = useMutation({
     mutationFn: (payload: { company_id: string; name: string; priority: string; owner_employee_id: string | null }) =>
       apiClient.post<Project>("/projects", payload),
@@ -108,6 +122,18 @@ export default function Projects() {
   const updateTaskStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TaskStatus }) => apiClient.patch<Task>(`/tasks/${id}`, { status }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", "project", selectedProjectId] }),
+  });
+
+  const createMilestone = useMutation({
+    mutationFn: (payload: { name: string; target_date: string | null }) =>
+      apiClient.post<Milestone>("/milestones", { project_id: selectedProjectId, ...payload }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["milestones", "project", selectedProjectId] }),
+  });
+
+  const updateMilestoneStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: MilestoneStatus }) =>
+      apiClient.patch<Milestone>(`/milestones/${id}`, { status }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["milestones", "project", selectedProjectId] }),
   });
 
   return (
@@ -299,6 +325,57 @@ export default function Projects() {
                   onSubmit={(title, assigneeId) => createTask.mutate({ title, assignee_employee_id: assigneeId })}
                 />
               </div>
+
+              <div className="border-t border-border pt-3">
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Milestones</p>
+                <ul className="flex flex-col gap-1">
+                  {(milestonesQuery.data ?? []).map((milestone) => (
+                    <li key={milestone.id} className="flex items-center justify-between gap-2 text-sm text-text">
+                      <span className="min-w-0 flex-1 truncate">{milestone.name}</span>
+                      <select
+                        value={milestone.status}
+                        onChange={(e) =>
+                          updateMilestoneStatus.mutate({ id: milestone.id, status: e.target.value as MilestoneStatus })
+                        }
+                        className={`rounded-edge-sm border border-border px-1.5 py-0.5 text-xs ${MILESTONE_STATUS_STYLES[milestone.status]}`}
+                      >
+                        {MILESTONE_STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {s.replace("_", " ")}
+                          </option>
+                        ))}
+                      </select>
+                    </li>
+                  ))}
+                  {milestonesQuery.data?.length === 0 && <li className="text-sm text-text-dim">No milestones yet.</li>}
+                </ul>
+                {updateMilestoneStatus.isError && <ErrorBanner message={errorMessage(updateMilestoneStatus.error)} />}
+                <NewMilestoneForm
+                  pending={createMilestone.isPending}
+                  error={createMilestone.isError ? errorMessage(createMilestone.error) : null}
+                  onSubmit={(name, targetDate) => createMilestone.mutate({ name, target_date: targetDate })}
+                />
+                {(milestonesQuery.data ?? []).map((milestone) => (
+                  <div key={milestone.id} className="mt-2 rounded-edge-sm bg-surface2/50 p-2">
+                    <p className="mb-1 text-xs font-medium text-text-muted">{milestone.name}</p>
+                    <CompletionWorkflow
+                      entityType="milestone"
+                      entityId={milestone.id}
+                      employees={employeesQuery.data ?? []}
+                      submitPath={`/milestones/${milestone.id}/submit-completion`}
+                      onChanged={() => queryClient.invalidateQueries({ queryKey: ["milestones", "project", selectedProjectId] })}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <CompletionWorkflow
+                entityType="project"
+                entityId={selectedProject.id}
+                employees={employeesQuery.data ?? []}
+                submitPath={`/projects/${selectedProject.id}/submit-completion`}
+                onChanged={() => queryClient.invalidateQueries({ queryKey: ["projects"] })}
+              />
             </div>
           )}
         </Card>
@@ -446,6 +523,48 @@ function NewTaskForm({
           </option>
         ))}
       </select>
+      <Button type="submit" disabled={pending}>
+        {pending ? "Adding..." : "Add"}
+      </Button>
+      {error && <ErrorBanner message={error} />}
+    </form>
+  );
+}
+
+function NewMilestoneForm({
+  onSubmit,
+  pending,
+  error,
+}: {
+  onSubmit: (name: string, targetDate: string | null) => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const [name, setName] = useState("");
+  const [targetDate, setTargetDate] = useState("");
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSubmit(name.trim(), targetDate || null);
+    setName("");
+    setTargetDate("");
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-2 flex gap-2">
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="New milestone name"
+        className="flex-1 rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
+      />
+      <input
+        type="date"
+        value={targetDate}
+        onChange={(e) => setTargetDate(e.target.value)}
+        className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+      />
       <Button type="submit" disabled={pending}>
         {pending ? "Adding..." : "Add"}
       </Button>

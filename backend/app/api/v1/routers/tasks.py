@@ -6,10 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentEmployee, get_current_employee, get_db
+from app.models.completion import CompletionSubmission as CompletionSubmissionModel
 from app.models.project import Task as TaskModel
 from app.models.project import TaskComment as TaskCommentModel
 from app.models.project import TaskStatusHistory as TaskStatusHistoryModel
+from app.schemas.completion import CompletionSubmission, CompletionSubmissionCreate
 from app.schemas.project import Task, TaskComment, TaskCommentCreate, TaskCreate, TaskStatusHistoryEntry, TaskUpdate
+from app.services import completion_workflow
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -97,6 +100,20 @@ async def archive_task(
 
     task.deleted_at = datetime.now(timezone.utc)
     await db.flush()
+
+
+@router.post("/{task_id}/submit-completion", response_model=CompletionSubmission, status_code=status.HTTP_201_CREATED)
+async def submit_task_completion(
+    task_id: uuid.UUID,
+    payload: CompletionSubmissionCreate,
+    db: AsyncSession = Depends(get_db),
+    current: CurrentEmployee = Depends(get_current_employee),
+) -> CompletionSubmissionModel:
+    """completion_submissions_insert's own RLS (must be this task's
+    assignee) is the real authorization -- no guard needed here beyond
+    that, same pattern as create_task above.
+    """
+    return await completion_workflow.create_submission(db, "task", task_id, uuid.UUID(current.employee_id), payload)
 
 
 @router.get("/{task_id}/history", response_model=list[TaskStatusHistoryEntry])

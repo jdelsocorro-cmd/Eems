@@ -13,6 +13,7 @@ import Projects from "@/pages/Projects";
 import Tasks from "@/pages/Tasks";
 import Goals from "@/pages/Goals";
 import MyScorecard from "@/pages/MyScorecard";
+import LeadershipScorecard from "@/pages/LeadershipScorecard";
 import AccountSettings from "@/pages/AccountSettings";
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/tasks" element={<Tasks />} />
                   <Route path="/scorecard" element={<MyScorecard />} />
+                  <Route path="/leadership-scorecard" element={<LeadershipScorecard />} />
                   <Route path="/goals" element={<Goals />} />
                   <Route path="/admin/org" element={<OrgAdmin />} />
                   <Route path="/admin/rbac" element={<RbacAdmin />} />

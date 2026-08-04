@@ -6,9 +6,12 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentEmployee, get_current_employee, get_db, require_permission
+from app.models.completion import CompletionSubmission as CompletionSubmissionModel
 from app.models.project import Project as ProjectModel
 from app.models.project import ProjectMember as ProjectMemberModel
+from app.schemas.completion import CompletionSubmission, CompletionSubmissionCreate
 from app.schemas.project import Project, ProjectCreate, ProjectMember, ProjectMemberCreate, ProjectUpdate
+from app.services import completion_workflow
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -97,6 +100,20 @@ async def archive_project(
 
     project.deleted_at = datetime.now(timezone.utc)
     await db.flush()
+
+
+@router.post("/{project_id}/submit-completion", response_model=CompletionSubmission, status_code=status.HTTP_201_CREATED)
+async def submit_project_completion(
+    project_id: uuid.UUID,
+    payload: CompletionSubmissionCreate,
+    db: AsyncSession = Depends(get_db),
+    current: CurrentEmployee = Depends(get_current_employee),
+) -> CompletionSubmissionModel:
+    """completion_submissions_insert's own RLS (must be this project's
+    owner) is the real authorization -- same pattern as tasks.py's
+    submit_task_completion.
+    """
+    return await completion_workflow.create_submission(db, "project", project_id, uuid.UUID(current.employee_id), payload)
 
 
 @router.get("/{project_id}/members", response_model=list[ProjectMember])

@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: "/projects", label: "Projects" },
   { to: "/tasks", label: "My Tasks" },
   { to: "/scorecard", label: "My Scorecard" },
+  { to: "/leadership-scorecard", label: "Leadership Scorecard" },
   { to: "/goals", label: "Goals & Performance" },
   { to: "/admin/org", label: "Org Admin" },
   { to: "/admin/rbac", label: "RBAC Admin" },

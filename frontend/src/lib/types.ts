@@ -4,6 +4,7 @@ export interface Company {
   legal_name: string | null;
   timezone: string;
   is_active: boolean;
+  recognition_score_threshold: number;
 }
 
 export interface OrgUnit {
@@ -266,4 +267,87 @@ export interface KpiScore {
   kpi_snapshot: Array<{ kpi_id: string; name: string; target_value: number; current_value: number; weight: number; direction: KpiDirection }>;
   computed_at: string;
   computed_by: ScoreComputedBy;
+}
+
+export type MilestoneStatus = "not_started" | "in_progress" | "done";
+
+export interface Milestone {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  target_date: string | null;
+  status: MilestoneStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CompletionEntityType = "task" | "project" | "milestone";
+export type CompletionStatus = "pending" | "approved" | "rejected";
+
+export interface CompletionSubmission {
+  id: string;
+  entity_type: CompletionEntityType;
+  entity_id: string;
+  submitted_by: string;
+  summary: string;
+  submitted_at: string;
+  status: CompletionStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  completion_score: number | null;
+  rejection_feedback: string | null;
+}
+
+export interface CompletionEvidenceLink {
+  id: string;
+  submission_id: string;
+  url: string;
+  label: string | null;
+  added_by: string | null;
+  created_at: string;
+}
+
+export interface KpiTask {
+  kpi_id: string;
+  task_id: string;
+  weight: number;
+  created_at: string;
+}
+
+export interface KpiProject {
+  kpi_id: string;
+  project_id: string;
+  weight: number;
+  created_at: string;
+}
+
+export interface KpiMilestone {
+  kpi_id: string;
+  milestone_id: string;
+  weight: number;
+  created_at: string;
+}
+
+export type RecognitionRelatedEntityType = "task" | "project" | "milestone" | "kpi";
+
+export interface Recognition {
+  id: string;
+  employee_id: string;
+  given_by: string;
+  category: string;
+  message: string;
+  related_entity_type: RecognitionRelatedEntityType | null;
+  related_entity_id: string | null;
+  created_at: string;
+}
+
+export interface PositionScore {
+  id: string;
+  position_id: string;
+  period_start: string;
+  period_end: string;
+  computed_score: number | null;
+  computed_at: string;
 }

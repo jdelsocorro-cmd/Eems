@@ -4,17 +4,21 @@ from sqlalchemy.exc import DBAPIError
 
 from app.api.v1.routers import (
     companies,
+    completion,
     dashboards,
     employee_roles,
     employees,
     goals,
     health,
+    kpi_links,
     kpi_templates,
     kpis,
+    milestones,
     org_units,
     position_assignments,
     positions,
     projects,
+    recognitions,
     roles,
     scores,
     task_categories,
@@ -47,8 +51,12 @@ app.include_router(employee_roles.router, prefix="/api/v1")
 app.include_router(projects.router, prefix="/api/v1")
 app.include_router(tasks.router, prefix="/api/v1")
 app.include_router(task_categories.router, prefix="/api/v1")
+app.include_router(milestones.router, prefix="/api/v1")
+app.include_router(completion.router, prefix="/api/v1")
 app.include_router(goals.router, prefix="/api/v1")
 app.include_router(kpi_templates.router, prefix="/api/v1")
 app.include_router(kpis.router, prefix="/api/v1")
+app.include_router(kpi_links.router, prefix="/api/v1")
+app.include_router(recognitions.router, prefix="/api/v1")
 app.include_router(scores.router, prefix="/api/v1")
 app.include_router(dashboards.router, prefix="/api/v1")

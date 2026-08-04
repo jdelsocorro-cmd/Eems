@@ -5,6 +5,7 @@ import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Company, Employee, Project, Task, TaskCategory, TaskComment, TaskStatus, TaskStatusHistoryEntry } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState } from "@/components/ui";
+import { CompletionWorkflow } from "@/components/completion/CompletionWorkflow";
 
 const NEW_CATEGORY_VALUE = "__new__";
 
@@ -258,6 +259,14 @@ export default function Tasks() {
                 </p>
                 {updateTaskAssignee.isError && <ErrorBanner message={errorMessage(updateTaskAssignee.error)} />}
               </div>
+
+              <CompletionWorkflow
+                entityType="task"
+                entityId={selectedTask.id}
+                employees={employeesQuery.data ?? []}
+                submitPath={`/tasks/${selectedTask.id}/submit-completion`}
+                onChanged={() => queryClient.invalidateQueries({ queryKey: ["tasks", "assignee", meQuery.data?.id] })}
+              />
 
               <div className="border-t border-border pt-3">
                 <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">History</p>

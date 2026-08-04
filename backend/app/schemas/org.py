@@ -9,6 +9,7 @@ class CompanyBase(BaseModel):
     legal_name: str | None = None
     timezone: str = "UTC"
     is_active: bool = True
+    recognition_score_threshold: float = 90
 
 
 class CompanyCreate(CompanyBase):
@@ -20,6 +21,7 @@ class CompanyUpdate(BaseModel):
     legal_name: str | None = None
     timezone: str | None = None
     is_active: bool | None = None
+    recognition_score_threshold: float | None = None
 
 
 class Company(CompanyBase):

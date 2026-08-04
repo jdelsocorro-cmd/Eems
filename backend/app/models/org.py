@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import Enum as PgEnum
 from sqlalchemy.orm import Mapped, mapped_column
@@ -36,6 +36,7 @@ class Company(Base):
     legal_name: Mapped[str | None] = mapped_column(String)
     timezone: Mapped[str] = mapped_column(String, nullable=False, default="UTC")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    recognition_score_threshold: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=90)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

@@ -3,8 +3,27 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
-import type { Company, Employee, Goal, GoalStatus, GoalType, Kpi, KpiDirection, OrgUnit } from "@/lib/types";
+import type {
+  Company,
+  Employee,
+  Goal,
+  GoalStatus,
+  GoalType,
+  Kpi,
+  KpiDirection,
+  KpiMilestone,
+  KpiProject,
+  KpiTask,
+  Milestone,
+  OrgUnit,
+  Project,
+  Task,
+} from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState } from "@/components/ui";
+
+type EvidenceKind = "task" | "project" | "milestone";
+const EVIDENCE_KINDS: EvidenceKind[] = ["task", "project", "milestone"];
+const EVIDENCE_LABELS: Record<EvidenceKind, string> = { task: "Task", project: "Project", milestone: "Milestone" };
 
 const GOAL_TYPES: GoalType[] = ["company", "org_unit", "individual"];
 const GOAL_STATUSES: GoalStatus[] = ["draft", "active", "completed", "archived", "cancelled"];
@@ -287,17 +306,12 @@ export default function Goals() {
 
               <div className="border-t border-border pt-3">
                 <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Linked KPIs</p>
-                <ul className="flex flex-col gap-1 text-sm text-text">
+                <div className="flex flex-col gap-1.5">
                   {(kpisQuery.data ?? []).map((kpi) => (
-                    <li key={kpi.id} className="flex items-center justify-between">
-                      <span>{kpi.name}</span>
-                      <span className="text-text-muted">
-                        {kpi.current_value}/{kpi.target_value} {kpi.unit} &middot; w{kpi.weight}
-                      </span>
-                    </li>
+                    <KpiRow key={kpi.id} kpi={kpi} />
                   ))}
-                  {kpisQuery.data?.length === 0 && <li className="text-sm text-text-dim">No KPIs linked yet.</li>}
-                </ul>
+                  {kpisQuery.data?.length === 0 && <p className="text-sm text-text-dim">No KPIs linked yet.</p>}
+                </div>
                 {createKpi.isError && <ErrorBanner message={errorMessage(createKpi.error)} />}
                 <NewKpiForm
                   employees={employeesQuery.data ?? []}
@@ -606,5 +620,186 @@ function NewKpiForm({
         {pending ? "Adding..." : "Add KPI"}
       </Button>
     </form>
+  );
+}
+
+function entityName(kind: EvidenceKind, id: string, tasks: Task[], projects: Project[], milestones: Milestone[]): string {
+  if (kind === "task") return tasks.find((t) => t.id === id)?.title ?? id;
+  if (kind === "project") return projects.find((p) => p.id === id)?.name ?? id;
+  return milestones.find((m) => m.id === id)?.name ?? id;
+}
+
+function entityStatus(kind: EvidenceKind, id: string, tasks: Task[], projects: Project[], milestones: Milestone[]): string {
+  if (kind === "task") return tasks.find((t) => t.id === id)?.status ?? "";
+  if (kind === "project") return projects.find((p) => p.id === id)?.status ?? "";
+  return milestones.find((m) => m.id === id)?.status ?? "";
+}
+
+// KPIs are evidence-driven now (031_kpi_links.sql) -- a KPI's current_value is
+// a weighted average of the completion_score of whatever tasks/projects/
+// milestones are linked to it. This section is where that linking happens,
+// and it also doubles as a live readout of each linked item's status so the
+// KPI's progress is traceable back to the actual work driving it.
+function KpiRow({ kpi }: { kpi: Kpi }) {
+  const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const [kind, setKind] = useState<EvidenceKind>("task");
+  const [entityId, setEntityId] = useState("");
+  const [weight, setWeight] = useState("1");
+
+  const kpiTasksQuery = useQuery({
+    queryKey: ["kpi-tasks", kpi.id],
+    queryFn: () => apiClient.get<KpiTask[]>(`/kpis/${kpi.id}/tasks`),
+    enabled: expanded,
+  });
+  const kpiProjectsQuery = useQuery({
+    queryKey: ["kpi-projects", kpi.id],
+    queryFn: () => apiClient.get<KpiProject[]>(`/kpis/${kpi.id}/projects`),
+    enabled: expanded,
+  });
+  const kpiMilestonesQuery = useQuery({
+    queryKey: ["kpi-milestones", kpi.id],
+    queryFn: () => apiClient.get<KpiMilestone[]>(`/kpis/${kpi.id}/milestones`),
+    enabled: expanded,
+  });
+
+  const allTasksQuery = useQuery({ queryKey: ["tasks"], queryFn: () => apiClient.get<Task[]>("/tasks"), enabled: expanded });
+  const allProjectsQuery = useQuery({ queryKey: ["projects"], queryFn: () => apiClient.get<Project[]>("/projects"), enabled: expanded });
+  const allMilestonesQuery = useQuery({
+    queryKey: ["milestones"],
+    queryFn: () => apiClient.get<Milestone[]>("/milestones"),
+    enabled: expanded,
+  });
+
+  function invalidateLinks() {
+    queryClient.invalidateQueries({ queryKey: ["kpi-tasks", kpi.id] });
+    queryClient.invalidateQueries({ queryKey: ["kpi-projects", kpi.id] });
+    queryClient.invalidateQueries({ queryKey: ["kpi-milestones", kpi.id] });
+    queryClient.invalidateQueries({ queryKey: ["kpis", "goal", kpi.goal_id] });
+  }
+
+  const link = useMutation({
+    mutationFn: ({ kind, id, weight }: { kind: EvidenceKind; id: string; weight: number }) =>
+      apiClient.post(`/kpis/${kpi.id}/${kind}s/${id}`, { weight }),
+    onSuccess: () => {
+      invalidateLinks();
+      setEntityId("");
+    },
+  });
+
+  const unlink = useMutation({
+    mutationFn: ({ kind, id }: { kind: EvidenceKind; id: string }) =>
+      apiClient.delete(`/kpis/${kpi.id}/${kind}s/${id}`),
+    onSuccess: () => invalidateLinks(),
+  });
+
+  const tasks = allTasksQuery.data ?? [];
+  const projects = allProjectsQuery.data ?? [];
+  const milestones = allMilestonesQuery.data ?? [];
+
+  const linkedItems: { kind: EvidenceKind; id: string; weight: number }[] = [
+    ...(kpiTasksQuery.data ?? []).map((l) => ({ kind: "task" as const, id: l.task_id, weight: l.weight })),
+    ...(kpiProjectsQuery.data ?? []).map((l) => ({ kind: "project" as const, id: l.project_id, weight: l.weight })),
+    ...(kpiMilestonesQuery.data ?? []).map((l) => ({ kind: "milestone" as const, id: l.milestone_id, weight: l.weight })),
+  ];
+
+  const linkedIds = new Set(linkedItems.filter((i) => i.kind === kind).map((i) => i.id));
+  const availableEntities: { id: string; label: string }[] =
+    kind === "task"
+      ? tasks.filter((t) => !linkedIds.has(t.id)).map((t) => ({ id: t.id, label: t.title }))
+      : kind === "project"
+        ? projects.filter((p) => !linkedIds.has(p.id)).map((p) => ({ id: p.id, label: p.name }))
+        : milestones.filter((m) => !linkedIds.has(m.id)).map((m) => ({ id: m.id, label: m.name }));
+
+  function handleLink(e: FormEvent) {
+    e.preventDefault();
+    if (!entityId || !weight) return;
+    link.mutate({ kind, id: entityId, weight: Number(weight) });
+  }
+
+  return (
+    <div className="rounded-edge-sm bg-surface2/50 p-2">
+      <div className="flex items-center justify-between text-sm text-text">
+        <button type="button" onClick={() => setExpanded((v) => !v)} className="flex items-center gap-1.5 text-left">
+          <span className="text-text-dim">{expanded ? "▾" : "▸"}</span>
+          <span>{kpi.name}</span>
+        </button>
+        <span className="text-text-muted">
+          {kpi.current_value}/{kpi.target_value} {kpi.unit} &middot; w{kpi.weight}
+        </span>
+      </div>
+
+      {expanded && (
+        <div className="mt-2 flex flex-col gap-1.5 border-t border-border pt-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-text-dim">Evidence</p>
+          <ul className="flex flex-col gap-1">
+            {linkedItems.map((item) => (
+              <li key={`${item.kind}-${item.id}`} className="flex items-center justify-between gap-2 text-xs text-text">
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="text-text-dim">[{EVIDENCE_LABELS[item.kind]}]</span>{" "}
+                  {entityName(item.kind, item.id, tasks, projects, milestones)}{" "}
+                  <span className="text-text-dim">
+                    ({entityStatus(item.kind, item.id, tasks, projects, milestones).replace("_", " ")})
+                  </span>
+                </span>
+                <span className="shrink-0 text-text-muted">w{item.weight}</span>
+                <button
+                  type="button"
+                  onClick={() => unlink.mutate({ kind: item.kind, id: item.id })}
+                  className="shrink-0 text-danger hover:underline"
+                >
+                  Unlink
+                </button>
+              </li>
+            ))}
+            {linkedItems.length === 0 && <li className="text-xs text-text-dim">No evidence linked yet.</li>}
+          </ul>
+          {unlink.isError && <ErrorBanner message={errorMessage(unlink.error)} />}
+
+          <form onSubmit={handleLink} className="mt-1 flex items-center gap-1">
+            <select
+              value={kind}
+              onChange={(e) => {
+                setKind(e.target.value as EvidenceKind);
+                setEntityId("");
+              }}
+              className="rounded-edge-sm border border-border bg-surface px-1.5 py-1 text-xs text-text"
+            >
+              {EVIDENCE_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {EVIDENCE_LABELS[k]}
+                </option>
+              ))}
+            </select>
+            <select
+              value={entityId}
+              onChange={(e) => setEntityId(e.target.value)}
+              className="min-w-0 flex-1 rounded-edge-sm border border-border bg-surface px-1.5 py-1 text-xs text-text"
+            >
+              <option value="" disabled>
+                Choose {EVIDENCE_LABELS[kind].toLowerCase()}...
+              </option>
+              {availableEntities.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={0}
+              step="0.1"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              className="w-14 rounded-edge-sm border border-border bg-surface px-1.5 py-1 text-xs text-text"
+            />
+            <Button type="submit" size="sm" disabled={link.isPending || !entityId}>
+              Link
+            </Button>
+          </form>
+          {link.isError && <ErrorBanner message={errorMessage(link.error)} />}
+        </div>
+      )}
+    </div>
   );
 }
