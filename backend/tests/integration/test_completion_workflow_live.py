@@ -171,6 +171,27 @@ async def test_completion_workflow_and_rollup():
         )
         assert resp.status_code == 404, f"expected 404, got {resp.status_code}: {resp.text}"
 
+        # --- self-approval is blocked, even for the submitter themselves ---
+        # (037_block_self_approval.sql) -- staff cannot approve their own submission
+        resp = await api_client.post(
+            f"/api/v1/completion-submissions/{submission_id}/approve", headers=headers_staff, json={"completion_score": 100}
+        )
+        assert resp.status_code == 404, f"self-approval must be blocked, got {resp.status_code}: {resp.text}"
+
+        # --- review queue: shows up for the eligible reviewer (mgr), not for the
+        # submitter themselves (staff) or an unrelated outsider ---
+        resp = await api_client.get("/api/v1/completion-submissions?awaiting_my_review=true", headers=headers_mgr)
+        assert resp.status_code == 200
+        assert any(s["id"] == submission_id for s in resp.json()), "mgr should see this pending submission in their review queue"
+
+        resp = await api_client.get("/api/v1/completion-submissions?awaiting_my_review=true", headers=headers_staff)
+        assert resp.status_code == 200
+        assert not any(s["id"] == submission_id for s in resp.json()), "the submitter should not see their own submission in their own review queue"
+
+        resp = await api_client.get("/api/v1/completion-submissions?awaiting_my_review=true", headers=headers_outsider)
+        assert resp.status_code == 200
+        assert not any(s["id"] == submission_id for s in resp.json()), "an unrelated outsider should not see this submission at all"
+
         # --- manager (assigner) approves with a score of 80 ---
         resp = await api_client.post(
             f"/api/v1/completion-submissions/{submission_id}/approve", headers=headers_mgr, json={"completion_score": 80}

@@ -24,14 +24,25 @@ async def list_completion_submissions(
     status_filter: str | None = Query(default=None, alias="status"),
     entity_type: str | None = Query(default=None),
     entity_id: uuid.UUID | None = Query(default=None),
+    awaiting_my_review: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
-    _current: CurrentEmployee = Depends(get_current_employee),
+    current: CurrentEmployee = Depends(get_current_employee),
 ) -> list[CompletionSubmissionModel]:
-    """No manual scoping here -- completion_submissions_select's own RLS
-    (submitter, reviewer, or anyone who could see the underlying entity)
-    already narrows this to exactly what the caller should see, the same
-    "the query looks like select everything because RLS already scoped it"
-    pattern list_companies uses.
+    """No manual scoping here for the base case -- completion_submissions_
+    select's own RLS (submitter, reviewer, or anyone who could see the
+    underlying entity) already narrows this to exactly what the caller
+    should see, the same "the query looks like select everything because
+    RLS already scoped it" pattern list_companies uses.
+
+    awaiting_my_review is different: RLS's broad SELECT visibility would
+    also hand back the caller's OWN pending submissions (they can see what
+    they submitted), which isn't what a review inbox should show. This
+    mirrors completion_submissions_review's reviewer-eligibility branches
+    exactly (same three entity_type checks, same has_permission_on_employee
+    calls, same self-submission exclusion added in 037_block_self_approval.
+    sql) so "what shows up in my review queue" and "what I'm actually
+    allowed to approve" never drift apart -- still fully subject to RLS on
+    top, this is a narrowing filter, not a bypass.
     """
     stmt = select(CompletionSubmissionModel).order_by(CompletionSubmissionModel.submitted_at.desc())
     if status_filter is not None:
@@ -40,6 +51,31 @@ async def list_completion_submissions(
         stmt = stmt.where(CompletionSubmissionModel.entity_type == entity_type)
     if entity_id is not None:
         stmt = stmt.where(CompletionSubmissionModel.entity_id == entity_id)
+    if awaiting_my_review:
+        stmt = (
+            stmt.where(CompletionSubmissionModel.status == "pending")
+            .where(CompletionSubmissionModel.submitted_by != uuid.UUID(current.employee_id))
+            .where(
+                text("""
+                    (
+                      (entity_type = 'task' and exists (
+                        select 1 from tasks t where t.id = entity_id
+                          and (t.assigner_employee_id = :me
+                               or app.has_permission_on_employee(:me, t.assignee_employee_id, 'completion', 'review'))
+                      ))
+                      or (entity_type = 'project' and exists (
+                        select 1 from projects p where p.id = entity_id
+                          and app.has_permission_on_employee(:me, p.owner_employee_id, 'completion', 'review')
+                      ))
+                      or (entity_type = 'milestone' and exists (
+                        select 1 from milestones m join projects p on p.id = m.project_id where m.id = entity_id
+                          and app.has_permission_on_employee(:me, p.owner_employee_id, 'completion', 'review')
+                      ))
+                    )
+                """)
+            )
+            .params(me=current.employee_id)
+        )
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

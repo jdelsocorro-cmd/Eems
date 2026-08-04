@@ -12,6 +12,7 @@ import UserManagement from "@/pages/UserManagement";
 import RbacAdmin from "@/pages/RbacAdmin";
 import Projects from "@/pages/Projects";
 import Tasks from "@/pages/Tasks";
+import ReviewQueue from "@/pages/ReviewQueue";
 import Goals from "@/pages/Goals";
 import MyScorecard from "@/pages/MyScorecard";
 import LeadershipScorecard from "@/pages/LeadershipScorecard";
@@ -36,6 +37,7 @@ export default function App() {
                   <Route path="/org-chart" element={<OrgChart />} />
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/tasks" element={<Tasks />} />
+                  <Route path="/review-queue" element={<ReviewQueue />} />
                   <Route path="/scorecard" element={<MyScorecard />} />
                   <Route path="/leadership-scorecard" element={<LeadershipScorecard />} />
                   <Route path="/goals" element={<Goals />} />

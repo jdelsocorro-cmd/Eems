@@ -18,6 +18,7 @@ const NAV_ITEMS: { to: string; label: string; section: "workspace" | "admin"; re
   { to: "/org-chart", label: "Org Chart", section: "workspace" },
   { to: "/projects", label: "Projects", section: "workspace" },
   { to: "/tasks", label: "My Tasks", section: "workspace" },
+  { to: "/review-queue", label: "Review Queue", section: "workspace" },
   { to: "/scorecard", label: "My Scorecard", section: "workspace" },
   { to: "/leadership-scorecard", label: "Leadership Scorecard", section: "workspace" },
   { to: "/goals", label: "Goals & Performance", section: "workspace" },
