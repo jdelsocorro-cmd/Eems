@@ -49,6 +49,7 @@ export default function Tasks() {
     queryFn: () => apiClient.get<TaskCategory[]>("/task-categories"),
   });
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiClient.get<Company[]>("/companies") });
+  const employeesQuery = useQuery({ queryKey: ["employees"], queryFn: () => apiClient.get<Employee[]>("/employees") });
 
   const selectedTask = tasksQuery.data?.find((t) => t.id === selectedTaskId) ?? null;
 
@@ -65,8 +66,12 @@ export default function Tasks() {
   });
 
   const createTask = useMutation({
-    mutationFn: (payload: { title: string; project_id: string | null; task_category_id: string | null }) =>
-      apiClient.post<Task>("/tasks", { ...payload, assignee_employee_id: meQuery.data?.id }),
+    mutationFn: (payload: {
+      title: string;
+      project_id: string | null;
+      task_category_id: string | null;
+      assignee_employee_id: string;
+    }) => apiClient.post<Task>("/tasks", payload),
     onSuccess: (task) => {
       queryClient.invalidateQueries({ queryKey: ["tasks", "assignee", meQuery.data?.id] });
       setSelectedTaskId(task.id);
@@ -91,6 +96,12 @@ export default function Tasks() {
   const updateTaskCategory = useMutation({
     mutationFn: ({ id, task_category_id }: { id: string; task_category_id: string | null }) =>
       apiClient.patch<Task>(`/tasks/${id}`, { task_category_id }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", "assignee", meQuery.data?.id] }),
+  });
+
+  const updateTaskAssignee = useMutation({
+    mutationFn: ({ id, assignee_employee_id }: { id: string; assignee_employee_id: string }) =>
+      apiClient.patch<Task>(`/tasks/${id}`, { assignee_employee_id }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", "assignee", meQuery.data?.id] }),
   });
 
@@ -122,6 +133,8 @@ export default function Tasks() {
         <CreateTaskForm
           projects={projectsQuery.data ?? []}
           categories={categoriesQuery.data ?? []}
+          employees={employeesQuery.data ?? []}
+          defaultAssigneeId={meQuery.data?.id ?? ""}
           onSubmit={(payload) => createTask.mutate(payload)}
           pending={createTask.isPending}
           error={createTask.isError ? errorMessage(createTask.error) : null}
@@ -228,6 +241,25 @@ export default function Tasks() {
               </div>
 
               <div className="border-t border-border pt-3">
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Assigned to</p>
+                <select
+                  value={selectedTask.assignee_employee_id ?? ""}
+                  onChange={(e) => updateTaskAssignee.mutate({ id: selectedTask.id, assignee_employee_id: e.target.value })}
+                  className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+                >
+                  {(employeesQuery.data ?? []).map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.first_name} {emp.last_name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] leading-snug text-text-dim">
+                  Reassigning moves this task off your "My Tasks" list and onto theirs.
+                </p>
+                {updateTaskAssignee.isError && <ErrorBanner message={errorMessage(updateTaskAssignee.error)} />}
+              </div>
+
+              <div className="border-t border-border pt-3">
                 <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">History</p>
                 <ul className="flex flex-col gap-1 text-sm text-text-muted">
                   {(historyQuery.data ?? []).map((entry) => (
@@ -273,6 +305,8 @@ export default function Tasks() {
 function CreateTaskForm({
   projects,
   categories,
+  employees,
+  defaultAssigneeId,
   onSubmit,
   pending,
   error,
@@ -280,7 +314,14 @@ function CreateTaskForm({
 }: {
   projects: Project[];
   categories: TaskCategory[];
-  onSubmit: (payload: { title: string; project_id: string | null; task_category_id: string | null }) => void;
+  employees: Employee[];
+  defaultAssigneeId: string;
+  onSubmit: (payload: {
+    title: string;
+    project_id: string | null;
+    task_category_id: string | null;
+    assignee_employee_id: string;
+  }) => void;
   pending: boolean;
   error: string | null;
   onCreateCategory: (name: string) => Promise<TaskCategory>;
@@ -288,14 +329,20 @@ function CreateTaskForm({
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [assigneeId, setAssigneeId] = useState(defaultAssigneeId);
   const [addingCategory, setAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [creatingCategory, setCreatingCategory] = useState(false);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
-    onSubmit({ title: title.trim(), project_id: projectId || null, task_category_id: categoryId || null });
+    if (!title.trim() || !assigneeId) return;
+    onSubmit({
+      title: title.trim(),
+      project_id: projectId || null,
+      task_category_id: categoryId || null,
+      assignee_employee_id: assigneeId,
+    });
     setTitle("");
   }
 
@@ -323,7 +370,7 @@ function CreateTaskForm({
 
   return (
     <form onSubmit={handleSubmit} className="rounded-edge-lg bg-surface p-4 shadow-edge-sm">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <div>
           <FieldLabel>Task title</FieldLabel>
           <input
@@ -332,6 +379,21 @@ function CreateTaskForm({
             placeholder="e.g. Fix invoice export bug"
             className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
           />
+        </div>
+
+        <div>
+          <FieldLabel>Assign to</FieldLabel>
+          <select
+            value={assigneeId}
+            onChange={(e) => setAssigneeId(e.target.value)}
+            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+          >
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {emp.first_name} {emp.last_name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>
