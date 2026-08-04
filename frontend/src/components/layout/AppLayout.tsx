@@ -9,22 +9,39 @@ import { usePermissions } from "@/hooks/usePermissions";
 // usePermissions/GET /employees/me/permissions) -- undefined means visible
 // to everyone, matching how it's always been for the non-admin items below.
 // This is UI-only: RLS remains the real authorization boundary regardless
-// of what's shown here.
-const NAV_ITEMS: { to: string; label: string; requiredPermission?: [string, string] }[] = [
-  { to: "/", label: "Dashboard" },
-  { to: "/org-chart", label: "Org Chart" },
-  { to: "/projects", label: "Projects" },
-  { to: "/tasks", label: "My Tasks" },
-  { to: "/scorecard", label: "My Scorecard" },
-  { to: "/leadership-scorecard", label: "Leadership Scorecard" },
-  { to: "/goals", label: "Goals & Performance" },
-  { to: "/help", label: "Help Center" },
-  { to: "/admin/org", label: "Org Admin", requiredPermission: ["org_structure", "manage"] },
-  { to: "/admin/rbac", label: "RBAC Admin", requiredPermission: ["role", "manage"] },
-  { to: "/admin/users", label: "Users", requiredPermission: ["employee", "create"] },
-  { to: "/admin/help", label: "Help Admin", requiredPermission: ["help_articles", "manage"] },
-  { to: "/admin/support", label: "Support Tickets", requiredPermission: ["support_tickets", "review"] },
+// of what's shown here. section drives the visual grouping below --
+// intentionally a separate field from requiredPermission (not "gated =
+// admin section"), so a future non-gated-but-admin-adjacent item can still
+// land in the right group.
+const NAV_ITEMS: { to: string; label: string; section: "workspace" | "admin"; requiredPermission?: [string, string] }[] = [
+  { to: "/", label: "Dashboard", section: "workspace" },
+  { to: "/org-chart", label: "Org Chart", section: "workspace" },
+  { to: "/projects", label: "Projects", section: "workspace" },
+  { to: "/tasks", label: "My Tasks", section: "workspace" },
+  { to: "/scorecard", label: "My Scorecard", section: "workspace" },
+  { to: "/leadership-scorecard", label: "Leadership Scorecard", section: "workspace" },
+  { to: "/goals", label: "Goals & Performance", section: "workspace" },
+  { to: "/help", label: "Help Center", section: "workspace" },
+  { to: "/admin/org", label: "Org Admin", section: "admin", requiredPermission: ["org_structure", "manage"] },
+  { to: "/admin/rbac", label: "RBAC Admin", section: "admin", requiredPermission: ["role", "manage"] },
+  { to: "/admin/users", label: "Users", section: "admin", requiredPermission: ["employee", "create"] },
+  { to: "/admin/help", label: "Help Admin", section: "admin", requiredPermission: ["help_articles", "manage"] },
+  { to: "/admin/support", label: "Support Tickets", section: "admin", requiredPermission: ["support_tickets", "review"] },
 ];
+
+function NavItemLink({ item }: { item: (typeof NAV_ITEMS)[number] }) {
+  return (
+    <NavLink
+      to={item.to}
+      end={item.to === "/"}
+      className={({ isActive }) =>
+        `nav-item rounded-edge-sm px-3 py-2 text-sm ${isActive ? "active bg-nav-active text-edge-teal font-medium" : "text-text-muted hover:bg-surface2"}`
+      }
+    >
+      {item.label}
+    </NavLink>
+  );
+}
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { has, isLoading: permissionsLoading } = usePermissions();
@@ -35,6 +52,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const visibleNavItems = NAV_ITEMS.filter(
     (item) => !item.requiredPermission || (!permissionsLoading && has(...item.requiredPermission)),
   );
+  const workspaceItems = visibleNavItems.filter((item) => item.section === "workspace");
+  const adminItems = visibleNavItems.filter((item) => item.section === "admin");
 
   return (
     <div className="flex min-h-screen bg-bg font-ui text-text" data-theme="navy">
@@ -45,18 +64,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-2">
-          {visibleNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              className={({ isActive }) =>
-                `nav-item rounded-edge-sm px-3 py-2 text-sm ${isActive ? "active bg-nav-active text-edge-teal font-medium" : "text-text-muted hover:bg-surface2"}`
-              }
-            >
-              {item.label}
-            </NavLink>
+          {workspaceItems.map((item) => (
+            <NavItemLink key={item.to} item={item} />
           ))}
+          {adminItems.length > 0 && (
+            <>
+              <p className="mb-1 mt-3 px-3 text-xs font-medium uppercase tracking-wide text-text-dim">Admin</p>
+              {adminItems.map((item) => (
+                <NavItemLink key={item.to} item={item} />
+              ))}
+            </>
+          )}
         </nav>
         <div className="sidebar-footer border-t border-border p-2">
           <Link
