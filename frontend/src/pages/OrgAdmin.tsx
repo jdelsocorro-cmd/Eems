@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import type { Company, OrgUnit, Position } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
 
 interface UnitNode {
   unit: OrgUnit;
@@ -170,7 +170,7 @@ export default function OrgAdmin() {
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.3fr_1fr]">
         <Card className="p-2">
-          {unitsQuery.isLoading && <p className="p-3 text-xs text-text-muted">Loading...</p>}
+          {unitsQuery.isLoading && <LoadingState label="Loading org units..." />}
           {!unitsQuery.isLoading && tree.length === 0 && (
             <EmptyState message="No org units yet -- add the first one below." />
           )}

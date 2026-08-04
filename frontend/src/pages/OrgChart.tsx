@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/apiClient";
 import type { Company, Employee, OrgUnit, Position, PositionAssignment } from "@/lib/types";
-import { Button, Card, EmptyState, Toolbar, ToolbarDivider } from "@/components/ui";
+import { Button, Card, EmptyState, LoadingState, Toolbar, ToolbarDivider } from "@/components/ui";
 import "./OrgChart.css";
 
 interface TreeNode {
@@ -263,7 +263,7 @@ export default function OrgChart() {
       )}
 
       <Card ref={viewportRef} className="p-6" style={{ maxHeight: "75vh", overflow: "auto" }}>
-        {isLoading && <p className="p-4 text-sm text-text-muted">Loading...</p>}
+        {isLoading && <LoadingState label="Loading org chart..." />}
         {!isLoading && tree.length === 0 && <EmptyState message="No positions in this company yet." />}
 
         {viewMode === "list" && visibleRoots.length > 0 && (

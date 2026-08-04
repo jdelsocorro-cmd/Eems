@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import type { Company, Employee, EmployeeRole, OrgUnit, Permission, Position, Role, ScopeType } from "@/lib/types";
-import { Button, Card, ErrorBanner } from "@/components/ui";
+import { Button, Card, ErrorBanner, LoadingState } from "@/components/ui";
 
 const SCOPE_TYPES: ScopeType[] = ["company", "org_unit", "position_subtree", "self"];
 
@@ -94,6 +94,7 @@ export default function RbacAdmin() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Roles</h2>
+          {rolesQuery.isLoading && <LoadingState label="Loading roles..." />}
           <ul className="mb-3 flex flex-col gap-1">
             {(rolesQuery.data ?? []).map((role) => (
               <li key={role.id}>

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Company, Employee, Project, ProjectMember, ProjectStatus, Task, TaskStatus } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState } from "@/components/ui";
 
 const PROJECT_STATUSES: ProjectStatus[] = ["planning", "active", "on_hold", "completed", "cancelled"];
 const TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
@@ -142,6 +142,13 @@ export default function Projects() {
               </tr>
             </thead>
             <tbody>
+              {projectsQuery.isLoading && (
+                <tr>
+                  <td colSpan={3}>
+                    <LoadingState label="Loading projects..." />
+                  </td>
+                </tr>
+              )}
               {(projectsQuery.data ?? []).map((project) => (
                 <tr
                   key={project.id}

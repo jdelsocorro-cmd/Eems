@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Company, Employee, Project, Task, TaskCategory, TaskComment, TaskStatus, TaskStatusHistoryEntry } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState } from "@/components/ui";
 
 const NEW_CATEGORY_VALUE = "__new__";
 
@@ -141,6 +141,13 @@ export default function Tasks() {
               </tr>
             </thead>
             <tbody>
+              {tasksQuery.isLoading && (
+                <tr>
+                  <td colSpan={4}>
+                    <LoadingState label="Loading tasks..." />
+                  </td>
+                </tr>
+              )}
               {(tasksQuery.data ?? []).map((task) => (
                 <tr
                   key={task.id}

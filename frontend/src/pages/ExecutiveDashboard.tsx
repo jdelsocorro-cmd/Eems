@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Company, DashboardData, OrgUnit } from "@/lib/types";
-import { Card, ErrorBanner } from "@/components/ui";
+import { Card, ErrorBanner, LoadingState } from "@/components/ui";
 
 type ScopeType = "company" | "org_unit";
 
@@ -88,6 +88,12 @@ export default function ExecutiveDashboard() {
       </div>
 
       {dashboardQuery.isError && <ErrorBanner message={errorMessage(dashboardQuery.error)} />}
+
+      {!effectiveScopeId && (companiesQuery.isLoading || unitsQuery.isLoading) && (
+        <LoadingState label="Loading dashboard..." />
+      )}
+
+      {dashboardQuery.isLoading && <LoadingState label="Loading dashboard..." />}
 
       {dashboardQuery.data && (
         <>

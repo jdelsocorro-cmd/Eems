@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, Spinner } from "@/components/ui";
 
 interface EmployeeMe {
   first_name: string;
@@ -68,6 +68,7 @@ export default function AccountSettings() {
 
       <Card className="max-w-md p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Profile</h2>
+        {meQuery.isLoading && <Spinner />}
         {meQuery.data && (
           <div className="text-sm text-text">
             <p className="font-medium">

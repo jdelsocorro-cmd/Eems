@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Employee, Goal, Kpi, KpiScore, Project } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.detail;
@@ -96,6 +96,13 @@ export default function MyScorecard() {
               </tr>
             </thead>
             <tbody>
+              {kpisQuery.isLoading && (
+                <tr>
+                  <td colSpan={4}>
+                    <LoadingState label="Loading KPIs..." />
+                  </td>
+                </tr>
+              )}
               {activeKpis.map((kpi) => (
                 <tr key={kpi.id} className="border-b border-border last:border-0">
                   <td className="px-4 py-2 text-text">
@@ -180,7 +187,9 @@ export default function MyScorecard() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Goals I own</h2>
-          {(ownedGoalsQuery.data ?? []).length === 0 ? (
+          {ownedGoalsQuery.isLoading ? (
+            <LoadingState label="Loading..." />
+          ) : (ownedGoalsQuery.data ?? []).length === 0 ? (
             <EmptyState message="You don't own any goals yet." />
           ) : (
             <ul className="flex flex-col gap-1">
@@ -198,7 +207,9 @@ export default function MyScorecard() {
 
         <Card className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Projects I own</h2>
-          {(ownedProjectsQuery.data ?? []).length === 0 ? (
+          {ownedProjectsQuery.isLoading ? (
+            <LoadingState label="Loading..." />
+          ) : (ownedProjectsQuery.data ?? []).length === 0 ? (
             <EmptyState message="You don't own any projects yet." />
           ) : (
             <ul className="flex flex-col gap-1">

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import type { Employee, EmploymentType, OrgUnit, Position, PositionAssignment } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
 
 const STATUS_STYLES: Record<Employee["status"], string> = {
   active: "bg-success-soft text-success",
@@ -144,6 +144,13 @@ export default function UserManagement() {
               </tr>
             </thead>
             <tbody>
+              {employeesQuery.isLoading && (
+                <tr>
+                  <td colSpan={3}>
+                    <LoadingState label="Loading employees..." />
+                  </td>
+                </tr>
+              )}
               {(employeesQuery.data ?? []).map((emp) => (
                 <tr
                   key={emp.id}

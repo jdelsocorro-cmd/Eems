@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Company, Employee, Goal, GoalStatus, GoalType, Kpi, KpiDirection, OrgUnit } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState } from "@/components/ui";
 
 const GOAL_TYPES: GoalType[] = ["company", "org_unit", "individual"];
 const GOAL_STATUSES: GoalStatus[] = ["draft", "active", "completed", "archived", "cancelled"];
@@ -192,6 +192,13 @@ export default function Goals() {
               </tr>
             </thead>
             <tbody>
+              {goalsQuery.isLoading && (
+                <tr>
+                  <td colSpan={4}>
+                    <LoadingState label="Loading goals..." />
+                  </td>
+                </tr>
+              )}
               {(goalsQuery.data ?? []).map((goal) => (
                 <tr
                   key={goal.id}
