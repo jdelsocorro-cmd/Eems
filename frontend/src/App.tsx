@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import AppLayout from "@/components/layout/AppLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import RequirePermission from "@/components/RequirePermission";
 import Login from "@/pages/Login";
 import AcceptInvite from "@/pages/AcceptInvite";
 import ExecutiveDashboard from "@/pages/ExecutiveDashboard";
@@ -38,12 +39,47 @@ export default function App() {
                   <Route path="/scorecard" element={<MyScorecard />} />
                   <Route path="/leadership-scorecard" element={<LeadershipScorecard />} />
                   <Route path="/goals" element={<Goals />} />
-                  <Route path="/admin/org" element={<OrgAdmin />} />
-                  <Route path="/admin/rbac" element={<RbacAdmin />} />
-                  <Route path="/admin/users" element={<UserManagement />} />
+                  <Route
+                    path="/admin/org"
+                    element={
+                      <RequirePermission resource="org_structure" action="manage">
+                        <OrgAdmin />
+                      </RequirePermission>
+                    }
+                  />
+                  <Route
+                    path="/admin/rbac"
+                    element={
+                      <RequirePermission resource="role" action="manage">
+                        <RbacAdmin />
+                      </RequirePermission>
+                    }
+                  />
+                  <Route
+                    path="/admin/users"
+                    element={
+                      <RequirePermission resource="employee" action="create">
+                        <UserManagement />
+                      </RequirePermission>
+                    }
+                  />
                   <Route path="/help" element={<HelpCenter />} />
-                  <Route path="/admin/help" element={<HelpAdmin />} />
-                  <Route path="/admin/support" element={<SupportAdmin />} />
+                  <Route
+                    path="/admin/help"
+                    element={
+                      <RequirePermission resource="help_articles" action="manage">
+                        <HelpAdmin />
+                      </RequirePermission>
+                    }
+                  />
+                  <Route
+                    path="/admin/support"
+                    element={
+                      <RequirePermission resource="support_tickets" action="review">
+                        <SupportAdmin />
+                      </RequirePermission>
+                    }
+                  />
                   <Route path="/settings" element={<AccountSettings />} />
                 </Routes>
               </AppLayout>

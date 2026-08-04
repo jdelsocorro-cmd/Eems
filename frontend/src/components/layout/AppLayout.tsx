@@ -3,8 +3,14 @@ import { Link, NavLink } from "react-router-dom";
 
 import { supabase } from "@/lib/supabaseClient";
 import { ReportProblemButton } from "@/components/support/ReportProblemButton";
+import { usePermissions } from "@/hooks/usePermissions";
 
-const NAV_ITEMS = [
+// requiredPermission gates a nav item on the caller's own grants (see
+// usePermissions/GET /employees/me/permissions) -- undefined means visible
+// to everyone, matching how it's always been for the non-admin items below.
+// This is UI-only: RLS remains the real authorization boundary regardless
+// of what's shown here.
+const NAV_ITEMS: { to: string; label: string; requiredPermission?: [string, string] }[] = [
   { to: "/", label: "Dashboard" },
   { to: "/org-chart", label: "Org Chart" },
   { to: "/projects", label: "Projects" },
@@ -13,14 +19,23 @@ const NAV_ITEMS = [
   { to: "/leadership-scorecard", label: "Leadership Scorecard" },
   { to: "/goals", label: "Goals & Performance" },
   { to: "/help", label: "Help Center" },
-  { to: "/admin/org", label: "Org Admin" },
-  { to: "/admin/rbac", label: "RBAC Admin" },
-  { to: "/admin/users", label: "Users" },
-  { to: "/admin/help", label: "Help Admin" },
-  { to: "/admin/support", label: "Support Tickets" },
+  { to: "/admin/org", label: "Org Admin", requiredPermission: ["org_structure", "manage"] },
+  { to: "/admin/rbac", label: "RBAC Admin", requiredPermission: ["role", "manage"] },
+  { to: "/admin/users", label: "Users", requiredPermission: ["employee", "create"] },
+  { to: "/admin/help", label: "Help Admin", requiredPermission: ["help_articles", "manage"] },
+  { to: "/admin/support", label: "Support Tickets", requiredPermission: ["support_tickets", "review"] },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {
+  const { has, isLoading: permissionsLoading } = usePermissions();
+
+  // Hide gated items while permissions are still loading, not just when
+  // denied -- otherwise a non-admin briefly sees the full admin nav flash
+  // before it's filtered out.
+  const visibleNavItems = NAV_ITEMS.filter(
+    (item) => !item.requiredPermission || (!permissionsLoading && has(...item.requiredPermission)),
+  );
+
   return (
     <div className="flex min-h-screen bg-bg font-ui text-text" data-theme="navy">
       <aside className="sidebar flex w-[var(--sidebar-w)] flex-col border-r border-border bg-surface">
@@ -30,7 +45,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-2">
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

@@ -15,12 +15,17 @@ router = APIRouter(tags=["rbac"])
 @router.get("/permissions", response_model=list[Permission])
 async def list_permissions(
     db: AsyncSession = Depends(get_db),
-    _current: CurrentEmployee = Depends(get_current_employee),
+    _current: CurrentEmployee = Depends(require_permission("role", "manage")),
 ) -> list[PermissionModel]:
-    """Fixed catalog, readable by anyone authenticated -- needed to render
-    the RBAC admin permission matrix. Not client-writable (permissions_
-    select in 006_rls_policies.sql is the only policy on this table; new
-    permissions ship via migration when a new module lands).
+    """Fixed catalog -- needed to render the RBAC admin permission matrix.
+    Gated on role.manage (not left open to any authenticated employee):
+    the underlying table has no RLS restriction at all (permissions_select
+    in 006_rls_policies.sql is `using (true)`, deliberately, since it's a
+    catalog not per-row-sensitive data), so this API-level check is the
+    only thing standing between "any employee" and "the entire RBAC
+    permission catalog" -- added as part of the Super-Admin-vs-User view
+    separation pass, matching the same require_permission gate create_role
+    below already uses.
     """
     result = await db.execute(select(PermissionModel))
     return list(result.scalars().all())
@@ -29,7 +34,7 @@ async def list_permissions(
 @router.get("/roles", response_model=list[Role])
 async def list_roles(
     db: AsyncSession = Depends(get_db),
-    _current: CurrentEmployee = Depends(get_current_employee),
+    _current: CurrentEmployee = Depends(require_permission("role", "manage")),
 ) -> list[RoleModel]:
     result = await db.execute(select(RoleModel))
     return list(result.scalars().all())

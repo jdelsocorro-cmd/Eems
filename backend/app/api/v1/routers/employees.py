@@ -38,6 +38,38 @@ async def get_me(
     return EmployeeMe(**row)
 
 
+@router.get("/me/permissions", response_model=list[str])
+async def get_my_permissions(
+    current: CurrentEmployee = Depends(get_current_employee),
+    db: AsyncSession = Depends(get_db),
+) -> list[str]:
+    """The caller's own held (resource, action) grants, as "resource.action"
+    strings -- lets the frontend decide what to render (nav items, route
+    guards, mutation buttons) without duplicating RBAC logic client-side.
+    Not a new authorization mechanism: it's a read of the exact same
+    employee_roles -> role_permissions -> permissions chain
+    app.has_permission() already walks (003_rbac_functions.sql), just
+    returning the whole set instead of checking one pair. Safe under RLS
+    with no special handling -- employee_roles_select already allows
+    reading your own rows, role_permissions_select already allows reading
+    rows for roles you could hold, and permissions_select is `using (true)`
+    (006_rls_policies.sql) -- this endpoint doesn't grant any visibility
+    the caller didn't already have via those three tables.
+    """
+    result = await db.execute(
+        text("""
+            select distinct perm.resource, perm.action
+            from employee_roles er
+            join role_permissions rp on rp.role_id = er.role_id
+            join permissions perm on perm.id = rp.permission_id
+            where er.employee_id = :employee_id
+              and (er.expires_at is null or er.expires_at > now())
+        """),
+        {"employee_id": current.employee_id},
+    )
+    return [f"{row.resource}.{row.action}" for row in result.all()]
+
+
 @router.get("", response_model=list[Employee])
 async def list_employees(
     db: AsyncSession = Depends(get_db),

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
+import { usePermissions } from "@/hooks/usePermissions";
 import type { Employee, EmploymentType, OrgUnit, Position, PositionAssignment } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
 
@@ -24,6 +25,9 @@ const CONSULTANT_EMPLOYMENT_TYPES: EmploymentType[] = ["full_time", "part_time"]
 
 export default function UserManagement() {
   const queryClient = useQueryClient();
+  const { has } = usePermissions();
+  const canManagePositions = has("org_structure", "manage");
+  const canOffboard = has("employee", "update");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
@@ -207,7 +211,7 @@ export default function UserManagement() {
               <div className="border-t border-border pt-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Hire date &amp; employment type</p>
-                  {selectedEmployee.status !== "offboarded" && !editingProfile && (
+                  {selectedEmployee.status !== "offboarded" && !editingProfile && canOffboard && (
                     <button onClick={() => setEditingProfile(true)} className="text-xs text-edge-teal hover:underline">
                       Edit
                     </button>
@@ -236,7 +240,7 @@ export default function UserManagement() {
                 <p className="mt-1 text-sm text-text">{selectedPosition ? selectedPosition.title : "Unassigned"}</p>
               </div>
 
-              {selectedEmployee.status !== "offboarded" && (
+              {selectedEmployee.status !== "offboarded" && canManagePositions && (
                 <div className="border-t border-border pt-3">
                   <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">
                     {selectedPosition ? "Reassign position" : "Assign to position"}
@@ -260,7 +264,8 @@ export default function UserManagement() {
                         offboardEmployee.mutate(selectedEmployee.id);
                       }
                     }}
-                    disabled={offboardEmployee.isPending}
+                    disabled={offboardEmployee.isPending || !canOffboard}
+                    title={canOffboard ? undefined : "You don't hold the employee.update permission needed to offboard someone."}
                   >
                     {offboardEmployee.isPending ? "Offboarding..." : "Offboard"}
                   </Button>
