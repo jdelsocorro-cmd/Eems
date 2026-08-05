@@ -42,6 +42,7 @@ export function CompletionWorkflow({
   const [feedbackInputs, setFeedbackInputs] = useState<Record<string, string>>({});
   const [recognitionPromptId, setRecognitionPromptId] = useState<string | null>(null);
   const [recognitionMessage, setRecognitionMessage] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
 
   const submissionsQuery = useQuery({
     queryKey: ["completion-submissions", entityType, entityId],
@@ -128,6 +129,12 @@ export function CompletionWorkflow({
     const emp = employees.find((e) => e.id === id);
     return emp ? `${emp.first_name} ${emp.last_name}` : id;
   };
+
+  // submissionsQuery already returns the full history (submitted_at desc) --
+  // everything after the latest (index 0) is a prior attempt, e.g. a
+  // rejected submission that got resubmitted. Kept out of the main panel by
+  // default so it doesn't clutter the common case of "one submission, done".
+  const priorSubmissions = (submissionsQuery.data ?? []).slice(1);
 
   return (
     <div className="border-t border-border pt-3">
@@ -230,6 +237,25 @@ export function CompletionWorkflow({
         </div>
       )}
 
+      {priorSubmissions.length > 0 && (
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={() => setShowHistory((v) => !v)}
+            className="text-xs text-edge-teal hover:underline"
+          >
+            {showHistory ? "Hide" : "View"} completion history ({priorSubmissions.length})
+          </button>
+          {showHistory && (
+            <ul className="mt-1.5 flex flex-col gap-1.5">
+              {priorSubmissions.map((sub) => (
+                <HistoryEntry key={sub.id} submission={sub} submitterName={submitterName} />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {!hasPending && (
         <form onSubmit={handleSubmit} className="flex flex-col gap-1.5">
           <FieldLabel>Submit for review</FieldLabel>
@@ -273,5 +299,57 @@ export function CompletionWorkflow({
         </form>
       )}
     </div>
+  );
+}
+
+// Evidence links are fetched lazily (only once this specific history entry
+// is expanded), not for every prior submission up front -- avoids an N+1
+// burst of evidence-link requests for an entity with a long rejection trail.
+function HistoryEntry({
+  submission,
+  submitterName,
+}: {
+  submission: CompletionSubmission;
+  submitterName: (id: string) => string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const evidenceQuery = useQuery({
+    queryKey: ["completion-evidence", submission.id],
+    queryFn: () => apiClient.get<CompletionEvidenceLink[]>(`/completion-submissions/${submission.id}/evidence-links`),
+    enabled: expanded,
+  });
+
+  return (
+    <li className="rounded-edge-sm bg-surface2 p-2 text-xs">
+      <button type="button" onClick={() => setExpanded((v) => !v)} className="flex w-full items-center justify-between text-left">
+        <span className="flex items-center gap-1.5">
+          <span className={`rounded-edge-sm px-1.5 py-0.5 font-medium ${STATUS_STYLES[submission.status]}`}>{submission.status}</span>
+          <span className="text-text-dim">{new Date(submission.submitted_at).toLocaleDateString()}</span>
+        </span>
+        <span className="text-text-dim">{expanded ? "▾" : "▸"}</span>
+      </button>
+      {expanded && (
+        <div className="mt-1.5 flex flex-col gap-1 text-text">
+          <p>{submission.summary}</p>
+          <p className="text-text-dim">by {submitterName(submission.submitted_by)}</p>
+          {submission.status === "approved" && submission.completion_score !== null && <p>Score: {submission.completion_score}%</p>}
+          {submission.status === "rejected" && submission.rejection_feedback && (
+            <p className="text-danger">Feedback: {submission.rejection_feedback}</p>
+          )}
+          {(evidenceQuery.data ?? []).length > 0 && (
+            <ul className="flex flex-col gap-0.5">
+              {(evidenceQuery.data ?? []).map((link) => (
+                <li key={link.id}>
+                  <a href={link.url} target="_blank" rel="noreferrer" className="text-edge-teal hover:underline">
+                    {link.label || link.url}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </li>
   );
 }

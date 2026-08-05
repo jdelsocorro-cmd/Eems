@@ -3,7 +3,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
-import type { Company, Employee, Project, Task, TaskCategory, TaskComment, TaskStatus, TaskStatusHistoryEntry } from "@/lib/types";
+import type {
+  Company,
+  CompletionSubmission,
+  Employee,
+  KpiScore,
+  Project,
+  Task,
+  TaskCategory,
+  TaskComment,
+  TaskStatus,
+  TaskStatusHistoryEntry,
+} from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState } from "@/components/ui";
 import { CompletionWorkflow } from "@/components/completion/CompletionWorkflow";
 
@@ -51,6 +62,41 @@ export default function Tasks() {
   });
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiClient.get<Company[]>("/companies") });
   const employeesQuery = useQuery({ queryKey: ["employees"], queryFn: () => apiClient.get<Employee[]>("/employees") });
+
+  // RLS already returns every task-completion I submitted or reviewed --
+  // narrowed to "submitted by me" client-side, since this page is about my
+  // own work, not anything I happened to review for someone else.
+  const mySubmissionsQuery = useQuery({
+    queryKey: ["completion-submissions", "task", "mine", meQuery.data?.id],
+    queryFn: () => apiClient.get<CompletionSubmission[]>("/completion-submissions?entity_type=task"),
+    enabled: !!meQuery.data,
+  });
+
+  const myTaskSubmissions = (mySubmissionsQuery.data ?? []).filter((s) => s.submitted_by === meQuery.data?.id);
+
+  // Latest submission per task, for the Score column -- submitted_at desc
+  // means the first match per entity_id is the latest.
+  const latestSubmissionByTaskId = new Map<string, CompletionSubmission>();
+  for (const sub of myTaskSubmissions) {
+    if (!latestSubmissionByTaskId.has(sub.entity_id)) latestSubmissionByTaskId.set(sub.entity_id, sub);
+  }
+
+  const scoresQuery = useQuery({
+    queryKey: ["scores", meQuery.data?.id],
+    queryFn: () => apiClient.get<KpiScore[]>(`/scores?employee_id=${meQuery.data?.id}`),
+    enabled: !!meQuery.data,
+  });
+
+  const approvedScores = myTaskSubmissions.filter((s) => s.status === "approved" && s.completion_score !== null);
+  const completedTaskIds = new Set(approvedScores.map((s) => s.entity_id));
+  const pendingTaskIds = new Set(myTaskSubmissions.filter((s) => s.status === "pending").map((s) => s.entity_id));
+  const averageTaskScore =
+    approvedScores.length > 0
+      ? approvedScores.reduce((sum, s) => sum + (s.completion_score ?? 0), 0) / approvedScores.length
+      : null;
+  const totalTasks = tasksQuery.data?.length ?? 0;
+  const completionRate = totalTasks > 0 ? (completedTaskIds.size / totalTasks) * 100 : null;
+  const linkedKpiScore = scoresQuery.data?.[0]?.computed_score ?? null;
 
   const selectedTask = tasksQuery.data?.find((t) => t.id === selectedTaskId) ?? null;
 
@@ -143,6 +189,17 @@ export default function Tasks() {
         />
       )}
 
+      <Card className="p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">My Performance</h2>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+          <PerformanceStat label="Average Task Score" value={averageTaskScore === null ? "—" : `${averageTaskScore.toFixed(1)}%`} />
+          <PerformanceStat label="Tasks Completed" value={String(completedTaskIds.size)} />
+          <PerformanceStat label="Pending Review" value={String(pendingTaskIds.size)} />
+          <PerformanceStat label="Completion Rate" value={completionRate === null ? "—" : `${completionRate.toFixed(0)}%`} />
+          <PerformanceStat label="Linked KPI Score" value={linkedKpiScore === null ? "—" : `${linkedKpiScore}%`} />
+        </div>
+      </Card>
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <table className="w-full text-sm">
@@ -152,41 +209,54 @@ export default function Tasks() {
                 <th className="px-4 py-2">Project</th>
                 <th className="px-4 py-2">Category</th>
                 <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2">Score</th>
               </tr>
             </thead>
             <tbody>
               {tasksQuery.isLoading && (
                 <tr>
-                  <td colSpan={4}>
+                  <td colSpan={5}>
                     <LoadingState label="Loading tasks..." />
                   </td>
                 </tr>
               )}
-              {(tasksQuery.data ?? []).map((task) => (
-                <tr
-                  key={task.id}
-                  onClick={() => setSelectedTaskId(task.id)}
-                  className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
-                    selectedTaskId === task.id ? "bg-nav-active" : ""
-                  }`}
-                >
-                  <td className="px-4 py-2 text-text">{task.title}</td>
-                  <td className="px-4 py-2 text-text-muted">
-                    {projectsQuery.data?.find((p) => p.id === task.project_id)?.name ?? "Standalone"}
-                  </td>
-                  <td className="px-4 py-2 text-text-muted">
-                    {categoriesQuery.data?.find((c) => c.id === task.task_category_id)?.name ?? "—"}
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${TASK_STATUS_STYLES[task.status]}`}>
-                      {task.status.replace("_", " ")}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {(tasksQuery.data ?? []).map((task) => {
+                const latestSubmission = latestSubmissionByTaskId.get(task.id);
+                return (
+                  <tr
+                    key={task.id}
+                    onClick={() => setSelectedTaskId(task.id)}
+                    className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
+                      selectedTaskId === task.id ? "bg-nav-active" : ""
+                    }`}
+                  >
+                    <td className="px-4 py-2 text-text">{task.title}</td>
+                    <td className="px-4 py-2 text-text-muted">
+                      {projectsQuery.data?.find((p) => p.id === task.project_id)?.name ?? "Standalone"}
+                    </td>
+                    <td className="px-4 py-2 text-text-muted">
+                      {categoriesQuery.data?.find((c) => c.id === task.task_category_id)?.name ?? "—"}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${TASK_STATUS_STYLES[task.status]}`}>
+                        {task.status.replace("_", " ")}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-text-muted">
+                      {!latestSubmission
+                        ? "—"
+                        : latestSubmission.status === "approved"
+                          ? `${latestSubmission.completion_score}%`
+                          : latestSubmission.status === "rejected"
+                            ? "Rejected"
+                            : "Pending review"}
+                    </td>
+                  </tr>
+                );
+              })}
               {tasksQuery.data?.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-text-dim">
+                  <td colSpan={5} className="px-4 py-6 text-center text-text-dim">
                     No tasks assigned to you.
                   </td>
                 </tr>
@@ -307,6 +377,15 @@ export default function Tasks() {
           )}
         </Card>
       </div>
+    </div>
+  );
+}
+
+function PerformanceStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-text-muted">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-text">{value}</p>
     </div>
   );
 }

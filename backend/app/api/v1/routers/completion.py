@@ -25,6 +25,7 @@ async def list_completion_submissions(
     entity_type: str | None = Query(default=None),
     entity_id: uuid.UUID | None = Query(default=None),
     awaiting_my_review: bool = Query(default=False),
+    reviewed_by_me: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     current: CurrentEmployee = Depends(get_current_employee),
 ) -> list[CompletionSubmissionModel]:
@@ -44,6 +45,11 @@ async def list_completion_submissions(
     call added in 038) so "what shows up in my review queue" and "what I'm
     actually allowed to approve" never drift apart -- still fully subject
     to RLS on top, this is a narrowing filter, not a bypass.
+
+    reviewed_by_me is the mirror image, for Review Queue's "Recently
+    Reviewed" history -- reviewed_by is only ever set by approve_completion/
+    reject_completion (never client-writable directly), so filtering on it
+    alone is sufficient; no separate status check needed.
     """
     stmt = select(CompletionSubmissionModel).order_by(CompletionSubmissionModel.submitted_at.desc())
     if status_filter is not None:
@@ -52,6 +58,14 @@ async def list_completion_submissions(
         stmt = stmt.where(CompletionSubmissionModel.entity_type == entity_type)
     if entity_id is not None:
         stmt = stmt.where(CompletionSubmissionModel.entity_id == entity_id)
+    if reviewed_by_me:
+        # order_by(None) resets the submitted_at ordering set above -- this
+        # view wants most-recently-REVIEWED first, not most-recently-submitted.
+        stmt = (
+            stmt.where(CompletionSubmissionModel.reviewed_by == uuid.UUID(current.employee_id))
+            .order_by(None)
+            .order_by(CompletionSubmissionModel.reviewed_at.desc())
+        )
     if awaiting_my_review:
         stmt = (
             stmt.where(CompletionSubmissionModel.status == "pending")
