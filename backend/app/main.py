@@ -20,6 +20,7 @@ from app.api.v1.routers import (
     positions,
     projects,
     recognitions,
+    review_delegations,
     roles,
     scores,
     support,
@@ -64,3 +65,4 @@ app.include_router(scores.router, prefix="/api/v1")
 app.include_router(dashboards.router, prefix="/api/v1")
 app.include_router(help.router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
+app.include_router(review_delegations.router, prefix="/api/v1")

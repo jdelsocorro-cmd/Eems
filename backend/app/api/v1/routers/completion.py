@@ -40,9 +40,10 @@ async def list_completion_submissions(
     mirrors completion_submissions_review's reviewer-eligibility branches
     exactly (same three entity_type checks, same has_permission_on_employee
     calls, same self-submission exclusion added in 037_block_self_approval.
-    sql) so "what shows up in my review queue" and "what I'm actually
-    allowed to approve" never drift apart -- still fully subject to RLS on
-    top, this is a narrowing filter, not a bypass.
+    sql, same app.is_eligible_completion_reviewer() hierarchy-resolution
+    call added in 038) so "what shows up in my review queue" and "what I'm
+    actually allowed to approve" never drift apart -- still fully subject
+    to RLS on top, this is a narrowing filter, not a bypass.
     """
     stmt = select(CompletionSubmissionModel).order_by(CompletionSubmissionModel.submitted_at.desc())
     if status_filter is not None:
@@ -71,6 +72,7 @@ async def list_completion_submissions(
                         select 1 from milestones m join projects p on p.id = m.project_id where m.id = entity_id
                           and app.has_permission_on_employee(:me, p.owner_employee_id, 'completion', 'review')
                       ))
+                      or app.is_eligible_completion_reviewer(:me, entity_type, entity_id)
                     )
                 """)
             )

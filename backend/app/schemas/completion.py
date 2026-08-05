@@ -150,3 +150,24 @@ class RollupComputeRequest(BaseModel):
     company_id: uuid.UUID
     period_start: date
     period_end: date
+
+
+class ReviewDelegationCreate(BaseModel):
+    delegate_employee_id: uuid.UUID
+    start_date: date | None = None
+    end_date: date | None = None
+    reason: str | None = None
+
+
+class ReviewDelegation(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    delegator_employee_id: uuid.UUID
+    delegate_employee_id: uuid.UUID
+    start_date: date
+    end_date: date | None = None
+    reason: str | None = None
+    created_by: uuid.UUID | None = None
+    created_at: datetime
+    revoked_at: datetime | None = None

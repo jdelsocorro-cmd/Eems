@@ -421,3 +421,15 @@ export interface SupportTicketNote {
   note: string;
   created_at: string;
 }
+
+export interface ReviewDelegation {
+  id: string;
+  delegator_employee_id: string;
+  delegate_employee_id: string;
+  start_date: string;
+  end_date: string | null;
+  reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  revoked_at: string | null;
+}
