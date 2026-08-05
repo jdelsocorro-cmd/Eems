@@ -364,9 +364,18 @@ function UploadForm({
           />
         </div>
       </div>
-      <Button type="submit" disabled={pending || !file || !companyId} className="mt-3">
-        {pending ? "Uploading..." : "Upload & Preview"}
-      </Button>
+      <div className="mt-3 flex items-center gap-3">
+        <Button type="submit" disabled={pending || !file || !companyId}>
+          {pending ? "Uploading..." : "Upload & Preview"}
+        </Button>
+        <a
+          href="/samples/employees-import-sample.csv"
+          download
+          className="text-xs text-edge-teal hover:underline"
+        >
+          Download sample CSV
+        </a>
+      </div>
     </form>
   );
 }

@@ -30,6 +30,9 @@ its own matching key (e.g. `project_code` for Projects) without changing how imp
 
 ## CSV format
 
+A ready-to-edit sample file is available from the upload form itself ("Download sample CSV"),
+or directly at `frontend/public/samples/employees-import-sample.csv` in the repo.
+
 **Employees** — plain CSV, first row = headers, exact column names below (all except
 `work_email`/`first_name`/`last_name` are optional and can be omitted or left blank per row):
 
