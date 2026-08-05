@@ -15,6 +15,20 @@ function errorMessage(error: unknown): string {
   return "Something went wrong.";
 }
 
+// Multi-incumbent roles (several employees sharing one title, e.g. "Teacher
+// Recruiter Level1") need one position row per seat -- position_assignments
+// only allows a single current holder per position. Suggests the next free
+// "<CODE>-N" so Duplicate doesn't require typing a code by hand, following
+// the same numbered-seat convention already used for AM1-AM4.
+function nextAvailableCode(baseCode: string, positionsForUnit: Position[]): string {
+  const base = baseCode.toUpperCase();
+  const existing = new Set(positionsForUnit.map((p) => p.code.toUpperCase()));
+  if (!existing.has(base)) return base;
+  let n = 2;
+  while (existing.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
 export default function OrgAdmin() {
   const queryClient = useQueryClient();
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
@@ -23,6 +37,7 @@ export default function OrgAdmin() {
   const [addingChildOf, setAddingChildOf] = useState<string | null>(null);
   const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
   const [editingPositionId, setEditingPositionId] = useState<string | null>(null);
+  const [duplicatingFrom, setDuplicatingFrom] = useState<Position | null>(null);
 
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiClient.get<Company[]>("/companies") });
   const unitsQuery = useQuery({ queryKey: ["org-units"], queryFn: () => apiClient.get<OrgUnit[]>("/org-units") });
@@ -74,7 +89,10 @@ export default function OrgAdmin() {
   const createPosition = useMutation({
     mutationFn: (payload: { title: string; code: string; reports_to_position_id: string | null }) =>
       apiClient.post<Position>("/positions", { ...payload, org_unit_id: selectedUnitId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["positions"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["positions"] });
+      setDuplicatingFrom(null);
+    },
   });
 
   const reparentPosition = useMutation({
@@ -249,6 +267,12 @@ export default function OrgAdmin() {
                         <span className="flex items-center gap-1.5">
                           <span className="text-[10px] text-text-dim">{p.code}</span>
                           <button
+                            onClick={() => setDuplicatingFrom(p)}
+                            className="text-[10px] text-edge-teal hover:underline"
+                          >
+                            Duplicate
+                          </button>
+                          <button
                             onClick={() => setEditingPositionId(p.id)}
                             className="text-[10px] text-edge-teal hover:underline"
                           >
@@ -315,7 +339,13 @@ export default function OrgAdmin() {
               </ul>
               {reparentPosition.isError && <ErrorBanner message={errorMessage(reparentPosition.error)} />}
               <NewPositionForm
+                key={duplicatingFrom?.id ?? "new"}
                 positionsForUnit={positionsForUnit}
+                initialTitle={duplicatingFrom?.title}
+                initialCode={duplicatingFrom ? nextAvailableCode(duplicatingFrom.code, positionsForUnit) : undefined}
+                initialReportsTo={duplicatingFrom?.reports_to_position_id ?? undefined}
+                duplicatingFromTitle={duplicatingFrom?.title}
+                onCancelDuplicate={duplicatingFrom ? () => setDuplicatingFrom(null) : undefined}
                 onSubmit={(title, code, reportsTo) => createPosition.mutate({ title, code, reports_to_position_id: reportsTo })}
                 pending={createPosition.isPending}
                 error={createPosition.isError ? errorMessage(createPosition.error) : null}
@@ -596,15 +626,25 @@ function NewPositionForm({
   onSubmit,
   pending,
   error,
+  initialTitle,
+  initialCode,
+  initialReportsTo,
+  duplicatingFromTitle,
+  onCancelDuplicate,
 }: {
   positionsForUnit: Position[];
   onSubmit: (title: string, code: string, reportsTo: string | null) => void;
   pending: boolean;
   error: string | null;
+  initialTitle?: string;
+  initialCode?: string;
+  initialReportsTo?: string;
+  duplicatingFromTitle?: string;
+  onCancelDuplicate?: () => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [code, setCode] = useState("");
-  const [reportsTo, setReportsTo] = useState("");
+  const [title, setTitle] = useState(initialTitle ?? "");
+  const [code, setCode] = useState(initialCode ?? "");
+  const [reportsTo, setReportsTo] = useState(initialReportsTo ?? "");
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -617,6 +657,19 @@ function NewPositionForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-1.5 border-t border-border pt-2">
+      {duplicatingFromTitle && (
+        <div className="flex items-center justify-between text-[10px] text-text-muted">
+          <span>
+            Duplicating <span className="font-medium text-text">{duplicatingFromTitle}</span> — same title/reports-to, review the
+            code, then Add.
+          </span>
+          {onCancelDuplicate && (
+            <button type="button" onClick={onCancelDuplicate} className="text-edge-teal hover:underline">
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
