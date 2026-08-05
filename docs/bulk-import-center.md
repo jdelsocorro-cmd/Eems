@@ -44,7 +44,7 @@ or directly at `frontend/public/samples/employees-import-sample.csv` in the repo
 | `employee_number` | no | Checked for cross-record conflicts (see above). |
 | `personal_email` | no | |
 | `phone` | no | |
-| `hire_date` | no | `YYYY-MM-DD` |
+| `hire_date` | no | `YYYY-MM-DD` (preferred), or `MM/DD/YYYY` -- accepted because Excel silently reformats a date column to `MM/DD/YYYY` every time the file is saved, even if it started as ISO. |
 | `employment_type` | no | One of `full_time`, `part_time`, `contractor` |
 | `org_unit_name` | no | Org unit name, exact match against the current Org Chart. Must be filled in together with `position_code`, or both left blank. |
 | `position_code` | no | Position code *within that org unit*, exact match against the current Org Chart. See [Assigning a position](#assigning-a-position-org_unit_name--position_code) below. |

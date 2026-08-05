@@ -378,6 +378,32 @@ async def revalidate_batch(db: AsyncSession, batch: ImportBatch) -> list[ImportB
     return batch_rows
 
 
+_HIRE_DATE_FALLBACK_FORMATS = ("%m/%d/%Y", "%m-%d-%Y")
+
+
+def _parse_hire_date(value: str) -> date:
+    """Excel silently reformats a date column to the system locale's
+    display format (typically MM/DD/YYYY on a US install) every time the
+    file is saved -- even a column that started as clean YYYY-MM-DD gets
+    rewritten the moment Excel decides it "looks like a date". ISO is
+    tried first since it's the documented, unambiguous format; MM/DD/YYYY
+    is accepted as a fallback because it's what Excel actually produces,
+    not because it's unambiguous in general -- deliberately NOT also
+    accepting DD/MM/YYYY, since for a day/month pair both under 13 that
+    would silently misinterpret the date rather than reject it.
+    """
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        pass
+    for fmt in _HIRE_DATE_FALLBACK_FORMATS:
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(value)
+
+
 def _coerce_value(field: str, value: str) -> object:
     """Raw SQL via text() skips SQLAlchemy's normal type coercion, so a
     bind param goes to asyncpg exactly as Python typed it -- and unlike
@@ -389,9 +415,11 @@ def _coerce_value(field: str, value: str) -> object:
     """
     if field == "hire_date" and value:
         try:
-            return date.fromisoformat(value)
+            return _parse_hire_date(value)
         except ValueError as exc:
-            raise _RejectedRow(f"Rejected: hire_date '{value}' is not a valid date (expected YYYY-MM-DD)") from exc
+            raise _RejectedRow(
+                f"Rejected: hire_date '{value}' is not a valid date (expected YYYY-MM-DD, or MM/DD/YYYY)"
+            ) from exc
     return value
 
 
