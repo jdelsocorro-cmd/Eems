@@ -12,6 +12,8 @@ from app.schemas.employee import (
     EmployeeCreate,
     EmployeeMe,
     EmployeeOffboard,
+    EmployeeProfileSummary,
+    EmployeeProfileSummaryManager,
     EmployeeUpdate,
 )
 from app.services.supabase_admin import SupabaseAdminError, ban_auth_user, invite_user_by_email
@@ -89,6 +91,63 @@ async def get_employee(
     if employee is None or employee.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
     return employee
+
+
+@router.get("/{employee_id}/profile-summary", response_model=EmployeeProfileSummary)
+async def get_employee_profile_summary(
+    employee_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _current: CurrentEmployee = Depends(get_current_employee),
+) -> EmployeeProfileSummary:
+    """Overview tab for Employee 360 -- current position/org unit/manager in
+    one composite read. No permission dependency beyond authentication:
+    employees_select's own RLS (self, accessible_employee_ids, created_by,
+    or -- since 040 -- hierarchy_subtree_employee_ids) is what actually
+    gates whether `e` matches any row at all; if it doesn't, this 404s the
+    same way get_employee already does, rather than re-implementing the
+    visibility check here.
+    """
+    result = await db.execute(
+        text("""
+            select
+                e.id, e.employee_number, e.first_name, e.last_name, e.work_email, e.status, e.hire_date,
+                pos.title as position_title,
+                ou.name as org_unit_name,
+                mgr_emp.id as manager_id, mgr_emp.first_name as manager_first_name, mgr_emp.last_name as manager_last_name
+            from employees e
+            left join position_assignments pa on pa.employee_id = e.id and pa.end_date is null and pa.is_primary
+            left join positions pos on pos.id = pa.position_id
+            left join org_units ou on ou.id = pos.org_unit_id
+            left join positions mgr_pos on mgr_pos.id = pos.reports_to_position_id
+            left join position_assignments mgr_pa on mgr_pa.position_id = mgr_pos.id and mgr_pa.end_date is null and mgr_pa.is_primary
+            left join employees mgr_emp on mgr_emp.id = mgr_pa.employee_id
+            where e.id = :employee_id and e.deleted_at is null
+        """),
+        {"employee_id": str(employee_id)},
+    )
+    row = result.mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+
+    tenure_days = (date.today() - row["hire_date"]).days if row["hire_date"] else None
+    manager = (
+        EmployeeProfileSummaryManager(id=row["manager_id"], first_name=row["manager_first_name"], last_name=row["manager_last_name"])
+        if row["manager_id"] is not None
+        else None
+    )
+    return EmployeeProfileSummary(
+        id=row["id"],
+        employee_number=row["employee_number"],
+        first_name=row["first_name"],
+        last_name=row["last_name"],
+        work_email=row["work_email"],
+        status=row["status"],
+        hire_date=row["hire_date"],
+        tenure_days=tenure_days,
+        position_title=row["position_title"],
+        org_unit_name=row["org_unit_name"],
+        manager=manager,
+    )
 
 
 @router.post("", response_model=Employee, status_code=status.HTTP_201_CREATED)

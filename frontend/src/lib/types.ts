@@ -50,6 +50,20 @@ export interface Employee {
   status: EmployeeStatus;
 }
 
+export interface EmployeeProfileSummary {
+  id: string;
+  employee_number: string | null;
+  first_name: string;
+  last_name: string;
+  work_email: string;
+  status: EmployeeStatus;
+  hire_date: string | null;
+  tenure_days: number | null;
+  position_title: string | null;
+  org_unit_name: string | null;
+  manager: { id: string; first_name: string; last_name: string } | null;
+}
+
 export type AssignmentType = "permanent" | "acting" | "interim";
 
 export interface PositionAssignment {

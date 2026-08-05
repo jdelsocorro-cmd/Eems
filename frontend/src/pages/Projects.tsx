@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import type { Company, Employee, Milestone, MilestoneStatus, Project, ProjectMember, ProjectStatus, Task, TaskStatus } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState } from "@/components/ui";
 import { CompletionWorkflow } from "@/components/completion/CompletionWorkflow";
+import { EmployeeLink } from "@/components/EmployeeLink";
 
 const PROJECT_STATUSES: ProjectStatus[] = ["planning", "active", "on_hold", "completed", "cancelled"];
 const TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
@@ -184,7 +185,9 @@ export default function Projects() {
                   }`}
                 >
                   <td className="px-4 py-2 text-text">{project.name}</td>
-                  <td className="px-4 py-2 text-text-muted">{employeeName(employeesQuery.data, project.owner_employee_id)}</td>
+                  <td className="px-4 py-2 text-text-muted" onClick={(e) => e.stopPropagation()}>
+                    <EmployeeLink employeeId={project.owner_employee_id} name={employeeName(employeesQuery.data, project.owner_employee_id)} />
+                  </td>
                   <td className="px-4 py-2">
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${PROJECT_STATUS_STYLES[project.status]}`}>
                       {project.status.replace("_", " ")}

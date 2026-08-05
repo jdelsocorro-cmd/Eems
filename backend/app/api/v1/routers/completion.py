@@ -24,6 +24,7 @@ async def list_completion_submissions(
     status_filter: str | None = Query(default=None, alias="status"),
     entity_type: str | None = Query(default=None),
     entity_id: uuid.UUID | None = Query(default=None),
+    submitted_by: uuid.UUID | None = Query(default=None),
     awaiting_my_review: bool = Query(default=False),
     reviewed_by_me: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
@@ -50,6 +51,14 @@ async def list_completion_submissions(
     Reviewed" history -- reviewed_by is only ever set by approve_completion/
     reject_completion (never client-writable directly), so filtering on it
     alone is sufficient; no separate status check needed.
+
+    submitted_by powers Employee 360's Activity Timeline -- "everything this
+    specific employee submitted", scoped to one profile rather than
+    everything RLS happens to make visible to the caller across their whole
+    hierarchy subtree. Same optional-filter-on-top-of-RLS pattern as
+    entity_type/entity_id above; completion_submissions_select (040) is what
+    actually decides whether the caller can see this employee's submissions
+    at all.
     """
     stmt = select(CompletionSubmissionModel).order_by(CompletionSubmissionModel.submitted_at.desc())
     if status_filter is not None:
@@ -58,6 +67,8 @@ async def list_completion_submissions(
         stmt = stmt.where(CompletionSubmissionModel.entity_type == entity_type)
     if entity_id is not None:
         stmt = stmt.where(CompletionSubmissionModel.entity_id == entity_id)
+    if submitted_by is not None:
+        stmt = stmt.where(CompletionSubmissionModel.submitted_by == submitted_by)
     if reviewed_by_me:
         # order_by(None) resets the submitted_at ordering set above -- this
         # view wants most-recently-REVIEWED first, not most-recently-submitted.

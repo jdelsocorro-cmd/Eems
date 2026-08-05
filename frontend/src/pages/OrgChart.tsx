@@ -1,14 +1,44 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
 import { apiClient } from "@/lib/apiClient";
 import type { Company, Employee, OrgUnit, Position, PositionAssignment } from "@/lib/types";
 import { Button, Card, EmptyState, LoadingState, Toolbar, ToolbarDivider } from "@/components/ui";
+import { usePermissions } from "@/hooks/usePermissions";
 import "./OrgChart.css";
 
 interface TreeNode {
   position: Position;
   children: TreeNode[];
+}
+
+// The employee name here sits inside another element that's already
+// clickable (OrgNode's toggle button, TreeListRow's toggle row), so this
+// can't be a plain <Link>/<a> -- nesting interactive content invalidates
+// the outer control (a <button> especially). navigate() + stopPropagation
+// gets the same "click the name to open Employee 360" behavior without
+// that. Falls back to plain text for callers without employee.view_360,
+// same as the shared EmployeeLink used everywhere else.
+function EmployeeNameLink({ employeeId, children, className = "" }: { employeeId: string; children: ReactNode; className?: string }) {
+  const navigate = useNavigate();
+  const { has } = usePermissions();
+
+  if (!has("employee", "view_360")) {
+    return <span className={className}>{children}</span>;
+  }
+
+  return (
+    <span
+      className={`cursor-pointer hover:underline ${className}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigate(`/employees/${employeeId}`);
+      }}
+    >
+      {children}
+    </span>
+  );
 }
 
 type ViewMode = "chart" | "list";
@@ -348,9 +378,9 @@ function OrgNode({
           {node.position.title}
         </span>
         {employee ? (
-          <span className={`text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}>
+          <EmployeeNameLink employeeId={employee.id} className={`text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}>
             {employee.first_name} {employee.last_name}
-          </span>
+          </EmployeeNameLink>
         ) : (
           <span className="inline-block w-fit rounded-edge-sm bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">
             Vacant
@@ -427,9 +457,9 @@ function TreeListRow({
         <span className="w-4 text-text-dim">{hasChildren ? (isCollapsed ? "▸" : "▾") : ""}</span>
         <span className="font-medium text-text">{node.position.title}</span>
         {employee ? (
-          <span className="text-text-muted">
+          <EmployeeNameLink employeeId={employee.id} className="text-text-muted">
             — {employee.first_name} {employee.last_name}
-          </span>
+          </EmployeeNameLink>
         ) : (
           <span className="rounded-edge-sm bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">Vacant</span>
         )}

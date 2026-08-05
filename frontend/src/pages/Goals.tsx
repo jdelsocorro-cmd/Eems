@@ -20,6 +20,7 @@ import type {
   Task,
 } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState } from "@/components/ui";
+import { EmployeeLink } from "@/components/EmployeeLink";
 
 type EvidenceKind = "task" | "project" | "milestone";
 const EVIDENCE_KINDS: EvidenceKind[] = ["task", "project", "milestone"];
@@ -228,8 +229,12 @@ export default function Goals() {
                 >
                   <td className="px-4 py-2 text-text">{goal.title}</td>
                   <td className="px-4 py-2 text-text-muted">{goal.goal_type}</td>
-                  <td className="px-4 py-2 text-text-muted">
-                    {employeeName(employeesQuery.data, goal.owner_employee_id)}
+                  <td className="px-4 py-2 text-text-muted" onClick={(e) => e.stopPropagation()}>
+                    {goal.owner_employee_id ? (
+                      <EmployeeLink employeeId={goal.owner_employee_id} name={employeeName(employeesQuery.data, goal.owner_employee_id)} />
+                    ) : (
+                      employeeName(employeesQuery.data, goal.owner_employee_id)
+                    )}
                   </td>
                   <td className="px-4 py-2">
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${GOAL_STATUS_STYLES[goal.status]}`}>

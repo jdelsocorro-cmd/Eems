@@ -22,7 +22,8 @@ export type Permission =
   | "kpi_template.manage"
   | "goal.manage"
   | "audit_log.read"
-  | "dashboard.view_executive";
+  | "dashboard.view_executive"
+  | "employee.view_360";
 
 export function hasPermission(granted: Permission[], permission: Permission): boolean {
   return granted.includes(permission);

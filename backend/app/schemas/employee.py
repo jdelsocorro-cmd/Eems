@@ -84,3 +84,30 @@ class PositionAssignment(PositionAssignmentBase):
     start_date: date
     end_date: date | None
     is_primary: bool
+
+
+class EmployeeProfileSummaryManager(BaseModel):
+    id: uuid.UUID
+    first_name: str
+    last_name: str
+
+
+class EmployeeProfileSummary(BaseModel):
+    """Overview tab for Employee 360 (and reusable anywhere else a
+    position/org-unit/manager header is needed) -- one composite read
+    instead of each caller independently joining position_assignments +
+    positions + org_units by hand, the way UserManagement.tsx currently
+    does client-side.
+    """
+
+    id: uuid.UUID
+    employee_number: str | None
+    first_name: str
+    last_name: str
+    work_email: str
+    status: str
+    hire_date: date | None
+    tenure_days: int | None
+    position_title: str | None
+    org_unit_name: str | None
+    manager: EmployeeProfileSummaryManager | None

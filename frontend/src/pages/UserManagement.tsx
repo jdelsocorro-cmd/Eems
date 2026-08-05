@@ -5,6 +5,7 @@ import { apiClient, ApiError } from "@/lib/apiClient";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { Employee, EmploymentType, OrgUnit, Position, PositionAssignment } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
+import { EmployeeLink } from "@/components/EmployeeLink";
 
 const STATUS_STYLES: Record<Employee["status"], string> = {
   active: "bg-success-soft text-success",
@@ -166,8 +167,8 @@ export default function UserManagement() {
                     selectedEmployeeId === emp.id ? "bg-nav-active" : ""
                   }`}
                 >
-                  <td className="px-4 py-2 text-text">
-                    {emp.first_name} {emp.last_name}
+                  <td className="px-4 py-2 text-text" onClick={(e) => e.stopPropagation()}>
+                    <EmployeeLink employeeId={emp.id} name={`${emp.first_name} ${emp.last_name}`} />
                   </td>
                   <td className="px-4 py-2 text-text-muted">{emp.work_email}</td>
                   <td className="px-4 py-2">

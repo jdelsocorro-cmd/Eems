@@ -20,6 +20,7 @@ import HelpCenter from "@/pages/HelpCenter";
 import HelpAdmin from "@/pages/HelpAdmin";
 import SupportAdmin from "@/pages/SupportAdmin";
 import AccountSettings from "@/pages/AccountSettings";
+import Employee360 from "@/pages/Employee360";
 
 export default function App() {
   return (
@@ -83,6 +84,14 @@ export default function App() {
                     }
                   />
                   <Route path="/settings" element={<AccountSettings />} />
+                  <Route
+                    path="/employees/:employeeId"
+                    element={
+                      <RequirePermission resource="employee" action="view_360">
+                        <Employee360 />
+                      </RequirePermission>
+                    }
+                  />
                 </Routes>
               </AppLayout>
             </ProtectedRoute>

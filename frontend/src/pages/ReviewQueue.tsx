@@ -13,6 +13,7 @@ import type {
 } from "@/lib/types";
 import { Card, EmptyState, LoadingState } from "@/components/ui";
 import { CompletionWorkflow } from "@/components/completion/CompletionWorkflow";
+import { EmployeeLink } from "@/components/EmployeeLink";
 
 const ENTITY_LABELS: Record<CompletionEntityType, string> = { task: "Task", project: "Project", milestone: "Milestone" };
 
@@ -140,6 +141,8 @@ function ReviewedEntry({
     return emp ? `${emp.first_name} ${emp.last_name}` : id;
   };
 
+  const submitterLink = (id: string) => <EmployeeLink employeeId={id} name={submitterName(id)} />;
+
   const status = submission.status as "approved" | "rejected";
 
   return (
@@ -160,7 +163,7 @@ function ReviewedEntry({
         <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2 text-xs text-text">
           <p>{submission.summary}</p>
           <p className="text-text-dim">
-            Submitted by {submitterName(submission.submitted_by)} &middot; {new Date(submission.submitted_at).toLocaleDateString()}
+            Submitted by {submitterLink(submission.submitted_by)} &middot; {new Date(submission.submitted_at).toLocaleDateString()}
           </p>
           {status === "rejected" && submission.rejection_feedback && (
             <p className="text-danger">Feedback: {submission.rejection_feedback}</p>
