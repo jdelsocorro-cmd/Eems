@@ -43,6 +43,11 @@ Then run the one-time bootstrap in `supabase/seed.sql` (grants the first
 real employee the Super Admin role — nothing else can grant roles until one
 person has it).
 
+## Feature guides
+
+- [Bulk Import Center](docs/bulk-import-center.md) — CSV upload/upsert workflow, matching keys,
+  import modes, permissions, and current limitations.
+
 ## Known npm audit finding (accepted, not a bug)
 
 `npm audit` flags `react-router-dom@7.18.2` for GHSA-qwww-vcr4-c8h2 ("RSC
