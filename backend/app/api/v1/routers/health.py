@@ -12,13 +12,14 @@ async def health() -> dict:
     (not just a 200 OK) so it also proves the DB connection is alive, not
     just the web process.
 
-    Not what the keep-alive workflow hits, on purpose --
-    .github/workflows/keepalive.yml pings Supabase's REST endpoint directly.
-    Render's free-tier web service spinning down after 15 min idle is a
-    cheap, accepted cold start (see the architecture plan); the Supabase
-    project auto-pausing after 7 days idle is the actual outage risk, and
-    pinging this endpoint wouldn't touch Supabase unless this web service
-    also happened to be warm.
+    Also what .github/workflows/keepalive.yml's ping-render job hits every
+    10 minutes. Render's free-tier 15-min idle spin-down was originally an
+    accepted cold-start tradeoff for staying on the free tier -- revisited
+    once that cold start turned out to be exactly what real usage felt as
+    "loading takes some time": every request after 15 minutes idle ate a
+    30-90s container cold boot. This endpoint being pinged keeps the
+    service warm; it's unrelated to Supabase's separate 7-day auto-pause,
+    which keepalive.yml's other job covers independently.
     """
     async with AsyncSessionLocal() as session:
         await session.execute(text("select 1"))
