@@ -26,6 +26,7 @@ const NAV_ITEMS: { to: string; label: string; section: "workspace" | "admin"; re
   { to: "/admin/org", label: "Org Admin", section: "admin", requiredPermission: ["org_structure", "manage"] },
   { to: "/admin/rbac", label: "RBAC Admin", section: "admin", requiredPermission: ["role", "manage"] },
   { to: "/admin/users", label: "Users", section: "admin", requiredPermission: ["employee", "create"] },
+  { to: "/admin/bulk-import", label: "Bulk Import", section: "admin", requiredPermission: ["employee", "bulk_import"] },
   { to: "/admin/help", label: "Help Admin", section: "admin", requiredPermission: ["help_articles", "manage"] },
   { to: "/admin/support", label: "Support Tickets", section: "admin", requiredPermission: ["support_tickets", "review"] },
 ];

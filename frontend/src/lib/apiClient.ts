@@ -32,10 +32,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     data: { session },
   } = await supabase.auth.getSession();
 
+  // A FormData body (file uploads) must NOT get an explicit Content-Type --
+  // the browser sets its own multipart/form-data boundary automatically,
+  // and overriding it with application/json breaks the upload silently
+  // (the server sees a JSON content-type with a multipart body).
+  const isFormData = init.body instanceof FormData;
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
       ...init.headers,
     },
@@ -53,11 +59,30 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function requestBlob(path: string): Promise<Blob> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new ApiError(response.status, formatDetail(body.detail, response.statusText));
+  }
+
+  return response.blob();
+}
+
 export const apiClient = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) }),
+  postForm: <T>(path: string, formData: FormData) => request<T>(path, { method: "POST", body: formData }),
   patch: <T>(path: string, body: unknown) => request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  getBlob: (path: string) => requestBlob(path),
 };
 
 export { ApiError };

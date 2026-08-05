@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import DBAPIError
 
 from app.api.v1.routers import (
+    bulk_import,
     companies,
     completion,
     dashboards,
@@ -66,3 +67,4 @@ app.include_router(dashboards.router, prefix="/api/v1")
 app.include_router(help.router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
 app.include_router(review_delegations.router, prefix="/api/v1")
+app.include_router(bulk_import.router, prefix="/api/v1")

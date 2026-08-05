@@ -23,7 +23,8 @@ export type Permission =
   | "goal.manage"
   | "audit_log.read"
   | "dashboard.view_executive"
-  | "employee.view_360";
+  | "employee.view_360"
+  | "employee.bulk_import";
 
 export function hasPermission(granted: Permission[], permission: Permission): boolean {
   return granted.includes(permission);

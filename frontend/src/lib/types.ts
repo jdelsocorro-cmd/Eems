@@ -436,6 +436,44 @@ export interface SupportTicketNote {
   created_at: string;
 }
 
+export type ImportMode = "insert_only" | "upsert" | "update_only" | "skip_duplicates";
+export type FieldStrategy = "non_empty_only" | "overwrite_all";
+export type ImportBatchStatus = "staged" | "previewed" | "committed" | "failed" | "rolled_back";
+export type ImportRowAction = "insert" | "update" | "skip" | "reject";
+
+export interface ImportBatch {
+  id: string;
+  module: string;
+  initiated_by: string;
+  company_id: string;
+  import_mode: ImportMode;
+  field_strategy: FieldStrategy;
+  file_name: string;
+  status: ImportBatchStatus;
+  row_count: number;
+  inserted_count: number;
+  updated_count: number;
+  skipped_count: number;
+  rejected_count: number;
+  created_at: string;
+  committed_at: string | null;
+  rolled_back_at: string | null;
+  rolled_back_by: string | null;
+}
+
+export interface ImportBatchRow {
+  id: string;
+  batch_id: string;
+  row_number: number;
+  raw_data: Record<string, string>;
+  matching_key_value: string | null;
+  action: ImportRowAction;
+  target_record_id: string | null;
+  old_data: Record<string, unknown> | null;
+  validation_errors: string[] | null;
+  committed_at: string | null;
+}
+
 export interface ReviewDelegation {
   id: string;
   delegator_employee_id: string;

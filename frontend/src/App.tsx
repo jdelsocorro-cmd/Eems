@@ -21,6 +21,7 @@ import HelpAdmin from "@/pages/HelpAdmin";
 import SupportAdmin from "@/pages/SupportAdmin";
 import AccountSettings from "@/pages/AccountSettings";
 import Employee360 from "@/pages/Employee360";
+import BulkImportAdmin from "@/pages/BulkImportAdmin";
 
 export default function App() {
   return (
@@ -89,6 +90,14 @@ export default function App() {
                     element={
                       <RequirePermission resource="employee" action="view_360">
                         <Employee360 />
+                      </RequirePermission>
+                    }
+                  />
+                  <Route
+                    path="/admin/bulk-import"
+                    element={
+                      <RequirePermission resource="employee" action="bulk_import">
+                        <BulkImportAdmin />
                       </RequirePermission>
                     }
                   />
