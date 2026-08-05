@@ -1,4 +1,4 @@
-work_email,first_name,last_name,employee_number,personal_email,phone,hire_date,employment_type
-jane.doe@example.com,Jane,Doe,EMP-1001,jane.doe.personal@example.com,555-0101,2024-03-15,full_time
-john.smith@example.com,John,Smith,EMP-1002,,555-0102,2023-11-01,full_time
-maria.garcia@example.com,Maria,Garcia,EMP-1003,maria.g@example.com,,2025-01-10,part_time
+work_email,first_name,last_name,employee_number,personal_email,phone,hire_date,employment_type,org_unit_name,position_code
+jane.doe@example.com,Jane,Doe,EMP-1001,jane.doe.personal@example.com,555-0101,2024-03-15,full_time,Account Management,AM1
+john.smith@example.com,John,Smith,EMP-1002,,555-0102,2023-11-01,full_time,,
+maria.garcia@example.com,Maria,Garcia,EMP-1003,maria.g@example.com,,2025-01-10,part_time,Branding & Marketing,BSM

@@ -88,6 +88,13 @@ export default function BulkImportAdmin() {
     },
   });
 
+  const revalidateBatch = useMutation({
+    mutationFn: (batchId: string) => apiClient.post<ImportBatchRow[]>(`/import-batches/${batchId}/revalidate`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["import-batch-rows", selectedBatchId] });
+    },
+  });
+
   async function handleDownloadLog(batchId: string) {
     const blob = await apiClient.getBlob(`/import-batches/${batchId}/log`);
     const url = URL.createObjectURL(blob);
@@ -185,9 +192,20 @@ export default function BulkImportAdmin() {
                 </p>
                 <div className="ml-auto flex gap-2">
                   {selectedBatch.status === "previewed" && (
-                    <Button size="sm" onClick={() => commitBatch.mutate(selectedBatch.id)} disabled={commitBatch.isPending}>
-                      {commitBatch.isPending ? "Committing..." : "Commit Import"}
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => revalidateBatch.mutate(selectedBatch.id)}
+                        disabled={revalidateBatch.isPending}
+                        title="Re-check rejected rows against the current Org Chart, without re-uploading"
+                      >
+                        {revalidateBatch.isPending ? "Revalidating..." : "Revalidate"}
+                      </Button>
+                      <Button size="sm" onClick={() => commitBatch.mutate(selectedBatch.id)} disabled={commitBatch.isPending}>
+                        {commitBatch.isPending ? "Committing..." : "Commit Import"}
+                      </Button>
+                    </>
                   )}
                   {selectedBatch.status === "committed" && (
                     <Button size="sm" variant="secondary" onClick={() => handleDownloadLog(selectedBatch.id)}>
@@ -197,6 +215,7 @@ export default function BulkImportAdmin() {
                 </div>
               </div>
               {commitBatch.isError && <ErrorBanner message={errorMessage(commitBatch.error)} />}
+              {revalidateBatch.isError && <ErrorBanner message={errorMessage(revalidateBatch.error)} />}
 
               <div className="flex gap-1">
                 {(["all", "insert", "update", "skip", "reject"] as const).map((f) => (

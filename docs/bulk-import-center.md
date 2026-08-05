@@ -46,6 +46,8 @@ or directly at `frontend/public/samples/employees-import-sample.csv` in the repo
 | `phone` | no | |
 | `hire_date` | no | `YYYY-MM-DD` |
 | `employment_type` | no | One of `full_time`, `part_time`, `contractor` |
+| `org_unit_name` | no | Org unit name, exact match against the current Org Chart. Must be filled in together with `position_code`, or both left blank. |
+| `position_code` | no | Position code *within that org unit*, exact match against the current Org Chart. See [Assigning a position](#assigning-a-position-org_unit_name--position_code) below. |
 
 "Required for new employees" means: a row that will **update** an existing match doesn't need
 `first_name`/`last_name` filled in — leaving them blank there just means "don't change this
@@ -56,6 +58,38 @@ does need them.
 in the file, it's ignored. Status changes go through the dedicated Offboard flow in Users, which
 also closes position assignments and disables login — a bulk import deliberately can't bypass
 that.
+
+## Assigning a position (`org_unit_name` + `position_code`)
+
+A row can also assign the employee to a seat in the Org Chart — **both** columns together, or
+**both** left blank (leave their position untouched). One filled in without the other is treated
+as an error, not a guess.
+
+**The Org Chart is the single source of truth — nothing is ever auto-created.** A row referencing
+an org unit or position that doesn't already exist is **rejected outright**: the employee record
+itself is *not* created or updated either, even though that part alone would have succeeded. This
+is deliberate — a half-applied row (employee written, position silently skipped) would be more
+confusing than a clean rejection with a clear reason.
+
+Because position codes are only unique *within* their own org unit (two different org units can
+both have a position coded `M1`), the org unit is resolved first by name, then the position by
+code within it:
+
+1. **Org unit not found**, or the name matches more than one org unit → rejected, with the exact
+   name that didn't resolve.
+2. **Position not found** under that org unit → rejected, naming both the org unit and the code.
+3. **Position already held by someone else** → rejected (reassigning an employee to the position
+   they *already* hold is fine — that's a no-op, not a conflict).
+
+Assigning a position requires `org_structure.manage`, the same permission the existing
+single-employee "Reassign Position" control (in Users) requires, in addition to
+`employee.bulk_import`. Super Admin already holds both.
+
+**Fix and retry without re-uploading:** if rows were rejected because a position or org unit
+didn't exist yet, add it in Org Admin, then click **Revalidate** on the still-`previewed` batch —
+every row is re-checked against the current Org Chart in place, no new file upload needed. Commit
+also re-checks fresh at the moment you click it, so this is always accurate even if you don't
+click Revalidate first.
 
 ## Import modes
 
@@ -104,6 +138,12 @@ Two independent layers, same pattern used everywhere else in this app:
    Admin can run an import, but any row outside their accessible scope comes back **Rejected**
    (visible in the preview/summary and the downloaded log) rather than silently failing the whole
    batch or being written anyway.
+
+If a row also assigns a position (`org_unit_name` + `position_code`), a third requirement
+applies: `org_structure.manage`, scoped to that position's company — the same permission the
+single-employee "Reassign Position" control already requires. Missing it rejects only the
+position-assignment part of that row, but per the atomicity rule above, that rejects the *whole*
+row, including the employee write that would otherwise have succeeded.
 
 Bulk-imported employees are **never** sent an invite email, regardless of how many rows are in
 the file — inviting someone is a separate, existing action (in Users, or via `send_invite` on a

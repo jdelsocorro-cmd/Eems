@@ -42,6 +42,15 @@ class ImportModuleConfig:
     # excluded here on purpose -- see offboard_employee in employees.py).
     importable_fields: tuple[str, ...]
     permission: tuple[str, str]
+    # Optional: the two CSV columns that together identify a position to
+    # assign the row's employee to (org unit name + position code -- code
+    # alone isn't enough, positions are only unique per org unit, see
+    # 025_migrate_positions_projects_goals_to_org_units.sql:31). Neither
+    # column touching employees.* directly -- resolved against org_units/
+    # positions/position_assignments instead. None for modules that don't
+    # have a position concept.
+    position_org_unit_column: str | None = None
+    position_code_column: str | None = None
 
 
 IMPORT_MODULE_REGISTRY: dict[str, ImportModuleConfig] = {
@@ -61,6 +70,8 @@ IMPORT_MODULE_REGISTRY: dict[str, ImportModuleConfig] = {
             "employment_type",
         ),
         permission=("employee", "bulk_import"),
+        position_org_unit_column="org_unit_name",
+        position_code_column="position_code",
     ),
 }
 
@@ -118,6 +129,173 @@ def _validate_row(row: dict[str, str], config: ImportModuleConfig, *, is_new_rec
     return errors
 
 
+async def _bulk_lookup_existing(
+    db: AsyncSession, config: ImportModuleConfig, rows: list[dict[str, str]]
+) -> tuple[dict[str, uuid.UUID], dict[str, uuid.UUID]]:
+    """One query per key column, not one per row -- also what makes
+    pre-commit conflict detection possible: a CSV row can match an
+    existing record on work_email but collide with a DIFFERENT existing
+    record's employee_number, which a naive single-key dedupe would miss
+    until it hit a unique-constraint violation at commit time. Shared by
+    stage_batch() (fresh rows) and revalidate_batch() (re-checking
+    already-staged rows against the CURRENT state of the target table --
+    deliberately not reusing whatever was true at initial staging time).
+    """
+
+    def _clean_values(key: str) -> list[str]:
+        return [v for v in (((row.get(key) or "").strip()) for row in rows) if v]
+
+    matching_values = _clean_values(config.matching_key)
+    existing_by_key: dict[str, uuid.UUID] = {}
+    if matching_values:
+        result = await db.execute(
+            text(f"select id, {config.matching_key} as key from {config.table} where {config.matching_key} = any(:vals)"),
+            {"vals": matching_values},
+        )
+        existing_by_key = {row.key: row.id for row in result.mappings()}
+
+    existing_by_alt: dict[str, uuid.UUID] = {}
+    if config.alternate_matching_key:
+        alt_values = _clean_values(config.alternate_matching_key)
+        if alt_values:
+            result = await db.execute(
+                text(
+                    f"select id, {config.alternate_matching_key} as key from {config.table} "
+                    f"where {config.alternate_matching_key} = any(:vals)"
+                ),
+                {"vals": alt_values},
+            )
+            existing_by_alt = {row.key: row.id for row in result.mappings()}
+
+    return existing_by_key, existing_by_alt
+
+
+async def _resolve_position(
+    db: AsyncSession,
+    company_id: uuid.UUID,
+    org_unit_name: str,
+    position_code: str,
+    current_holder_employee_id: uuid.UUID | None,
+) -> tuple[uuid.UUID | None, list[str]]:
+    """Resolves (org_unit_name, position_code) against the CURRENT Org
+    Chart -- never creates or guesses a position, per Jayson's explicit
+    "keeps the Org Chart as the single source of truth". Called fresh at
+    both staging (for the preview) and commit (the real guarantee) --
+    never cached, so a Revalidate after fixing the Org Chart, or even just
+    the natural gap between preview and commit, is always checked against
+    current reality.
+
+    current_holder_employee_id is the row's own matched employee (None for
+    a candidate insert) -- lets "reassign this employee to the position
+    they already hold" pass as a no-op instead of a false occupancy
+    conflict.
+    """
+    errors: list[str] = []
+
+    unit_rows = await db.execute(
+        text("""
+            select id from org_units
+            where company_id = :company_id and lower(name) = lower(:name) and deleted_at is null and is_active
+        """),
+        {"company_id": str(company_id), "name": org_unit_name},
+    )
+    unit_ids = [row["id"] for row in unit_rows.mappings().all()]
+    if not unit_ids:
+        errors.append(f"Org unit '{org_unit_name}' not found in the Org Chart")
+        return None, errors
+    if len(unit_ids) > 1:
+        errors.append(
+            f"Org unit '{org_unit_name}' is ambiguous ({len(unit_ids)} org units share this name) -- rename one in Org Admin"
+        )
+        return None, errors
+    org_unit_id = unit_ids[0]
+
+    pos_result = await db.execute(
+        text("select id from positions where org_unit_id = :org_unit_id and code = :code and deleted_at is null"),
+        {"org_unit_id": org_unit_id, "code": position_code},
+    )
+    position = pos_result.mappings().one_or_none()
+    if position is None:
+        errors.append(f"Position '{position_code}' not found under org unit '{org_unit_name}' -- check Org Admin")
+        return None, errors
+    position_id = position["id"]
+
+    holder_result = await db.execute(
+        text("select employee_id from position_assignments where position_id = :position_id and end_date is null and is_primary"),
+        {"position_id": position_id},
+    )
+    holder = holder_result.mappings().one_or_none()
+    if holder is not None and holder["employee_id"] != current_holder_employee_id:
+        errors.append(f"Position '{position_code}' under '{org_unit_name}' is currently held by another employee")
+        return None, errors
+
+    return position_id, errors
+
+
+async def _classify_row(
+    db: AsyncSession,
+    config: ImportModuleConfig,
+    company_id: uuid.UUID,
+    row: dict[str, str],
+    import_mode: str,
+    existing_by_key: dict[str, uuid.UUID],
+    existing_by_alt: dict[str, uuid.UUID],
+) -> tuple[str, uuid.UUID | None, str | None, list[str] | None]:
+    """Pure classification -- never writes to the target table. Returns
+    (action, target_record_id, matching_key_value, validation_errors).
+    Shared by stage_batch() (fresh rows, first upload) and
+    revalidate_batch() (re-checking rows already in import_batch_rows
+    against current data, e.g. after Jayson fixes something in the Org
+    Chart -- no re-upload needed).
+    """
+    key_value = (row.get(config.matching_key) or "").strip()
+    alt_value = (row.get(config.alternate_matching_key) or "").strip() if config.alternate_matching_key else ""
+
+    existing_id = existing_by_key.get(key_value) if key_value else None
+    alt_existing_id = existing_by_alt.get(alt_value) if alt_value else None
+
+    errors = _validate_row(row, config, is_new_record=existing_id is None)
+
+    if alt_existing_id is not None and existing_id is not None and alt_existing_id != existing_id:
+        errors.append(
+            f"{config.alternate_matching_key} '{alt_value}' belongs to a different existing "
+            f"record than {config.matching_key} '{key_value}'"
+        )
+    elif alt_existing_id is not None and existing_id is None:
+        errors.append(f"{config.alternate_matching_key} '{alt_value}' is already used by a different existing record")
+
+    if config.position_org_unit_column and config.position_code_column:
+        org_unit_name = (row.get(config.position_org_unit_column) or "").strip()
+        position_code = (row.get(config.position_code_column) or "").strip()
+        # Both blank = no position change requested (existing behavior,
+        # backward compatible). Exactly one blank is ambiguous input, not
+        # "no request" -- reject rather than guess which one was meant.
+        if org_unit_name or position_code:
+            if not (org_unit_name and position_code):
+                errors.append(
+                    f"Both {config.position_org_unit_column} and {config.position_code_column} "
+                    "must be filled in together, or both left blank"
+                )
+            else:
+                _, position_errors = await _resolve_position(db, company_id, org_unit_name, position_code, existing_id)
+                errors.extend(position_errors)
+
+    if errors:
+        action = "reject"
+    elif existing_id is not None:
+        # insert_only and skip_duplicates currently produce identical
+        # behavior for an existing match (do nothing, report skipped) --
+        # both names describe "leave existing records alone", just from
+        # two different angles the original brief used. Flagging this
+        # explicitly rather than inventing an undocumented distinction;
+        # revisit if these two are meant to diverge.
+        action = "update" if import_mode in ("upsert", "update_only") else "skip"
+    else:
+        action = "skip" if import_mode == "update_only" else "insert"
+
+    return action, existing_id, (key_value or None), (errors or None)
+
+
 async def stage_batch(
     db: AsyncSession,
     *,
@@ -144,76 +322,21 @@ async def stage_batch(
     db.add(batch)
     await db.flush()
 
-    # Bulk existence check, one query per key column -- not one query per
-    # row. This is also what makes pre-commit conflict detection possible:
-    # a CSV row can match an existing record on work_email but collide with
-    # a DIFFERENT existing record's employee_number, which a naive
-    # single-key dedupe would miss until it hit a unique-constraint
-    # violation at commit time.
-    def _clean_values(key: str) -> list[str]:
-        return [v for v in (((row.get(key) or "").strip()) for row in rows) if v]
-
-    matching_values = _clean_values(config.matching_key)
-    existing_by_key: dict[str, uuid.UUID] = {}
-    if matching_values:
-        result = await db.execute(
-            text(f"select id, {config.matching_key} as key from {config.table} where {config.matching_key} = any(:vals)"),
-            {"vals": matching_values},
-        )
-        existing_by_key = {row.key: row.id for row in result.mappings()}
-
-    existing_by_alt: dict[str, uuid.UUID] = {}
-    if config.alternate_matching_key:
-        alt_values = _clean_values(config.alternate_matching_key)
-        if alt_values:
-            result = await db.execute(
-                text(
-                    f"select id, {config.alternate_matching_key} as key from {config.table} "
-                    f"where {config.alternate_matching_key} = any(:vals)"
-                ),
-                {"vals": alt_values},
-            )
-            existing_by_alt = {row.key: row.id for row in result.mappings()}
+    existing_by_key, existing_by_alt = await _bulk_lookup_existing(db, config, rows)
 
     for i, row in enumerate(rows, start=1):
-        key_value = (row.get(config.matching_key) or "").strip()
-        alt_value = (row.get(config.alternate_matching_key) or "").strip() if config.alternate_matching_key else ""
-
-        existing_id = existing_by_key.get(key_value) if key_value else None
-        alt_existing_id = existing_by_alt.get(alt_value) if alt_value else None
-
-        errors = _validate_row(row, config, is_new_record=existing_id is None)
-
-        if alt_existing_id is not None and existing_id is not None and alt_existing_id != existing_id:
-            errors.append(
-                f"{config.alternate_matching_key} '{alt_value}' belongs to a different existing "
-                f"record than {config.matching_key} '{key_value}'"
-            )
-        elif alt_existing_id is not None and existing_id is None:
-            errors.append(f"{config.alternate_matching_key} '{alt_value}' is already used by a different existing record")
-
-        if errors:
-            action = "reject"
-        elif existing_id is not None:
-            # insert_only and skip_duplicates currently produce identical
-            # behavior for an existing match (do nothing, report skipped) --
-            # both names describe "leave existing records alone", just from
-            # two different angles the original brief used. Flagging this
-            # explicitly rather than inventing an undocumented distinction;
-            # revisit if these two are meant to diverge.
-            action = "update" if import_mode in ("upsert", "update_only") else "skip"
-        else:
-            action = "skip" if import_mode == "update_only" else "insert"
-
+        action, target_id, key_value, errors = await _classify_row(
+            db, config, company_id, row, import_mode, existing_by_key, existing_by_alt
+        )
         db.add(
             ImportBatchRow(
                 batch_id=batch.id,
                 row_number=i,
                 raw_data=row,
-                matching_key_value=key_value or None,
+                matching_key_value=key_value,
                 action=action,
-                target_record_id=existing_id,
-                validation_errors=errors or None,
+                target_record_id=target_id,
+                validation_errors=errors,
             )
         )
 
@@ -221,6 +344,38 @@ async def stage_batch(
     await db.flush()
     await db.refresh(batch)
     return batch
+
+
+async def revalidate_batch(db: AsyncSession, batch: ImportBatch) -> list[ImportBatchRow]:
+    """Re-runs classification against every row's already-stored raw_data
+    -- no re-upload needed. Purely a staging re-check: never touches the
+    target table or position_assignments. Typical use: a row was rejected
+    for an Org Chart lookup failure, Jayson fixes the Org Chart in Org
+    Admin, then clicks Revalidate to confirm the fix before committing.
+    """
+    config = get_module_config(batch.module)
+
+    result = await db.execute(
+        select(ImportBatchRow).where(ImportBatchRow.batch_id == batch.id).order_by(ImportBatchRow.row_number)
+    )
+    batch_rows = list(result.scalars().all())
+    rows = [br.raw_data for br in batch_rows]
+
+    existing_by_key, existing_by_alt = await _bulk_lookup_existing(db, config, rows)
+
+    for batch_row in batch_rows:
+        action, target_id, key_value, errors = await _classify_row(
+            db, config, batch.company_id, batch_row.raw_data, batch.import_mode, existing_by_key, existing_by_alt
+        )
+        batch_row.action = action
+        batch_row.target_record_id = target_id
+        batch_row.matching_key_value = key_value
+        batch_row.validation_errors = errors
+
+    await db.flush()
+    for batch_row in batch_rows:
+        await db.refresh(batch_row)
+    return batch_rows
 
 
 def _coerce_value(field: str, value: str) -> object:
@@ -287,6 +442,24 @@ async def commit_batch(db: AsyncSession, batch: ImportBatch) -> ImportBatch:
                     if target_id is None:
                         raise _RejectedRow("Rejected: record no longer exists or is not visible to you")
                     batch_row.old_data = {k: _jsonable(v) for k, v in old_row.items()}
+
+                # Position assignment shares this row's SAVEPOINT with the
+                # employee write above -- resolved fresh here (never trusts
+                # whatever staging/revalidate last saw), and if it fails for
+                # ANY reason (Org Chart lookup, occupancy conflict, or the
+                # caller lacking org_structure.manage on this position's
+                # company), the whole row rolls back, employee write
+                # included. "Reject the row" means the row, not half of it.
+                if config.position_org_unit_column and config.position_code_column:
+                    org_unit_name = (raw.get(config.position_org_unit_column) or "").strip()
+                    position_code = (raw.get(config.position_code_column) or "").strip()
+                    if org_unit_name and position_code:
+                        position_id, position_errors = await _resolve_position(
+                            db, batch.company_id, org_unit_name, position_code, target_id
+                        )
+                        if position_id is None:
+                            raise _RejectedRow(f"Rejected: {'; '.join(position_errors)}")
+                        await _assign_position(db, position_id, target_id, batch.initiated_by)
         except _RejectedRow as exc:
             batch_row.action = "reject"
             batch_row.validation_errors = [str(exc)]
@@ -376,3 +549,46 @@ async def _execute_update(
     result = await db.execute(text(f"update {config.table} set {set_clause} where id = :id returning id"), params)
     row = result.mappings().one_or_none()
     return (row["id"], dict(existing_row)) if row else (None, {})
+
+
+async def _assign_position(db: AsyncSession, position_id: uuid.UUID, employee_id: uuid.UUID, initiated_by: uuid.UUID) -> None:
+    """Same three-statement close-out-then-insert sequence as the existing
+    single-employee POST /position-assignments endpoint
+    (app/api/v1/routers/position_assignments.py:62-88): close the
+    employee's current assignment wherever it is, close the position's
+    current primary holder, insert the new row. Both partial unique
+    indexes (uq_position_assignments_current_primary,
+    uq_position_assignments_current_employee, 001_org_hierarchy.sql) only
+    allow ONE current row per position and per employee -- a plain INSERT
+    without this close-out step would just fail those constraints instead
+    of doing the reassignment. If the employee already holds this exact
+    position (a true no-op), these two UPDATEs simply affect zero rows and
+    the INSERT below still records a fresh assignment row -- harmless,
+    matches the existing endpoint's own behavior for that case.
+
+    Runs inside commit_batch()'s per-row SAVEPOINT -- position_assignments_
+    mutate (016_scope_aware_position_assignments.sql) requires
+    org_structure.manage scoped to this position's company; if the caller
+    doesn't hold it, this INSERT's WITH CHECK raises, the savepoint rolls
+    back, and the whole row (employee write included) is rejected by
+    commit_batch()'s caller.
+    """
+    today = date.today()
+    await db.execute(
+        text("update position_assignments set end_date = :today where employee_id = :employee_id and end_date is null"),
+        {"today": today, "employee_id": str(employee_id)},
+    )
+    await db.execute(
+        text(
+            "update position_assignments set end_date = :today "
+            "where position_id = :position_id and end_date is null and is_primary"
+        ),
+        {"today": today, "position_id": str(position_id)},
+    )
+    await db.execute(
+        text(
+            "insert into position_assignments (position_id, employee_id, assignment_type, created_by) "
+            "values (:position_id, :employee_id, 'permanent', :created_by)"
+        ),
+        {"position_id": str(position_id), "employee_id": str(employee_id), "created_by": str(initiated_by)},
+    )

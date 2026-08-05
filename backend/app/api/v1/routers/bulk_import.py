@@ -133,6 +133,33 @@ async def commit_import_batch(
     return await service.commit_batch(db, batch)
 
 
+@router.post("/{batch_id}/revalidate", response_model=list[ImportBatchRow])
+async def revalidate_import_batch(
+    batch_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current: CurrentEmployee = Depends(require_bulk_import),
+) -> list[ImportBatchRowModel]:
+    """Re-checks every row's already-stored raw_data against current data
+    (including the Org Chart, for a module with position columns) without
+    re-uploading the file -- for fixing a row that was rejected because a
+    referenced org unit/position didn't exist yet, then confirming the fix
+    before committing. Same ownership rule as commit: only the employee who
+    staged the batch can revalidate it.
+    """
+    batch = await db.get(ImportBatchModel, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import batch not found")
+    if batch.status != "previewed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Batch is '{batch.status}', not 'previewed' -- it may already be committed",
+        )
+    if batch.initiated_by != uuid.UUID(current.employee_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the employee who staged this batch can revalidate it")
+
+    return await service.revalidate_batch(db, batch)
+
+
 def _sanitize_csv_cell(value: object) -> str:
     """CSV/Excel formula-injection mitigation: a cell opened in Excel that
     starts with =, +, -, or @ can execute as a formula. Prefixing with a

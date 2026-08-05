@@ -378,3 +378,300 @@ async def test_bulk_import_employees():
             await admin_conn.close()
             await auth_client.aclose()
             await api_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_bulk_import_position_assignment():
+    """Covers the Position Assignment Extension: org_unit_name/position_code
+    resolved against the CURRENT Org Chart, never guessed -- reject-not-
+    create on a missing org unit or position (with the employee write rolled
+    back too, proving the shared-savepoint atomicity), occupancy conflicts,
+    update-mode reassignment (old assignment closed, new one opened), the
+    caller needing org_structure.manage IN ADDITION to employee.bulk_import
+    (rejecting the whole row even though the employee part alone would have
+    succeeded), and Revalidate recovering a row after the Org Chart is fixed
+    -- no re-upload needed.
+    """
+    admin_conn = await asyncpg.connect(_admin_db_url(), statement_cache_size=0)
+    auth_client = httpx.AsyncClient()
+    api_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+
+    suffix = uuid.uuid4().hex[:6]
+    created_auth_user_ids = []
+
+    try:
+        super_admin_role_id = await admin_conn.fetchval("select id from roles where name = 'Super Admin'")
+        company_id = await admin_conn.fetchval("insert into companies (name) values ($1) returning id", f"PosImport Co {suffix}")
+        unit_id = await admin_conn.fetchval(
+            "insert into org_units (company_id, name, unit_type) values ($1,'Sales',$2) returning id", company_id, "department"
+        )
+        unit_name = "Sales"
+
+        async def make_position(title: str, code: str) -> str:
+            return await admin_conn.fetchval(
+                "insert into positions (org_unit_id, title, code) values ($1,$2,$3) returning id", unit_id, title, code
+            )
+
+        seat_open = await make_position("Rep Open", f"REP1-{suffix}")
+        seat_occupied = await make_position("Rep Occupied", f"REP2-{suffix}")
+        seat_old = await make_position("Rep Old", f"REP3-{suffix}")
+        seat_new = await make_position("Rep New", f"REP4-{suffix}")
+        seat_no_perm = await make_position("Rep NoPerm", f"REP5-{suffix}")
+        # seat_pending is deliberately NOT created here -- scenario (f)
+        # creates it only after the first (rejected) revalidate, to prove
+        # the Org Chart fix is picked up without re-uploading the file.
+        admin_seat = await make_position("Admin", f"ADM-{suffix}")
+
+        async def make_employee(email: str, first: str) -> tuple[str, dict]:
+            resp = await auth_client.post(
+                f"{SUPABASE_URL}/auth/v1/admin/users",
+                headers={"apikey": SERVICE_ROLE_KEY, "Authorization": f"Bearer {SERVICE_ROLE_KEY}"},
+                json={"email": email, "password": PASSWORD, "email_confirm": True},
+            )
+            resp.raise_for_status()
+            auth_user_id = resp.json()["id"]
+            created_auth_user_ids.append(auth_user_id)
+            employee_id = await admin_conn.fetchval(
+                "insert into employees (auth_user_id, first_name, last_name, work_email) values ($1,$2,$3,$4) returning id",
+                auth_user_id, first, "PosImport", email,
+            )
+            resp = await auth_client.post(
+                f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
+                headers={"apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json"},
+                json={"email": email, "password": PASSWORD},
+            )
+            resp.raise_for_status()
+            return str(employee_id), {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+        admin_id, headers_admin = await make_employee(f"pi-admin-{suffix}@eems-live-test.dev", "Admin")
+        occupant_id, _ = await make_employee(f"pi-occupant-{suffix}@eems-live-test.dev", "Occupant")
+        reassign_id, _ = await make_employee(f"pi-reassign-{suffix}@eems-live-test.dev", "Reassign")
+        limited_id, headers_limited = await make_employee(f"pi-limited-{suffix}@eems-live-test.dev", "Limited")
+
+        for pos_id, emp_id in ((admin_seat, admin_id), (seat_occupied, occupant_id), (seat_old, reassign_id), (seat_no_perm, limited_id)):
+            await admin_conn.execute(
+                "insert into position_assignments (position_id, employee_id, created_by) values ($1,$2,$3)", pos_id, emp_id, admin_id
+            )
+
+        # Admin: full Super Admin (employee.create/update, employee.bulk_import,
+        # org_structure.manage -- everything scenarios a-d and f need).
+        await admin_conn.execute(
+            "insert into employee_roles (employee_id, role_id, scope_type, scope_id, granted_by) values ($1,$2,'company',$3,$1)",
+            admin_id, super_admin_role_id, company_id,
+        )
+
+        # Limited: employee.create + employee.bulk_import, deliberately NOT
+        # org_structure.manage -- proves scenario (e), a row's position-
+        # assignment half failing on permission rolls back the employee half
+        # too, even though employee.create alone would have succeeded.
+        create_perm_id = await admin_conn.fetchval("select id from permissions where resource='employee' and action='create'")
+        bulk_import_perm_id = await admin_conn.fetchval(
+            "select id from permissions where resource='employee' and action='bulk_import'"
+        )
+        limited_role_id = await admin_conn.fetchval(
+            "insert into roles (company_id, name) values ($1,$2) returning id", company_id, f"PI Limited Grant {suffix}"
+        )
+        await admin_conn.execute("insert into role_permissions (role_id, permission_id) values ($1,$2)", limited_role_id, create_perm_id)
+        await admin_conn.execute(
+            "insert into role_permissions (role_id, permission_id) values ($1,$2)", limited_role_id, bulk_import_perm_id
+        )
+        await admin_conn.execute(
+            "insert into employee_roles (employee_id, role_id, scope_type, scope_id, granted_by) values ($1,$2,'self',null,$1)",
+            limited_id, limited_role_id,
+        )
+
+        header = ["work_email", "first_name", "last_name", "org_unit_name", "position_code"]
+
+        # --- (a) Valid insert + assign: new employee, unoccupied position. ---
+        rows_a = [[f"pi-new-a-{suffix}@eems-live-test.dev", "NewA", "PosImport", unit_name, f"REP1-{suffix}"]]
+        resp = await api_client.post(
+            "/api/v1/import-batches",
+            headers=headers_admin,
+            data={"module": "employees", "company_id": str(company_id), "import_mode": "upsert", "field_strategy": "non_empty_only"},
+            files={"file": ("batch_a.csv", _csv_bytes(header, rows_a), "text/csv")},
+        )
+        assert resp.status_code == 201
+        batch_a = resp.json()
+        resp = await api_client.get(f"/api/v1/import-batches/{batch_a['id']}/rows", headers=headers_admin)
+        assert resp.json()[0]["action"] == "insert"
+        resp = await api_client.post(f"/api/v1/import-batches/{batch_a['id']}/commit", headers=headers_admin)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["inserted_count"] == 1
+
+        new_a_id = await admin_conn.fetchval("select id from employees where work_email = $1", f"pi-new-a-{suffix}@eems-live-test.dev")
+        assert new_a_id is not None
+        assignment = await admin_conn.fetchrow(
+            "select employee_id, is_primary from position_assignments where position_id = $1 and end_date is null", seat_open
+        )
+        assert assignment is not None, "position_assignments row must exist for the newly bulk-imported employee"
+        assert assignment["employee_id"] == new_a_id
+        assert assignment["is_primary"] is True
+
+        # --- (b) Org unit not found: rejected, employee NOT created (atomicity). ---
+        rows_b = [[f"pi-new-b-{suffix}@eems-live-test.dev", "NewB", "PosImport", f"Nonexistent Unit {suffix}", "WHATEVER"]]
+        resp = await api_client.post(
+            "/api/v1/import-batches",
+            headers=headers_admin,
+            data={"module": "employees", "company_id": str(company_id), "import_mode": "upsert", "field_strategy": "non_empty_only"},
+            files={"file": ("batch_b.csv", _csv_bytes(header, rows_b), "text/csv")},
+        )
+        batch_b = resp.json()
+        resp = await api_client.post(f"/api/v1/import-batches/{batch_b['id']}/commit", headers=headers_admin)
+        assert resp.status_code == 200, resp.text
+        summary_b = resp.json()
+        assert summary_b["rejected_count"] == 1
+        assert summary_b["inserted_count"] == 0
+        no_row = await admin_conn.fetchval("select id from employees where work_email = $1", f"pi-new-b-{suffix}@eems-live-test.dev")
+        assert no_row is None, "employee must NOT be created when the org unit doesn't resolve -- reject the whole row"
+
+        # --- (c) Position occupied by a different employee: rejected. ---
+        rows_c = [[f"pi-new-c-{suffix}@eems-live-test.dev", "NewC", "PosImport", unit_name, f"REP2-{suffix}"]]
+        resp = await api_client.post(
+            "/api/v1/import-batches",
+            headers=headers_admin,
+            data={"module": "employees", "company_id": str(company_id), "import_mode": "upsert", "field_strategy": "non_empty_only"},
+            files={"file": ("batch_c.csv", _csv_bytes(header, rows_c), "text/csv")},
+        )
+        batch_c = resp.json()
+        resp = await api_client.post(f"/api/v1/import-batches/{batch_c['id']}/commit", headers=headers_admin)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["rejected_count"] == 1
+        no_row_c = await admin_conn.fetchval("select id from employees where work_email = $1", f"pi-new-c-{suffix}@eems-live-test.dev")
+        assert no_row_c is None, "occupied position must reject the row, employee included"
+        still_occupant = await admin_conn.fetchval(
+            "select employee_id from position_assignments where position_id = $1 and end_date is null", seat_occupied
+        )
+        assert str(still_occupant) == occupant_id, "the original occupant must be undisturbed"
+
+        # --- (d) Update-mode reassignment: old assignment closed, new one opened. ---
+        rows_d = [[f"pi-reassign-{suffix}@eems-live-test.dev", "Reassign", "PosImport", unit_name, f"REP4-{suffix}"]]
+        resp = await api_client.post(
+            "/api/v1/import-batches",
+            headers=headers_admin,
+            data={"module": "employees", "company_id": str(company_id), "import_mode": "upsert", "field_strategy": "non_empty_only"},
+            files={"file": ("batch_d.csv", _csv_bytes(header, rows_d), "text/csv")},
+        )
+        batch_d = resp.json()
+        resp = await api_client.post(f"/api/v1/import-batches/{batch_d['id']}/commit", headers=headers_admin)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["updated_count"] == 1
+        old_current = await admin_conn.fetchval(
+            "select employee_id from position_assignments where position_id = $1 and end_date is null", seat_old
+        )
+        assert old_current is None, "the employee's OLD assignment must be closed (end_date set), not left dangling"
+        new_current = await admin_conn.fetchval(
+            "select employee_id from position_assignments where position_id = $1 and end_date is null", seat_new
+        )
+        assert str(new_current) == reassign_id, "the employee must now hold the NEW position"
+
+        # --- (e) Caller lacks org_structure.manage: rejected even though the
+        # employee write alone would have succeeded (shared savepoint). ---
+        rows_e = [[f"pi-new-e-{suffix}@eems-live-test.dev", "NewE", "PosImport", unit_name, f"REP5-{suffix}"]]
+        resp = await api_client.post(
+            "/api/v1/import-batches",
+            headers=headers_limited,
+            data={"module": "employees", "company_id": str(company_id), "import_mode": "upsert", "field_strategy": "non_empty_only"},
+            files={"file": ("batch_e.csv", _csv_bytes(header, rows_e), "text/csv")},
+        )
+        assert resp.status_code == 201, f"staging (a pure preview) should still succeed: {resp.text}"
+        batch_e = resp.json()
+        resp = await api_client.post(f"/api/v1/import-batches/{batch_e['id']}/commit", headers=headers_limited)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["rejected_count"] == 1
+        no_row_e = await admin_conn.fetchval("select id from employees where work_email = $1", f"pi-new-e-{suffix}@eems-live-test.dev")
+        assert no_row_e is None, (
+            "missing org_structure.manage must roll back the employee write too -- "
+            "never a half-applied row where the employee exists but has no position"
+        )
+
+        # --- (f) Revalidate: fix the Org Chart after a rejection, re-check
+        # without re-uploading the file. ---
+        pending_code = f"REP6-{suffix}"
+        rows_f = [[f"pi-new-f-{suffix}@eems-live-test.dev", "NewF", "PosImport", unit_name, pending_code]]
+        resp = await api_client.post(
+            "/api/v1/import-batches",
+            headers=headers_admin,
+            data={"module": "employees", "company_id": str(company_id), "import_mode": "upsert", "field_strategy": "non_empty_only"},
+            files={"file": ("batch_f.csv", _csv_bytes(header, rows_f), "text/csv")},
+        )
+        batch_f = resp.json()
+        resp = await api_client.get(f"/api/v1/import-batches/{batch_f['id']}/rows", headers=headers_admin)
+        row_f = resp.json()[0]
+        assert row_f["action"] == "reject"
+        assert any("not found" in e for e in row_f["validation_errors"])
+
+        # Fix the Org Chart -- the position didn't exist at staging time.
+        await make_position("Rep Pending", pending_code)
+
+        resp = await api_client.post(f"/api/v1/import-batches/{batch_f['id']}/revalidate", headers=headers_admin)
+        assert resp.status_code == 200, resp.text
+        revalidated_rows = resp.json()
+        assert revalidated_rows[0]["action"] == "insert", "after fixing the Org Chart, Revalidate must resolve the row without re-uploading"
+
+        resp = await api_client.post(f"/api/v1/import-batches/{batch_f['id']}/commit", headers=headers_admin)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["inserted_count"] == 1
+        new_f_id = await admin_conn.fetchval("select id from employees where work_email = $1", f"pi-new-f-{suffix}@eems-live-test.dev")
+        assert new_f_id is not None
+
+    finally:
+        try:
+            emp_ids = await admin_conn.fetch("select id from employees where work_email like $1", f"%pi-%{suffix}%")
+            emp_ids = [r["id"] for r in emp_ids]
+
+            batch_ids = await admin_conn.fetch("select id from import_batches where company_id = $1", company_id)
+            batch_ids = [r["id"] for r in batch_ids]
+            if batch_ids:
+                await admin_conn.execute("delete from import_batch_rows where batch_id = any($1::uuid[])", batch_ids)
+                await admin_conn.execute("delete from import_batches where id = any($1::uuid[])", batch_ids)
+
+            role_ids = await admin_conn.fetch("select id from roles where name like $1", f"%{suffix}%")
+            role_ids = [r["id"] for r in role_ids]
+            if role_ids:
+                await admin_conn.execute("delete from role_permissions where role_id = any($1::uuid[])", role_ids)
+                await admin_conn.execute("delete from employee_roles where role_id = any($1::uuid[])", role_ids)
+                await admin_conn.execute("delete from roles where id = any($1::uuid[])", role_ids)
+            if emp_ids:
+                await admin_conn.execute("delete from employee_roles where employee_id = any($1::uuid[])", emp_ids)
+                await admin_conn.execute("delete from position_assignments where employee_id = any($1::uuid[])", emp_ids)
+
+            position_ids = await admin_conn.fetch(
+                "select p.id from positions p join org_units ou on ou.id = p.org_unit_id where ou.company_id = $1", company_id
+            )
+            position_ids = [r["id"] for r in position_ids]
+            if position_ids:
+                await admin_conn.execute("delete from position_assignments where position_id = any($1::uuid[])", position_ids)
+                await admin_conn.execute(
+                    "delete from position_closure where ancestor_position_id = any($1::uuid[]) or descendant_position_id = any($1::uuid[])",
+                    position_ids,
+                )
+                await admin_conn.execute("update positions set reports_to_position_id = null where id = any($1::uuid[])", position_ids)
+                await admin_conn.execute(
+                    "delete from position_hierarchy_history where position_id = any($1::uuid[]) or old_reports_to_position_id = any($1::uuid[]) or new_reports_to_position_id = any($1::uuid[])",
+                    position_ids,
+                )
+                await admin_conn.execute("delete from positions where id = any($1::uuid[])", position_ids)
+
+            unit_ids = await admin_conn.fetch("select id from org_units where company_id = $1", company_id)
+            unit_ids = [r["id"] for r in unit_ids]
+            if unit_ids:
+                await admin_conn.execute(
+                    "delete from org_unit_closure where ancestor_unit_id = any($1::uuid[]) or descendant_unit_id = any($1::uuid[])",
+                    unit_ids,
+                )
+            await admin_conn.execute("delete from org_units where company_id = $1", company_id)
+
+            if emp_ids:
+                await admin_conn.execute("delete from audit_log where actor_employee_id = any($1::uuid[])", emp_ids)
+                await admin_conn.execute("delete from employees where id = any($1::uuid[])", emp_ids)
+
+            await admin_conn.execute("delete from companies where id = $1", company_id)
+        finally:
+            for auth_id in created_auth_user_ids:
+                await auth_client.delete(
+                    f"{SUPABASE_URL}/auth/v1/admin/users/{auth_id}",
+                    headers={"apikey": SERVICE_ROLE_KEY, "Authorization": f"Bearer {SERVICE_ROLE_KEY}"},
+                )
+            await admin_conn.close()
+            await auth_client.aclose()
+            await api_client.aclose()
