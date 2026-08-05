@@ -302,6 +302,10 @@ async def test_org_hierarchy_crud_and_reparent_flow():
                 await admin_conn.execute("delete from org_units where id = any($1::uuid[])", unit_ids)
 
             await admin_conn.execute("delete from employees where work_email = $1", test_email)
+            await admin_conn.execute(
+                "delete from task_categories where company_id in (select id from companies where name like $1)",
+                f"%{suffix}%",
+            )
             await admin_conn.execute("delete from companies where name like $1", f"%{suffix}%")
         finally:
             if auth_user_id:
