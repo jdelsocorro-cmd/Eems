@@ -15,7 +15,7 @@ import type {
   TaskStatus,
   TaskStatusHistoryEntry,
 } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState, SuccessBanner } from "@/components/ui";
 import { CompletionWorkflow } from "@/components/completion/CompletionWorkflow";
 
 const NEW_CATEGORY_VALUE = "__new__";
@@ -36,12 +36,23 @@ function errorMessage(error: unknown): string {
   return "Something went wrong.";
 }
 
+function employeeName(employees: Employee[] | undefined, id: string | null): string {
+  const emp = employees?.find((e) => e.id === id);
+  return emp ? `${emp.first_name} ${emp.last_name}` : "someone";
+}
+
 export default function Tasks() {
   const { session } = useAuth();
   const queryClient = useQueryClient();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [commentBody, setCommentBody] = useState("");
+  // Reassigning (or creating a task assigned to someone else) removes it
+  // from this "My Tasks" list entirely -- the Details panel would
+  // otherwise just go blank with zero indication that actually worked,
+  // rather than failed. Tracked separately from selectedTask so it
+  // survives the list refetch that makes the task disappear.
+  const [lastAssignment, setLastAssignment] = useState<{ taskTitle: string; assigneeName: string } | null>(null);
 
   const meQuery = useQuery({
     queryKey: ["employees", "me"],
@@ -123,6 +134,9 @@ export default function Tasks() {
       queryClient.invalidateQueries({ queryKey: ["tasks", "assignee", meQuery.data?.id] });
       setSelectedTaskId(task.id);
       setShowCreateForm(false);
+      if (task.assignee_employee_id !== meQuery.data?.id) {
+        setLastAssignment({ taskTitle: task.title, assigneeName: employeeName(employeesQuery.data, task.assignee_employee_id) });
+      }
     },
   });
 
@@ -149,7 +163,12 @@ export default function Tasks() {
   const updateTaskAssignee = useMutation({
     mutationFn: ({ id, assignee_employee_id }: { id: string; assignee_employee_id: string }) =>
       apiClient.patch<Task>(`/tasks/${id}`, { assignee_employee_id }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", "assignee", meQuery.data?.id] }),
+    onSuccess: (task) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", "assignee", meQuery.data?.id] });
+      if (task.assignee_employee_id !== meQuery.data?.id) {
+        setLastAssignment({ taskTitle: task.title, assigneeName: employeeName(employeesQuery.data, task.assignee_employee_id) });
+      }
+    },
   });
 
   const addComment = useMutation({
@@ -225,7 +244,10 @@ export default function Tasks() {
                 return (
                   <tr
                     key={task.id}
-                    onClick={() => setSelectedTaskId(task.id)}
+                    onClick={() => {
+                      setSelectedTaskId(task.id);
+                      setLastAssignment(null);
+                    }}
                     className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
                       selectedTaskId === task.id ? "bg-nav-active" : ""
                     }`}
@@ -268,7 +290,17 @@ export default function Tasks() {
         <Card className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Details</h2>
           {!selectedTask ? (
-            <EmptyState message="Select a task to see details." />
+            lastAssignment ? (
+              <div className="flex flex-col gap-2">
+                <SuccessBanner message={`"${lastAssignment.taskTitle}" was assigned to ${lastAssignment.assigneeName}.`} />
+                <p className="text-xs text-text-dim">It's now on their My Tasks list, not yours.</p>
+                <Button variant="secondary" size="sm" onClick={() => setLastAssignment(null)} className="self-start">
+                  Dismiss
+                </Button>
+              </div>
+            ) : (
+              <EmptyState message="Select a task to see details." />
+            )
           ) : (
             <div className="flex flex-col gap-3">
               <div>
