@@ -187,6 +187,40 @@ async def create_employee(
     return employee
 
 
+@router.post("/{employee_id}/invite", response_model=Employee)
+async def invite_employee(
+    employee_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _current: CurrentEmployee = Depends(require_permission("employee", "create")),
+) -> EmployeeModel:
+    """Sends the same Supabase invite email POST /employees's send_invite=
+    true path does, for an employee who was provisioned without one -- the
+    common case for anyone created via Bulk Import, which deliberately
+    never invites (see bulk_import.py's docstring: inviting is a separate,
+    explicit action). Guarded on auth_user_id already being null: an
+    already-invited employee should go through password recovery, not a
+    second invite email pointing at an account that already exists.
+    """
+    employee = await db.get(EmployeeModel, employee_id)
+    if employee is None or employee.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+    if employee.auth_user_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This employee already has a login -- use password recovery instead of inviting again",
+        )
+
+    try:
+        auth_user_id = await invite_user_by_email(employee.work_email)
+    except SupabaseAdminError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    employee.auth_user_id = auth_user_id
+    await db.flush()
+    await db.refresh(employee)
+    return employee
+
+
 @router.patch("/{employee_id}", response_model=Employee)
 async def update_employee(
     employee_id: uuid.UUID,

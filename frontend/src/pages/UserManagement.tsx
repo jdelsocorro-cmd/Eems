@@ -33,6 +33,7 @@ export default function UserManagement() {
   const { has } = usePermissions();
   const canManagePositions = has("org_structure", "manage");
   const canOffboard = has("employee", "update");
+  const canInvite = has("employee", "create");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [search, setSearch] = useState("");
@@ -194,6 +195,11 @@ export default function UserManagement() {
     },
   });
 
+  const inviteEmployee = useMutation({
+    mutationFn: (employeeId: string) => apiClient.post<Employee>(`/employees/${employeeId}/invite`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["employees"] }),
+  });
+
   const [editingProfile, setEditingProfile] = useState(false);
 
   const updateEmployee = useMutation({
@@ -304,6 +310,14 @@ export default function UserManagement() {
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[emp.status]}`}>
                       {emp.status}
                     </span>
+                    {!emp.auth_user_id && (
+                      <span
+                        title="Hasn't been invited yet -- no way to log in"
+                        className="ml-1.5 rounded-edge-sm bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning"
+                      >
+                        No login
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -343,6 +357,31 @@ export default function UserManagement() {
               <div className="border-t border-border pt-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Email</p>
                 <p className="mt-1 text-sm text-text">{selectedEmployee.work_email}</p>
+              </div>
+
+              <div className="border-t border-border pt-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Login access</p>
+                {selectedEmployee.auth_user_id ? (
+                  <p className="mt-1 text-sm text-text">Has a login</p>
+                ) : (
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <p className="text-sm text-warning">Hasn't been invited yet -- no way to log in.</p>
+                    {selectedEmployee.status !== "offboarded" && canInvite && (
+                      <Button
+                        size="sm"
+                        onClick={() => inviteEmployee.mutate(selectedEmployee.id)}
+                        disabled={inviteEmployee.isPending}
+                        className="shrink-0"
+                      >
+                        {inviteEmployee.isPending ? "Sending..." : "Send Invite"}
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {inviteEmployee.isError && <ErrorBanner message={errorMessage(inviteEmployee.error)} />}
+                {inviteEmployee.isSuccess && inviteEmployee.variables === selectedEmployee.id && (
+                  <p className="mt-1 text-xs text-success">Invite sent to {selectedEmployee.work_email}.</p>
+                )}
               </div>
 
               <div className="border-t border-border pt-3">
