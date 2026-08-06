@@ -21,6 +21,7 @@ const NAV_ITEMS: { to: string; label: string; section: "workspace" | "admin"; re
   { to: "/review-queue", label: "Review Queue", section: "workspace" },
   { to: "/scorecard", label: "My Scorecard", section: "workspace" },
   { to: "/leadership-scorecard", label: "Leadership Scorecard", section: "workspace" },
+  { to: "/performance-review-center", label: "Performance Review Center", section: "workspace" },
   { to: "/goals", label: "Goals & Performance", section: "workspace" },
   { to: "/help", label: "Help Center", section: "workspace" },
   { to: "/admin/org", label: "Org Admin", section: "admin", requiredPermission: ["org_structure", "manage"] },

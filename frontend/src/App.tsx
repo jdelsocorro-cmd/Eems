@@ -16,6 +16,7 @@ import ReviewQueue from "@/pages/ReviewQueue";
 import Goals from "@/pages/Goals";
 import MyScorecard from "@/pages/MyScorecard";
 import LeadershipScorecard from "@/pages/LeadershipScorecard";
+import PerformanceReviewCenter from "@/pages/PerformanceReviewCenter";
 import HelpCenter from "@/pages/HelpCenter";
 import HelpAdmin from "@/pages/HelpAdmin";
 import SupportAdmin from "@/pages/SupportAdmin";
@@ -42,6 +43,7 @@ export default function App() {
                   <Route path="/review-queue" element={<ReviewQueue />} />
                   <Route path="/scorecard" element={<MyScorecard />} />
                   <Route path="/leadership-scorecard" element={<LeadershipScorecard />} />
+                  <Route path="/performance-review-center" element={<PerformanceReviewCenter />} />
                   <Route path="/goals" element={<Goals />} />
                   <Route
                     path="/admin/org"
