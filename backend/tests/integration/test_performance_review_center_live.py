@@ -29,6 +29,16 @@ usePerformanceReviewData.ts) -- that table is company-scoped, not
 subtree-scoped, and would be a real leak if reused here for a
 position_subtree-only caller.
 
+ScopedReviewer's /projects assertion doubles as the regression proof for
+043_reachable_employee_ids_shared_visibility.sql: this test originally
+caught projects_select lacking an accessible_employee_ids branch (the
+RBAC-grant path this scenario isolates), documented with
+expect_projects=False. 043 closed that gap by wiring
+app.reachable_employee_ids() (accessible_employee_ids UNION hierarchy_
+subtree_employee_ids) into projects_select, so this now asserts
+expect_projects=True for both callers -- if that migration ever gets
+reverted or projects_select regresses, this is what catches it.
+
 Skipped by default -- see test_user_rbac_live.py for the RUN_LIVE_TESTS=1
 convention and rationale.
 """
@@ -207,17 +217,13 @@ async def test_performance_review_center_scope_narrowing():
             task_ids = {t["id"] for t in resp.json()}
             assert staff_task_id in task_ids, f"{label} should see Staff's task via unscoped /tasks"
 
-            # GET /projects -- unscoped. UNLIKE tasks/goals/kpis/scores/
-            # completion-submissions, projects_select (040:102-108) has NO
-            # accessible_employee_ids() branch -- only hierarchy_subtree_
-            # employee_ids and a company-wide project.read_all permission
-            # check. A caller whose ONLY access is a position_subtree/
-            # org_unit RBAC grant (no position of their own, no company-
-            # wide read_all) genuinely cannot see a subordinate's projects
-            # today -- a real, pre-existing gap in projects_select shared by
-            # Projects.tsx already, not something this feature introduces.
-            # expect_projects=False documents that live-proven limitation
-            # rather than asserting something the system doesn't actually do.
+            # GET /projects -- unscoped. Fixed by
+            # 043_reachable_employee_ids_shared_visibility.sql: projects_
+            # select now has an app.reachable_employee_ids() branch (=
+            # accessible_employee_ids UNION hierarchy_subtree_employee_ids),
+            # same as tasks/goals/kpis/scores/completion-submissions already
+            # had. Before that migration this was expect_projects=False,
+            # documenting a real gap this exact test caught live.
             resp = await api_client.get("/api/v1/projects", headers=headers)
             assert resp.status_code == 200, f"{label}: {resp.status_code} {resp.text}"
             project_ids = {p["id"] for p in resp.json()}
@@ -258,15 +264,15 @@ async def test_performance_review_center_scope_narrowing():
 
         # (a) Manager: hierarchy-based visibility, ZERO employee_roles
         # grants. hierarchy_subtree_employee_ids covers all six endpoints,
-        # projects included (it's one of the two branches projects_select
-        # actually has), so the full set is expected here.
+        # projects included, so the full set is expected here.
         await assert_scope(headers_manager, "Manager (hierarchy only, no RBAC grant)", expect_projects=True)
 
         # (b) ScopedReviewer: RBAC position_subtree grant, holds NO
         # position at all -- hierarchy_subtree_employee_ids contributes
         # nothing for them, so this isolates the RBAC-grant path alone.
-        # Projects is the one exception (see assert_scope's comment).
-        await assert_scope(headers_scoped_reviewer, "ScopedReviewer (position_subtree grant, no position held)", expect_projects=False)
+        # Projects is now included too (043_reachable_employee_ids_shared_
+        # visibility.sql closed the gap this scenario originally caught).
+        await assert_scope(headers_scoped_reviewer, "ScopedReviewer (position_subtree grant, no position held)", expect_projects=True)
 
         # (c) Sibling Contributor must not see Staff's data either --
         # confirms the scope narrowing isn't just "everyone in the company".
