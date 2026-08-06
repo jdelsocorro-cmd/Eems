@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, ApiError } from "@/lib/apiClient";
@@ -24,6 +24,10 @@ const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
 };
 const CONSULTANT_EMPLOYMENT_TYPES: EmploymentType[] = ["full_time", "part_time"];
 
+type SortColumn = "name" | "department" | "status";
+type StatusFilter = "all" | Employee["status"];
+const UNASSIGNED_DEPARTMENT_ID = "unassigned";
+
 export default function UserManagement() {
   const queryClient = useQueryClient();
   const { has } = usePermissions();
@@ -31,6 +35,11 @@ export default function UserManagement() {
   const canOffboard = has("employee", "update");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [search, setSearch] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortColumn, setSortColumn] = useState<SortColumn>("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const employeesQuery = useQuery({
     queryKey: ["employees"],
@@ -52,9 +61,87 @@ export default function UserManagement() {
     queryFn: () => apiClient.get<PositionAssignment[]>("/position-assignments?current_only=true"),
   });
 
+  // current_only=true only filters end_date is null -- NOT is_primary. A
+  // dual-hat employee (a schema-legal secondary assignment, see
+  // position_assignments' partial unique indexes) would have two rows that
+  // pass that filter. Reducing to one-row-per-employee here, keyed by
+  // is_primary, is what keeps "current position" (and the derived
+  // department below) deterministic instead of picking whichever row the
+  // API happened to return first.
+  const primaryAssignmentByEmployee = useMemo(() => {
+    const map = new Map<string, PositionAssignment>();
+    for (const a of assignmentsQuery.data ?? []) {
+      if (a.is_primary) map.set(a.employee_id, a);
+    }
+    return map;
+  }, [assignmentsQuery.data]);
+
+  const positionsById = useMemo(() => new Map((positionsQuery.data ?? []).map((p) => [p.id, p])), [positionsQuery.data]);
+  const unitsById = useMemo(() => new Map((unitsQuery.data ?? []).map((u) => [u.id, u])), [unitsQuery.data]);
+
+  // Department is derived, not stored -- an employee with no current
+  // primary assignment (a fresh bulk import without a position, someone
+  // mid-reassignment) has no department, so they get an explicit
+  // "Unassigned" bucket rather than silently vanishing from every
+  // department-filtered view.
+  const employeeDepartment = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const emp of employeesQuery.data ?? []) {
+      const assignment = primaryAssignmentByEmployee.get(emp.id);
+      const position = assignment ? positionsById.get(assignment.position_id) : undefined;
+      const unit = position ? unitsById.get(position.org_unit_id) : undefined;
+      map.set(emp.id, unit ? { id: unit.id, name: unit.name } : { id: UNASSIGNED_DEPARTMENT_ID, name: "Unassigned" });
+    }
+    return map;
+  }, [employeesQuery.data, primaryAssignmentByEmployee, positionsById, unitsById]);
+
+  const departmentOptions = useMemo(
+    () => [...(unitsQuery.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [unitsQuery.data],
+  );
+
+  const visibleEmployees = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let rows = (employeesQuery.data ?? []).map((employee) => ({
+      employee,
+      department: employeeDepartment.get(employee.id) ?? { id: UNASSIGNED_DEPARTMENT_ID, name: "Unassigned" },
+    }));
+
+    if (q) {
+      rows = rows.filter(({ employee }) => {
+        const fullName = `${employee.first_name} ${employee.last_name}`.toLowerCase();
+        return fullName.includes(q) || employee.work_email.toLowerCase().includes(q);
+      });
+    }
+
+    if (departmentFilter !== "all") {
+      rows = rows.filter(({ department }) => department.id === departmentFilter);
+    }
+
+    if (statusFilter !== "all") {
+      rows = rows.filter(({ employee }) => employee.status === statusFilter);
+    }
+
+    const dir = sortDirection === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      if (sortColumn === "department") return a.department.name.localeCompare(b.department.name) * dir;
+      if (sortColumn === "status") return a.employee.status.localeCompare(b.employee.status) * dir;
+      return `${a.employee.first_name} ${a.employee.last_name}`.localeCompare(`${b.employee.first_name} ${b.employee.last_name}`) * dir;
+    });
+  }, [employeesQuery.data, employeeDepartment, search, departmentFilter, statusFilter, sortColumn, sortDirection]);
+
+  function toggleSort(column: SortColumn) {
+    if (sortColumn === column) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  }
+
   const selectedEmployee = employeesQuery.data?.find((e) => e.id === selectedEmployeeId) ?? null;
-  const selectedAssignment = assignmentsQuery.data?.find((a) => a.employee_id === selectedEmployeeId) ?? null;
-  const selectedPosition = positionsQuery.data?.find((p) => p.id === selectedAssignment?.position_id) ?? null;
+  const selectedAssignment = selectedEmployeeId ? primaryAssignmentByEmployee.get(selectedEmployeeId) ?? null : null;
+  const selectedPosition = selectedAssignment ? positionsById.get(selectedAssignment.position_id) ?? null : null;
 
   const createEmployee = useMutation({
     mutationFn: (payload: {
@@ -140,23 +227,64 @@ export default function UserManagement() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name or email..."
+              type="search"
+              className="min-w-[200px] flex-1 rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
+            />
+            <select
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+            >
+              <option value="all">All departments</option>
+              <option value={UNASSIGNED_DEPARTMENT_ID}>Unassigned</option>
+              {departmentOptions.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1 rounded-edge-md bg-surface2 p-1 text-xs">
+              {(["all", "active", "on_leave", "offboarded"] as StatusFilter[]).map((s) => (
+                <Button key={s} variant="toolbar" size="sm" active={statusFilter === s} onClick={() => setStatusFilter(s)}>
+                  {s === "all" ? "All" : s === "on_leave" ? "On Leave" : s[0].toUpperCase() + s.slice(1)}
+                </Button>
+              ))}
+            </div>
+            {(search || departmentFilter !== "all" || statusFilter !== "all") && (
+              <span className="text-xs text-text-muted">
+                {visibleEmployees.length} of {employeesQuery.data?.length ?? 0} shown
+              </span>
+            )}
+          </div>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-                <th className="px-4 py-2">Name</th>
+                <SortHeader label="Name" column="name" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
                 <th className="px-4 py-2">Email</th>
-                <th className="px-4 py-2">Status</th>
+                <SortHeader
+                  label="Department"
+                  column="department"
+                  sortColumn={sortColumn}
+                  sortDirection={sortDirection}
+                  onSort={toggleSort}
+                />
+                <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
               </tr>
             </thead>
             <tbody>
               {employeesQuery.isLoading && (
                 <tr>
-                  <td colSpan={3}>
+                  <td colSpan={4}>
                     <LoadingState label="Loading employees..." />
                   </td>
                 </tr>
               )}
-              {(employeesQuery.data ?? []).map((emp) => (
+              {visibleEmployees.map(({ employee: emp, department }) => (
                 <tr
                   key={emp.id}
                   onClick={() => {
@@ -171,6 +299,7 @@ export default function UserManagement() {
                     <EmployeeLink employeeId={emp.id} name={`${emp.first_name} ${emp.last_name}`} />
                   </td>
                   <td className="px-4 py-2 text-text-muted">{emp.work_email}</td>
+                  <td className="px-4 py-2 text-text-muted">{department.name}</td>
                   <td className="px-4 py-2">
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[emp.status]}`}>
                       {emp.status}
@@ -178,10 +307,17 @@ export default function UserManagement() {
                   </td>
                 </tr>
               ))}
-              {employeesQuery.data?.length === 0 && (
+              {!employeesQuery.isLoading && employeesQuery.data?.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-text-dim">
+                  <td colSpan={4} className="px-4 py-6 text-center text-text-dim">
                     No employees yet.
+                  </td>
+                </tr>
+              )}
+              {!employeesQuery.isLoading && (employeesQuery.data?.length ?? 0) > 0 && visibleEmployees.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-6 text-center text-text-dim">
+                    No employees match your search or filters.
                   </td>
                 </tr>
               )}
@@ -389,6 +525,35 @@ function ConsultantProfileEditForm({
       </div>
       {error && <ErrorBanner message={error} />}
     </form>
+  );
+}
+
+function SortHeader({
+  label,
+  column,
+  sortColumn,
+  sortDirection,
+  onSort,
+}: {
+  label: string;
+  column: SortColumn;
+  sortColumn: SortColumn;
+  sortDirection: "asc" | "desc";
+  onSort: (column: SortColumn) => void;
+}) {
+  const isActive = sortColumn === column;
+  return (
+    <th className="px-4 py-2">
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        aria-sort={isActive ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+        className={`flex items-center gap-1 uppercase tracking-wide hover:text-text ${isActive ? "text-text" : "text-text-muted"}`}
+      >
+        {label}
+        <span className="text-[10px]">{isActive ? (sortDirection === "asc" ? "▲" : "▼") : ""}</span>
+      </button>
+    </th>
   );
 }
 
