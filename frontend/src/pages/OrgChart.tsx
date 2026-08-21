@@ -31,7 +31,22 @@ const ZOOM_STEP = 0.1;
 // adjacent quirk: the same department could read as a different color
 // after a re-render if sibling ordering shifted. Keying on the actual
 // org_unit_id fixes that and is what makes the legend meaningful at all.
-const DEPARTMENT_BORDER_CLASSES = ["border-l-edge-teal", "border-l-info", "border-l-success", "border-l-warning", "border-l-danger"];
+// Must stay the same length and order as AVATAR_PALETTE (EmployeeAvatar.tsx)
+// and SWATCH_PALETTE (OrgChartLegend.tsx) -- see those files' comments.
+const DEPARTMENT_BORDER_CLASSES = [
+  "border-l-edge-teal",
+  "border-l-info",
+  "border-l-success",
+  "border-l-warning",
+  "border-l-danger",
+  "border-l-purple-500",
+  "border-l-pink-500",
+  "border-l-indigo-500",
+  "border-l-cyan-500",
+  "border-l-lime-500",
+  "border-l-orange-500",
+  "border-l-violet-500",
+];
 
 export default function OrgChart() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);

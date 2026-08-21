@@ -3,7 +3,24 @@
 // it's a small standalone dot). Keeping both derived from one colorIndex
 // keeps a department's color consistent between the legend, the avatars,
 // and the node accent border everywhere on the page.
-const SWATCH_PALETTE = ["bg-edge-teal", "bg-info", "bg-success", "bg-warning", "bg-danger"];
+// Must stay the same length and order as AVATAR_PALETTE (EmployeeAvatar.tsx)
+// and DEPARTMENT_BORDER_CLASSES (OrgChart.tsx) -- all three are indexed by
+// the same colorIndex, so a mismatched length would make a department's
+// legend swatch, avatar, and card border disagree past index 4.
+const SWATCH_PALETTE = [
+  "bg-edge-teal",
+  "bg-info",
+  "bg-success",
+  "bg-warning",
+  "bg-danger",
+  "bg-purple-500",
+  "bg-pink-500",
+  "bg-indigo-500",
+  "bg-cyan-500",
+  "bg-lime-500",
+  "bg-orange-500",
+  "bg-violet-500",
+];
 
 export function legendSwatchClass(colorIndex: number): string {
   return SWATCH_PALETTE[colorIndex % SWATCH_PALETTE.length];
