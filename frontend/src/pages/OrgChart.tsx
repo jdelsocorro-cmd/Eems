@@ -34,18 +34,18 @@ const ZOOM_STEP = 0.1;
 // Must stay the same length and order as AVATAR_PALETTE (EmployeeAvatar.tsx)
 // and SWATCH_PALETTE (OrgChartLegend.tsx) -- see those files' comments.
 const DEPARTMENT_BORDER_CLASSES = [
-  "border-l-edge-teal",
-  "border-l-info",
-  "border-l-success",
-  "border-l-warning",
-  "border-l-danger",
-  "border-l-purple-500",
-  "border-l-pink-500",
-  "border-l-indigo-500",
-  "border-l-cyan-500",
-  "border-l-lime-500",
-  "border-l-orange-500",
-  "border-l-violet-500",
+  "border-l-[#2fc6a0]",
+  "border-l-[#2fa0c6]",
+  "border-l-[#2f54c6]",
+  "border-l-[#542fc6]",
+  "border-l-[#a02fc6]",
+  "border-l-[#c62fa0]",
+  "border-l-[#c62f54]",
+  "border-l-[#c6542f]",
+  "border-l-[#c6a02f]",
+  "border-l-[#a0c62f]",
+  "border-l-[#54c62f]",
+  "border-l-[#2fc654]",
 ];
 
 export default function OrgChart() {
@@ -158,7 +158,6 @@ export default function OrgChart() {
       totalEmployees: employeeIds.size,
       departments: unitsForCompany.length,
       managers: managerNodes.length,
-      teams: managerNodes.length,
       spanOfControl,
       lastUpdated,
     };
@@ -465,13 +464,17 @@ export default function OrgChart() {
 function StatStrip({
   stats,
 }: {
-  stats: { totalEmployees: number; departments: number; managers: number; teams: number; spanOfControl: number; lastUpdated: string | null };
+  stats: { totalEmployees: number; departments: number; managers: number; spanOfControl: number; lastUpdated: string | null };
 }) {
+  // No separate "Teams" tile -- EEMS has no team entity distinct from
+  // "a position with direct reports," so it would always show the exact
+  // same number as Managers (confirmed live: both read 23). Two tiles that
+  // can never disagree don't convey two pieces of information; showing
+  // both just reads as a stat-strip bug.
   const tiles: { label: string; value: string }[] = [
     { label: "Total Employees", value: String(stats.totalEmployees) },
     { label: "Departments", value: String(stats.departments) },
     { label: "Managers", value: String(stats.managers) },
-    { label: "Teams", value: String(stats.teams) },
     { label: "Span of Control", value: stats.spanOfControl > 0 ? stats.spanOfControl.toFixed(1) + " avg" : "—" },
     { label: "Last Position Change", value: stats.lastUpdated ?? "—" },
   ];

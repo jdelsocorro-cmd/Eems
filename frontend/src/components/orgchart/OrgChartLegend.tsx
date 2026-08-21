@@ -3,23 +3,25 @@
 // it's a small standalone dot). Keeping both derived from one colorIndex
 // keeps a department's color consistent between the legend, the avatars,
 // and the node accent border everywhere on the page.
-// Must stay the same length and order as AVATAR_PALETTE (EmployeeAvatar.tsx)
-// and DEPARTMENT_BORDER_CLASSES (OrgChart.tsx) -- all three are indexed by
-// the same colorIndex, so a mismatched length would make a department's
-// legend swatch, avatar, and card border disagree past index 4.
+// Solid version of the same 12 hue-wheel colors AVATAR_PALETTE uses (see
+// its comment for why -- hand-picked Tailwind shades weren't actually
+// checked for pairwise hue distinctiveness and three pairs turned out to be
+// the same color family). Must stay the same length/order as
+// AVATAR_PALETTE (EmployeeAvatar.tsx) and DEPARTMENT_BORDER_CLASSES
+// (OrgChart.tsx) -- all three are indexed by the same colorIndex.
 const SWATCH_PALETTE = [
-  "bg-edge-teal",
-  "bg-info",
-  "bg-success",
-  "bg-warning",
-  "bg-danger",
-  "bg-purple-500",
-  "bg-pink-500",
-  "bg-indigo-500",
-  "bg-cyan-500",
-  "bg-lime-500",
-  "bg-orange-500",
-  "bg-violet-500",
+  "bg-[#2fc6a0]",
+  "bg-[#2fa0c6]",
+  "bg-[#2f54c6]",
+  "bg-[#542fc6]",
+  "bg-[#a02fc6]",
+  "bg-[#c62fa0]",
+  "bg-[#c62f54]",
+  "bg-[#c6542f]",
+  "bg-[#c6a02f]",
+  "bg-[#a0c62f]",
+  "bg-[#54c62f]",
+  "bg-[#2fc654]",
 ];
 
 export function legendSwatchClass(colorIndex: number): string {

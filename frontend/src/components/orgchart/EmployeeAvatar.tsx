@@ -5,26 +5,34 @@
 // with zero new backend work. Color comes from the SAME department palette
 // map the chart nodes and legend use (colorIndex), so an avatar always
 // matches its person's department color everywhere it appears.
-// 12 entries, not 5 -- with only 5, EDGE Tutor's real 11 departments wrapped
-// the index and THREE different departments (Account Management, People &
-// Culture, Workforce & BI) rendered as the identical color, confirmed live
-// (the legend visibly repeated colors). The first 5 stay the existing
-// design-system semantic tokens; the rest are Tailwind's default palette --
-// available with zero new dependency since tailwind.config.ts uses `extend`,
-// not a full override, so Tailwind's built-in colors were never removed.
+// 12 entries, evenly spaced 30 degrees apart around the hue wheel starting
+// at the brand teal's own hue (165 degrees), computed once (not hand-picked)
+// so every pair is guaranteed at least 30deg apart -- comfortably above the
+// ~20-25deg threshold generally needed for adjacent categorical colors to
+// read as clearly different, not just technically-different hex values.
+//
+// This replaces two earlier attempts that both failed for the same root
+// cause -- "distinct enough" was never actually checked, just assumed:
+// (1) a 5-color palette that wrapped for real 11-department data (three
+// departments landed on the identical class), and (2) a 12-color fix built
+// from hand-picked Tailwind default shades that turned out to contain three
+// same-hue-family pairs (teal/green, orange/orange, blue/cyan) -- distinct
+// classes, near-identical hues, confirmed by pulling getComputedStyle() RGB
+// values live and finding same-hue pairs only ~40-50 RGB-units apart.
+// Light bg / darker text at each hue, sized for legibility behind initials.
 const AVATAR_PALETTE = [
-  "bg-edge-teal/15 text-edge-teal",
-  "bg-info/15 text-info",
-  "bg-success/15 text-success",
-  "bg-warning/15 text-warning",
-  "bg-danger/15 text-danger",
-  "bg-purple-100 text-purple-600",
-  "bg-pink-100 text-pink-600",
-  "bg-indigo-100 text-indigo-600",
-  "bg-cyan-100 text-cyan-600",
-  "bg-lime-100 text-lime-700",
-  "bg-orange-100 text-orange-600",
-  "bg-violet-100 text-violet-600",
+  "bg-[#d7f4ed] text-[#238b71]",
+  "bg-[#d7edf4] text-[#23718b]",
+  "bg-[#d7def4] text-[#233d8b]",
+  "bg-[#ded7f4] text-[#3d238b]",
+  "bg-[#edd7f4] text-[#71238b]",
+  "bg-[#f4d7ed] text-[#8b2371]",
+  "bg-[#f4d7de] text-[#8b233d]",
+  "bg-[#f4ded7] text-[#8b3d23]",
+  "bg-[#f4edd7] text-[#8b7123]",
+  "bg-[#edf4d7] text-[#718b23]",
+  "bg-[#def4d7] text-[#3d8b23]",
+  "bg-[#d7f4de] text-[#238b3d]",
 ];
 
 const SIZE_CLASSES = {
