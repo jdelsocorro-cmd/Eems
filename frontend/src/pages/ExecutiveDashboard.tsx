@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { IconFolder, IconGauge, IconListCheck, IconTargetArrow, IconUsers, type IconProps } from "@tabler/icons-react";
 
 import { apiClient, errorMessage } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,13 +9,33 @@ import { Card, ErrorBanner, LoadingState } from "@/components/ui";
 
 type ScopeType = "company" | "org_unit";
 
-function StatusCard({ title, counts }: { title: string; counts: Record<string, number> }) {
+// Icon + colored top accent, matching the KPI-card treatment Org Chart's
+// StatStrip already established -- this is the app's first-landed page
+// after login, so it should carry at least as much visual weight as the
+// page one click away. Accent colors reuse the same semantic/hue-wheel
+// palette Org Chart's tiles use (teal/info/warning + two SWATCH_HEX hues)
+// rather than inventing a new one.
+function StatusCard({
+  title,
+  counts,
+  icon: Icon,
+  accent,
+}: {
+  title: string;
+  counts: Record<string, number>;
+  icon: ComponentType<IconProps>;
+  accent: string;
+}) {
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   return (
-    <Card className="p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-text-muted">{title}</p>
-      <p className="mt-1 text-3xl font-semibold text-text">{total}</p>
-      <ul className="mt-2 flex flex-col gap-0.5 text-xs text-text-muted">
+    <Card className="relative overflow-hidden p-4">
+      <div className={`absolute inset-x-0 top-0 h-[3px] ${accent}`} />
+      <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
+        <Icon size={14} className="text-text-dim" />
+        {title}
+      </p>
+      <p className="mt-2 text-3xl font-semibold leading-none text-text">{total}</p>
+      <ul className="mt-2.5 flex flex-col gap-0.5 text-xs text-text-muted">
         {Object.entries(counts).map(([status, n]) => (
           <li key={status} className="flex justify-between">
             <span>{status.replace(/_/g, " ")}</span>
@@ -91,25 +112,27 @@ export default function ExecutiveDashboard() {
       {dashboardQuery.isLoading && <LoadingState label="Loading dashboard..." />}
 
       {dashboardQuery.data && (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatusCard title="Headcount" counts={dashboardQuery.data.headcount.counts} />
-            <StatusCard title="Projects" counts={dashboardQuery.data.projects.counts} />
-            <StatusCard title="Tasks" counts={dashboardQuery.data.tasks.counts} />
-            <StatusCard title="Goals" counts={dashboardQuery.data.goals.counts} />
-          </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <StatusCard title="Headcount" counts={dashboardQuery.data.headcount.counts} icon={IconUsers} accent="bg-edge-teal" />
+          <StatusCard title="Projects" counts={dashboardQuery.data.projects.counts} icon={IconFolder} accent="bg-info" />
+          <StatusCard title="Tasks" counts={dashboardQuery.data.tasks.counts} icon={IconListCheck} accent="bg-[#542fc6]" />
+          <StatusCard title="Goals" counts={dashboardQuery.data.goals.counts} icon={IconTargetArrow} accent="bg-warning" />
 
-          <Card className="p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Average KPI score</p>
-            <p className="mt-1 text-3xl font-semibold text-text">
+          <Card className="relative overflow-hidden p-4">
+            <div className="absolute inset-x-0 top-0 h-[3px] bg-[#c62fa0]" />
+            <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
+              <IconGauge size={14} className="text-text-dim" />
+              Average KPI score
+            </p>
+            <p className="mt-2 text-3xl font-semibold leading-none text-text">
               {dashboardQuery.data.average_score === null ? "--" : `${dashboardQuery.data.average_score}%`}
             </p>
-            <p className="mt-1 text-xs text-text-dim">
+            <p className="mt-2.5 text-xs text-text-dim">
               Based on the latest computed score for {dashboardQuery.data.scored_employee_count} employee
               {dashboardQuery.data.scored_employee_count === 1 ? "" : "s"} in scope.
             </p>
           </Card>
-        </>
+        </div>
       )}
     </div>
   );
