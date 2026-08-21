@@ -1,5 +1,26 @@
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
+import {
+  IconAffiliate,
+  IconChartBar,
+  IconClipboardCheck,
+  IconClipboardList,
+  IconFolder,
+  IconHelpCircle,
+  IconLayoutDashboard,
+  IconLifebuoy,
+  IconListCheck,
+  IconLogout,
+  IconReportAnalytics,
+  IconSettings,
+  IconShieldLock,
+  IconSitemap,
+  IconTargetArrow,
+  IconTicket,
+  IconUpload,
+  IconUsers,
+  type IconProps,
+} from "@tabler/icons-react";
 
 import { supabase } from "@/lib/supabaseClient";
 import { ReportProblemButton } from "@/components/support/ReportProblemButton";
@@ -12,24 +33,32 @@ import { usePermissions } from "@/hooks/usePermissions";
 // of what's shown here. section drives the visual grouping below --
 // intentionally a separate field from requiredPermission (not "gated =
 // admin section"), so a future non-gated-but-admin-adjacent item can still
-// land in the right group.
-const NAV_ITEMS: { to: string; label: string; section: "workspace" | "admin"; requiredPermission?: [string, string] }[] = [
-  { to: "/", label: "Dashboard", section: "workspace" },
-  { to: "/org-chart", label: "Org Chart", section: "workspace" },
-  { to: "/projects", label: "Projects", section: "workspace" },
-  { to: "/tasks", label: "My Tasks", section: "workspace" },
-  { to: "/review-queue", label: "Review Queue", section: "workspace" },
-  { to: "/scorecard", label: "My Scorecard", section: "workspace" },
-  { to: "/leadership-scorecard", label: "Leadership Scorecard", section: "workspace" },
-  { to: "/performance-review-center", label: "Performance Review Center", section: "workspace" },
-  { to: "/goals", label: "Goals & Performance", section: "workspace" },
-  { to: "/help", label: "Help Center", section: "workspace" },
-  { to: "/admin/org", label: "Org Admin", section: "admin", requiredPermission: ["org_structure", "manage"] },
-  { to: "/admin/rbac", label: "RBAC Admin", section: "admin", requiredPermission: ["role", "manage"] },
-  { to: "/admin/users", label: "Users", section: "admin", requiredPermission: ["employee", "create"] },
-  { to: "/admin/bulk-import", label: "Bulk Import", section: "admin", requiredPermission: ["employee", "bulk_import"] },
-  { to: "/admin/help", label: "Help Admin", section: "admin", requiredPermission: ["help_articles", "manage"] },
-  { to: "/admin/support", label: "Support Tickets", section: "admin", requiredPermission: ["support_tickets", "review"] },
+// land in the right group. icon extends the Org Chart page's icon pass
+// (@tabler/icons-react) to the sidebar itself, per Jayson's reference
+// screenshot -- this is the second surface to adopt the package.
+const NAV_ITEMS: {
+  to: string;
+  label: string;
+  section: "workspace" | "admin";
+  icon: ComponentType<IconProps>;
+  requiredPermission?: [string, string];
+}[] = [
+  { to: "/", label: "Dashboard", section: "workspace", icon: IconLayoutDashboard },
+  { to: "/org-chart", label: "Org Chart", section: "workspace", icon: IconAffiliate },
+  { to: "/projects", label: "Projects", section: "workspace", icon: IconFolder },
+  { to: "/tasks", label: "My Tasks", section: "workspace", icon: IconListCheck },
+  { to: "/review-queue", label: "Review Queue", section: "workspace", icon: IconClipboardList },
+  { to: "/scorecard", label: "My Scorecard", section: "workspace", icon: IconReportAnalytics },
+  { to: "/leadership-scorecard", label: "Leadership Scorecard", section: "workspace", icon: IconChartBar },
+  { to: "/performance-review-center", label: "Performance Review Center", section: "workspace", icon: IconClipboardCheck },
+  { to: "/goals", label: "Goals & Performance", section: "workspace", icon: IconTargetArrow },
+  { to: "/help", label: "Help Center", section: "workspace", icon: IconHelpCircle },
+  { to: "/admin/org", label: "Org Admin", section: "admin", icon: IconSitemap, requiredPermission: ["org_structure", "manage"] },
+  { to: "/admin/rbac", label: "RBAC Admin", section: "admin", icon: IconShieldLock, requiredPermission: ["role", "manage"] },
+  { to: "/admin/users", label: "Users", section: "admin", icon: IconUsers, requiredPermission: ["employee", "create"] },
+  { to: "/admin/bulk-import", label: "Bulk Import", section: "admin", icon: IconUpload, requiredPermission: ["employee", "bulk_import"] },
+  { to: "/admin/help", label: "Help Admin", section: "admin", icon: IconLifebuoy, requiredPermission: ["help_articles", "manage"] },
+  { to: "/admin/support", label: "Support Tickets", section: "admin", icon: IconTicket, requiredPermission: ["support_tickets", "review"] },
 ];
 
 function NavItemLink({ item }: { item: (typeof NAV_ITEMS)[number] }) {
@@ -38,9 +67,10 @@ function NavItemLink({ item }: { item: (typeof NAV_ITEMS)[number] }) {
       to={item.to}
       end={item.to === "/"}
       className={({ isActive }) =>
-        `nav-item rounded-edge-sm px-3 py-2 text-sm ${isActive ? "active bg-nav-active text-edge-teal font-medium" : "text-text-muted hover:bg-surface2"}`
+        `nav-item flex items-center gap-2.5 rounded-edge-sm px-3 py-2 text-sm ${isActive ? "active bg-nav-active text-edge-teal font-medium" : "text-text-muted hover:bg-surface2"}`
       }
     >
+      <item.icon size={17} className="shrink-0" stroke={1.75} />
       {item.label}
     </NavLink>
   );
@@ -82,14 +112,16 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <div className="sidebar-footer border-t border-border p-2">
           <Link
             to="/settings"
-            className="block rounded-edge-sm px-3 py-2 text-sm text-text-muted hover:bg-surface2"
+            className="flex items-center gap-2.5 rounded-edge-sm px-3 py-2 text-sm text-text-muted hover:bg-surface2"
           >
+            <IconSettings size={17} className="shrink-0" stroke={1.75} />
             Account Settings
           </Link>
           <button
             onClick={() => supabase.auth.signOut()}
-            className="theme-toggle w-full rounded-edge-sm px-3 py-2 text-left text-sm text-text-muted hover:bg-surface2"
+            className="theme-toggle flex w-full items-center gap-2.5 rounded-edge-sm px-3 py-2 text-left text-sm text-text-muted hover:bg-surface2"
           >
+            <IconLogout size={17} className="shrink-0" stroke={1.75} />
             Sign out
           </button>
         </div>
