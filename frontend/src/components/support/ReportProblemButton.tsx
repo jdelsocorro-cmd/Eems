@@ -1,18 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import { supabase } from "@/lib/supabaseClient";
 import type { SupportCategory, SupportTicket } from "@/lib/types";
 import { Button, ErrorBanner, FieldLabel } from "@/components/ui";
 
 const CATEGORIES: SupportCategory[] = ["bug", "ux_issue", "performance", "data_issue", "feature_request", "question", "other"];
 const SEVERITIES = ["low", "medium", "high", "critical"] as const;
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
 
 // Floating, mounted once in AppLayout (not per-page) so it's reachable from
 // anywhere -- page URL and browser info are captured invisibly at submit

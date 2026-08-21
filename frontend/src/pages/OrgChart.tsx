@@ -4,6 +4,8 @@ import {
   IconArrowsMaximize,
   IconArrowsMinimize,
   IconBuilding,
+  IconChevronDown,
+  IconChevronRight,
   IconChevronsDown,
   IconChevronsUp,
   IconClockEdit,
@@ -685,7 +687,10 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
             <span
               className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${isRoot ? "bg-white/10 text-white/70" : "bg-surface3 text-text-muted"}`}
             >
-              {isCollapsed ? "▸" : "▾"} {node.children.length} report{node.children.length === 1 ? "" : "s"}
+              <span className="inline-flex items-center gap-0.5">
+                {isCollapsed ? <IconChevronRight size={10} /> : <IconChevronDown size={10} />}
+                {node.children.length} report{node.children.length === 1 ? "" : "s"}
+              </span>
             </span>
           ) : !employee ? (
             <span className="shrink-0 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning">Vacant</span>
@@ -725,7 +730,7 @@ function TreeListRow({ node, depth, ...shared }: { node: TreeNode; depth: number
           isDirectMatch(node) ? "bg-nav-active" : ""
         } ${dimmed ? "opacity-35" : ""}`}
       >
-        <span className="w-4 text-text-dim">{hasChildren ? (isCollapsed ? "▸" : "▾") : ""}</span>
+        <span className="w-4 text-text-dim">{hasChildren ? (isCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />) : ""}</span>
         <span className={`h-2 w-2 shrink-0 rounded-full ${legendSwatchClass(colorIndex)}`} />
         <span className="font-medium text-text">{node.position.title}</span>
         {employee ? (

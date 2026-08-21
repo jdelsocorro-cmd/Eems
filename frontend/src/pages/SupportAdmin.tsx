@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import type { Employee, SupportTicket, SupportTicketNote, SupportTicketStatus } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, LoadingState, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 
 const STATUSES: SupportTicketStatus[] = ["new", "acknowledged", "in_progress", "resolved", "closed"];
 
@@ -21,11 +21,6 @@ const SEVERITY_STYLES: Record<string, string> = {
   high: "bg-warning-soft text-warning",
   critical: "bg-danger/10 text-danger",
 };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
 
 function employeeName(employees: Employee[] | undefined, id: string): string {
   const emp = employees?.find((e) => e.id === id);
@@ -102,15 +97,13 @@ export default function SupportAdmin() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-                <th className="px-4 py-2">Title</th>
-                <th className="px-4 py-2">Reported by</th>
-                <th className="px-4 py-2">Severity</th>
-                <th className="px-4 py-2">Status</th>
-              </tr>
-            </thead>
+          <Table>
+            <TableHead>
+              <Th>Title</Th>
+              <Th>Reported by</Th>
+              <Th>Severity</Th>
+              <Th>Status</Th>
+            </TableHead>
             <tbody>
               {ticketsQuery.isLoading && (
                 <tr>
@@ -120,36 +113,24 @@ export default function SupportAdmin() {
                 </tr>
               )}
               {(ticketsQuery.data ?? []).map((ticket) => (
-                <tr
-                  key={ticket.id}
-                  onClick={() => setSelectedTicketId(ticket.id)}
-                  className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
-                    selectedTicketId === ticket.id ? "bg-nav-active" : ""
-                  }`}
-                >
-                  <td className="px-4 py-2 text-text">{ticket.title}</td>
-                  <td className="px-4 py-2 text-text-muted">{employeeName(employeesQuery.data, ticket.reported_by)}</td>
-                  <td className="px-4 py-2">
+                <Tr key={ticket.id} onClick={() => setSelectedTicketId(ticket.id)} selected={selectedTicketId === ticket.id}>
+                  <Td className="text-text">{ticket.title}</Td>
+                  <Td className="text-text-muted">{employeeName(employeesQuery.data, ticket.reported_by)}</Td>
+                  <Td>
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${SEVERITY_STYLES[ticket.severity]}`}>
                       {ticket.severity}
                     </span>
-                  </td>
-                  <td className="px-4 py-2">
+                  </Td>
+                  <Td>
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[ticket.status]}`}>
                       {ticket.status.replace("_", " ")}
                     </span>
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
-              {ticketsQuery.data?.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-text-dim">
-                    No tickets.
-                  </td>
-                </tr>
-              )}
+              {ticketsQuery.data?.length === 0 && <TableEmptyRow colSpan={4} message="No tickets." />}
             </tbody>
-          </table>
+          </Table>
         </Card>
 
         <Card className="p-4">

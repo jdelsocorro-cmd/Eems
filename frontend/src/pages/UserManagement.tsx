@@ -1,10 +1,10 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { Employee, EmploymentType, OrgUnit, Position, PositionAssignment } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, LoadingState, SortHeader, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 import { EmployeeLink } from "@/components/EmployeeLink";
 
 const STATUS_STYLES: Record<Employee["status"], string> = {
@@ -267,21 +267,19 @@ export default function UserManagement() {
               </span>
             )}
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-                <SortHeader label="Name" column="name" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-                <th className="px-4 py-2">Email</th>
-                <SortHeader
-                  label="Department"
-                  column="department"
-                  sortColumn={sortColumn}
-                  sortDirection={sortDirection}
-                  onSort={toggleSort}
-                />
-                <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              </tr>
-            </thead>
+          <Table>
+            <TableHead>
+              <SortHeader label="Name" column="name" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+              <Th>Email</Th>
+              <SortHeader
+                label="Department"
+                column="department"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={toggleSort}
+              />
+              <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            </TableHead>
             <tbody>
               {employeesQuery.isLoading && (
                 <tr>
@@ -291,22 +289,20 @@ export default function UserManagement() {
                 </tr>
               )}
               {visibleEmployees.map(({ employee: emp, department }) => (
-                <tr
+                <Tr
                   key={emp.id}
                   onClick={() => {
                     setSelectedEmployeeId(emp.id);
                     setEditingProfile(false);
                   }}
-                  className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
-                    selectedEmployeeId === emp.id ? "bg-nav-active" : ""
-                  }`}
+                  selected={selectedEmployeeId === emp.id}
                 >
-                  <td className="px-4 py-2 text-text" onClick={(e) => e.stopPropagation()}>
+                  <Td className="text-text" onClick={(e) => e.stopPropagation()}>
                     <EmployeeLink employeeId={emp.id} name={`${emp.first_name} ${emp.last_name}`} />
-                  </td>
-                  <td className="px-4 py-2 text-text-muted">{emp.work_email}</td>
-                  <td className="px-4 py-2 text-text-muted">{department.name}</td>
-                  <td className="px-4 py-2">
+                  </Td>
+                  <Td className="text-text-muted">{emp.work_email}</Td>
+                  <Td className="text-text-muted">{department.name}</Td>
+                  <Td>
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[emp.status]}`}>
                       {emp.status}
                     </span>
@@ -318,25 +314,17 @@ export default function UserManagement() {
                         No login
                       </span>
                     )}
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
               {!employeesQuery.isLoading && employeesQuery.data?.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-text-dim">
-                    No employees yet.
-                  </td>
-                </tr>
+                <TableEmptyRow colSpan={4} message="No employees yet." />
               )}
               {!employeesQuery.isLoading && (employeesQuery.data?.length ?? 0) > 0 && visibleEmployees.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-text-dim">
-                    No employees match your search or filters.
-                  </td>
-                </tr>
+                <TableEmptyRow colSpan={4} message="No employees match your search or filters." />
               )}
             </tbody>
-          </table>
+          </Table>
         </Card>
 
         <Card className="p-4">
@@ -567,40 +555,6 @@ function ConsultantProfileEditForm({
   );
 }
 
-function SortHeader({
-  label,
-  column,
-  sortColumn,
-  sortDirection,
-  onSort,
-}: {
-  label: string;
-  column: SortColumn;
-  sortColumn: SortColumn;
-  sortDirection: "asc" | "desc";
-  onSort: (column: SortColumn) => void;
-}) {
-  const isActive = sortColumn === column;
-  return (
-    <th className="px-4 py-2">
-      <button
-        type="button"
-        onClick={() => onSort(column)}
-        aria-sort={isActive ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-        className={`flex items-center gap-1 uppercase tracking-wide hover:text-text ${isActive ? "text-text" : "text-text-muted"}`}
-      >
-        {label}
-        <span className="text-[10px]">{isActive ? (sortDirection === "asc" ? "▲" : "▼") : ""}</span>
-      </button>
-    </th>
-  );
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
-
 function CreateEmployeeForm({
   positions,
   units,
@@ -647,7 +601,8 @@ function CreateEmployeeForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-edge-lg bg-surface p-4 shadow-edge-sm">
+    <Card className="p-4">
+      <form onSubmit={handleSubmit}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <input
           value={firstName}
@@ -724,6 +679,7 @@ function CreateEmployeeForm({
         {pending ? "Creating..." : "Create employee"}
       </Button>
       {error && <ErrorBanner message={error} />}
-    </form>
+      </form>
+    </Card>
   );
 }

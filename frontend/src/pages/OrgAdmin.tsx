@@ -1,18 +1,14 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import type { Company, OrgUnit, Position } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
 
 interface UnitNode {
   unit: OrgUnit;
   children: UnitNode[];
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
 }
 
 // Multi-incumbent roles (several employees sharing one title, e.g. "Teacher
@@ -268,13 +264,13 @@ export default function OrgAdmin() {
                           <span className="text-[10px] text-text-dim">{p.code}</span>
                           <button
                             onClick={() => setDuplicatingFrom(p)}
-                            className="text-[10px] text-edge-teal hover:underline"
+                            className="text-xs text-edge-teal hover:underline"
                           >
                             Duplicate
                           </button>
                           <button
                             onClick={() => setEditingPositionId(p.id)}
-                            className="text-[10px] text-edge-teal hover:underline"
+                            className="text-xs text-edge-teal hover:underline"
                           >
                             Edit
                           </button>
@@ -284,7 +280,7 @@ export default function OrgAdmin() {
                                 deactivatePosition.mutate(p.id);
                               }
                             }}
-                            className="text-[10px] text-danger hover:underline"
+                            className="text-xs text-danger hover:underline"
                           >
                             Deactivate
                           </button>
@@ -428,7 +424,7 @@ function UnitRow({
             onClick={() => hasChildren && onToggle(node.unit.id)}
             className={`w-3 text-text-dim ${hasChildren ? "cursor-pointer" : ""}`}
           >
-            {hasChildren ? (isCollapsed ? "▸" : "▾") : ""}
+            {hasChildren ? (isCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />) : ""}
           </span>
           <span onClick={() => onSelect(node.unit.id)} className="cursor-pointer font-medium text-text">
             {node.unit.name}
@@ -448,13 +444,13 @@ function UnitRow({
                 </option>
               ))}
           </select>
-          <button onClick={() => onStartAddChild(node.unit.id)} className="text-[10px] text-edge-teal hover:underline">
+          <button onClick={() => onStartAddChild(node.unit.id)} className="text-xs text-edge-teal hover:underline">
             + child
           </button>
-          <button onClick={() => onStartEdit(node.unit.id)} className="text-[10px] text-edge-teal hover:underline">
+          <button onClick={() => onStartEdit(node.unit.id)} className="text-xs text-edge-teal hover:underline">
             Edit
           </button>
-          <button onClick={() => onDeactivate(node.unit.id, node.unit.name)} className="text-[10px] text-danger hover:underline">
+          <button onClick={() => onDeactivate(node.unit.id, node.unit.name)} className="text-xs text-danger hover:underline">
             Deactivate
           </button>
         </div>

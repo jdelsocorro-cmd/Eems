@@ -1,14 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import type { CompletionEntityType, CompletionEvidenceLink, CompletionSubmission, Employee, Recognition } from "@/lib/types";
 import { Button, ErrorBanner, FieldLabel } from "@/components/ui";
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
 
 const STATUS_STYLES: Record<CompletionSubmission["status"], string> = {
   pending: "bg-warning-soft text-warning",
@@ -327,7 +323,7 @@ function HistoryEntry({
           <span className={`rounded-edge-sm px-1.5 py-0.5 font-medium ${STATUS_STYLES[submission.status]}`}>{submission.status}</span>
           <span className="text-text-dim">{new Date(submission.submitted_at).toLocaleDateString()}</span>
         </span>
-        <span className="text-text-dim">{expanded ? "▾" : "▸"}</span>
+        <span className="text-text-dim">{expanded ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}</span>
       </button>
       {expanded && (
         <div className="mt-1.5 flex flex-col gap-1 text-text">

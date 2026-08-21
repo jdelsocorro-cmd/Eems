@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Employee, ReviewDelegation } from "@/lib/types";
@@ -13,11 +13,6 @@ interface EmployeeMe {
   last_name: string;
   work_email: string;
   status: string;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
 }
 
 function employeeName(employees: Employee[] | undefined, id: string): string {

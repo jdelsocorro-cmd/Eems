@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { EmployeeLink } from "@/components/EmployeeLink";
-import { Button, Card, LoadingState } from "@/components/ui";
+import { Button, Card, ErrorBanner, LoadingState, SortHeader, Table, TableEmptyRow, TableHead, Td, Tr } from "@/components/ui";
 import {
   useAllEmployees,
   useScopedCompletionSubmissions,
@@ -102,11 +102,19 @@ export default function PerformanceReviewCenter() {
           kpis={kpisQuery.data ?? []}
           submissions={submissionsQuery.data ?? []}
           loading={employeesQuery.isLoading || scoresQuery.isLoading || kpisQuery.isLoading || submissionsQuery.isLoading}
+          error={employeesQuery.isError || scoresQuery.isError || kpisQuery.isError || submissionsQuery.isError}
         />
       )}
-      {activeTab === "tasks" && <TasksTab tasks={tasksQuery.data ?? []} employeeName={employeeName} loading={tasksQuery.isLoading} />}
+      {activeTab === "tasks" && (
+        <TasksTab tasks={tasksQuery.data ?? []} employeeName={employeeName} loading={tasksQuery.isLoading} error={tasksQuery.isError} />
+      )}
       {activeTab === "projects" && (
-        <ProjectsTab projects={projectsQuery.data ?? []} employeeName={employeeName} loading={projectsQuery.isLoading} />
+        <ProjectsTab
+          projects={projectsQuery.data ?? []}
+          employeeName={employeeName}
+          loading={projectsQuery.isLoading}
+          error={projectsQuery.isError}
+        />
       )}
       {activeTab === "goals" && (
         <GoalsKpisTab
@@ -114,6 +122,7 @@ export default function PerformanceReviewCenter() {
           kpis={kpisQuery.data ?? []}
           employeeName={employeeName}
           loading={goalsQuery.isLoading || kpisQuery.isLoading}
+          error={goalsQuery.isError || kpisQuery.isError}
         />
       )}
     </div>
@@ -121,39 +130,12 @@ export default function PerformanceReviewCenter() {
 }
 
 // ----------------------------------------------------------------------------
-// Shared small pieces (sort header, stat strip, status-pill filter) -- each
-// tab below has different columns/statuses, so filter/sort state stays
-// local to each tab rather than one shared mega-hook.
+// Shared small pieces (stat strip, status-pill filter) -- each tab below has
+// different columns/statuses, so filter/sort state stays local to each tab
+// rather than one shared mega-hook. SortHeader itself is the app-wide shared
+// one from components/ui (was a near-identical duplicate defined locally
+// here and in UserManagement.tsx).
 // ----------------------------------------------------------------------------
-
-function SortHeader<T extends string>({
-  label,
-  column,
-  sortColumn,
-  sortDirection,
-  onSort,
-}: {
-  label: string;
-  column: T;
-  sortColumn: T;
-  sortDirection: "asc" | "desc";
-  onSort: (column: T) => void;
-}) {
-  const isActive = sortColumn === column;
-  return (
-    <th className="px-4 py-2">
-      <button
-        type="button"
-        onClick={() => onSort(column)}
-        aria-sort={isActive ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
-        className={`flex items-center gap-1 uppercase tracking-wide hover:text-text ${isActive ? "text-text" : "text-text-muted"}`}
-      >
-        {label}
-        <span className="text-[10px]">{isActive ? (sortDirection === "asc" ? "▲" : "▼") : ""}</span>
-      </button>
-    </th>
-  );
-}
 
 function StatStrip({ stats }: { stats: { label: string; value: string }[] }) {
   return (
@@ -226,12 +208,14 @@ function PerformanceTab({
   kpis,
   submissions,
   loading,
+  error,
 }: {
   employees: Employee[];
   scores: KpiScore[];
   kpis: Kpi[];
   submissions: CompletionSubmission[];
   loading: boolean;
+  error: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "scored" | "not_scored">("all");
@@ -306,6 +290,7 @@ function PerformanceTab({
   }
 
   if (loading) return <LoadingState label="Loading performance data..." />;
+  if (error) return <ErrorBanner message="Some performance data failed to load. Try refreshing the page." />;
 
   const scoredRows = rows.filter((r) => r.score !== null);
   const averageScore =
@@ -337,49 +322,46 @@ function PerformanceTab({
             ]}
           />
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-              <SortHeader label="Name" column="name" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Score" column="score" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader
-                label="Active KPIs"
-                column="activeKpis"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={toggleSort}
-              />
-              <SortHeader
-                label="Pending reviews on this person's work"
-                column="pending"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={toggleSort}
-              />
-            </tr>
-          </thead>
+        <Table>
+          <TableHead>
+            <SortHeader label="Name" column="name" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Score" column="score" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader
+              label="Active KPIs"
+              column="activeKpis"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={toggleSort}
+            />
+            <SortHeader
+              label="Pending reviews on this person's work"
+              column="pending"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={toggleSort}
+            />
+          </TableHead>
           <tbody>
             {visibleRows.map((r) => (
-              <tr key={r.employee.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-2 text-text">
+              <Tr key={r.employee.id}>
+                <Td className="text-text">
                   <EmployeeLink employeeId={r.employee.id} name={`${r.employee.first_name} ${r.employee.last_name}`} />
-                </td>
-                <td className="px-4 py-2 text-text-muted">
+                </Td>
+                <Td className="text-text-muted">
                   {r.score === null ? "—" : r.score.computed_score === null ? "No active KPIs" : `${r.score.computed_score}%`}
-                </td>
-                <td className="px-4 py-2 text-text-muted">{r.activeKpis}</td>
-                <td className="px-4 py-2 text-text-muted">{r.pending}</td>
-              </tr>
+                </Td>
+                <Td className="text-text-muted">{r.activeKpis}</Td>
+                <Td className="text-text-muted">{r.pending}</Td>
+              </Tr>
             ))}
             {visibleRows.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-text-dim">
-                  {rows.length === 0 ? "No performance data within your scope yet." : "No employees match your search or filters."}
-                </td>
-              </tr>
+              <TableEmptyRow
+                colSpan={4}
+                message={rows.length === 0 ? "No performance data within your scope yet." : "No employees match your search or filters."}
+              />
             )}
           </tbody>
-        </table>
+        </Table>
       </Card>
     </div>
   );
@@ -412,10 +394,12 @@ function TasksTab({
   tasks,
   employeeName,
   loading,
+  error,
 }: {
   tasks: Task[];
   employeeName: (id: string | null) => string;
   loading: boolean;
+  error: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
@@ -448,6 +432,7 @@ function TasksTab({
   }
 
   if (loading) return <LoadingState label="Loading tasks..." />;
+  if (error) return <ErrorBanner message="Tasks failed to load. Try refreshing the page." />;
 
   const overdueCount = tasks.filter(isTaskOverdue).length;
   const statusCounts = TASK_STATUSES.reduce(
@@ -473,44 +458,38 @@ function TasksTab({
             options={[{ value: "all", label: "All" }, ...TASK_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))]}
           />
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-              <SortHeader label="Title" column="title" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Assignee" column="assignee" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Priority" column="priority" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Due date" column="due_date" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-            </tr>
-          </thead>
+        <Table>
+          <TableHead>
+            <SortHeader label="Title" column="title" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Assignee" column="assignee" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Priority" column="priority" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Due date" column="due_date" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+          </TableHead>
           <tbody>
             {visible.map((task) => (
-              <tr key={task.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-2 text-text">{task.title}</td>
-                <td className="px-4 py-2 text-text-muted">
+              <Tr key={task.id}>
+                <Td className="text-text">{task.title}</Td>
+                <Td className="text-text-muted">
                   <EmployeeCell employeeId={task.assignee_employee_id} name={employeeName(task.assignee_employee_id)} />
-                </td>
-                <td className="px-4 py-2">
+                </Td>
+                <Td>
                   <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${TASK_STATUS_STYLES[task.status]}`}>
                     {task.status.replace(/_/g, " ")}
                   </span>
-                </td>
-                <td className="px-4 py-2 text-text-muted">{task.priority}</td>
-                <td className={`px-4 py-2 ${isTaskOverdue(task) ? "font-medium text-danger" : "text-text-muted"}`}>
+                </Td>
+                <Td className="text-text-muted">{task.priority}</Td>
+                <Td className={isTaskOverdue(task) ? "font-medium text-danger" : "text-text-muted"}>
                   {task.due_date ?? "—"}
                   {isTaskOverdue(task) && " (overdue)"}
-                </td>
-              </tr>
+                </Td>
+              </Tr>
             ))}
             {visible.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-text-dim">
-                  {tasks.length === 0 ? "No tasks within your scope." : "No tasks match your search or filters."}
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={5} message={tasks.length === 0 ? "No tasks within your scope." : "No tasks match your search or filters."} />
             )}
           </tbody>
-        </table>
+        </Table>
       </Card>
     </div>
   );
@@ -542,10 +521,12 @@ function ProjectsTab({
   projects,
   employeeName,
   loading,
+  error,
 }: {
   projects: Project[];
   employeeName: (id: string | null) => string;
   loading: boolean;
+  error: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "all">("all");
@@ -578,6 +559,7 @@ function ProjectsTab({
   }
 
   if (loading) return <LoadingState label="Loading projects..." />;
+  if (error) return <ErrorBanner message="Projects failed to load. Try refreshing the page." />;
 
   const statusCounts = PROJECT_STATUSES.reduce(
     (acc, s) => ({ ...acc, [s]: projects.filter((p) => p.status === s).length }),
@@ -603,50 +585,44 @@ function ProjectsTab({
             options={[{ value: "all", label: "All" }, ...PROJECT_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))]}
           />
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-              <SortHeader label="Name" column="name" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Owner" column="owner" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Priority" column="priority" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader
-                label="Target end date"
-                column="target_end_date"
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSort={toggleSort}
-              />
-            </tr>
-          </thead>
+        <Table>
+          <TableHead>
+            <SortHeader label="Name" column="name" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Owner" column="owner" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Priority" column="priority" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader
+              label="Target end date"
+              column="target_end_date"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={toggleSort}
+            />
+          </TableHead>
           <tbody>
             {visible.map((project) => (
-              <tr key={project.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-2 text-text">{project.name}</td>
-                <td className="px-4 py-2 text-text-muted">
+              <Tr key={project.id}>
+                <Td className="text-text">{project.name}</Td>
+                <Td className="text-text-muted">
                   <EmployeeCell employeeId={project.owner_employee_id} name={employeeName(project.owner_employee_id)} />
-                </td>
-                <td className="px-4 py-2">
+                </Td>
+                <Td>
                   <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${PROJECT_STATUS_STYLES[project.status]}`}>
                     {project.status.replace(/_/g, " ")}
                   </span>
-                </td>
-                <td className="px-4 py-2 text-text-muted">{project.priority}</td>
-                <td className={`px-4 py-2 ${isProjectAtRisk(project) ? "font-medium text-danger" : "text-text-muted"}`}>
+                </Td>
+                <Td className="text-text-muted">{project.priority}</Td>
+                <Td className={isProjectAtRisk(project) ? "font-medium text-danger" : "text-text-muted"}>
                   {project.target_end_date ?? "—"}
                   {isProjectAtRisk(project) && " (at risk)"}
-                </td>
-              </tr>
+                </Td>
+              </Tr>
             ))}
             {visible.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-text-dim">
-                  {projects.length === 0 ? "No projects within your scope." : "No projects match your search or filters."}
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={5} message={projects.length === 0 ? "No projects within your scope." : "No projects match your search or filters."} />
             )}
           </tbody>
-        </table>
+        </Table>
       </Card>
     </div>
   );
@@ -688,13 +664,16 @@ function GoalsKpisTab({
   kpis,
   employeeName,
   loading,
+  error,
 }: {
   goals: Goal[];
   kpis: Kpi[];
   employeeName: (id: string | null) => string;
   loading: boolean;
+  error: boolean;
 }) {
   if (loading) return <LoadingState label="Loading goals & KPIs..." />;
+  if (error) return <ErrorBanner message="Goals & KPIs failed to load. Try refreshing the page." />;
 
   const individualGoals = goals.filter((g) => g.goal_type === "individual");
   const groupGoals = goals.filter((g) => g.goal_type !== "individual");
@@ -751,39 +730,33 @@ function IndividualGoalsSection({ goals, employeeName }: { goals: Goal[]; employ
             options={[{ value: "all", label: "All" }, ...GOAL_STATUSES.map((s) => ({ value: s, label: s }))]}
           />
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-              <SortHeader label="Title" column="title" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Person" column="person" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Period" column="period" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-            </tr>
-          </thead>
+        <Table>
+          <TableHead>
+            <SortHeader label="Title" column="title" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Person" column="person" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Period" column="period" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+          </TableHead>
           <tbody>
             {visible.map((goal) => (
-              <tr key={goal.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-2 text-text">{goal.title}</td>
-                <td className="px-4 py-2 text-text-muted">
+              <Tr key={goal.id}>
+                <Td className="text-text">{goal.title}</Td>
+                <Td className="text-text-muted">
                   <EmployeeCell employeeId={goal.employee_id} name={employeeName(goal.employee_id)} />
-                </td>
-                <td className="px-4 py-2">
+                </Td>
+                <Td>
                   <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${GOAL_STATUS_STYLES[goal.status]}`}>{goal.status}</span>
-                </td>
-                <td className="px-4 py-2 text-text-muted">
+                </Td>
+                <Td className="text-text-muted">
                   {goal.period_start} to {goal.period_end}
-                </td>
-              </tr>
+                </Td>
+              </Tr>
             ))}
             {visible.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-text-dim">
-                  {goals.length === 0 ? "No individual goals within your scope." : "No goals match your search or filters."}
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={4} message={goals.length === 0 ? "No individual goals within your scope." : "No goals match your search or filters."} />
             )}
           </tbody>
-        </table>
+        </Table>
       </Card>
     </div>
   );
@@ -833,43 +806,40 @@ function GroupGoalsSection({ goals, employeeName }: { goals: Goal[]; employeeNam
             options={[{ value: "all", label: "All" }, ...GOAL_STATUSES.map((s) => ({ value: s, label: s }))]}
           />
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-              <SortHeader label="Title" column="title" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Type" column="type" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Owner" column="owner" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Period" column="period" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-            </tr>
-          </thead>
+        <Table>
+          <TableHead>
+            <SortHeader label="Title" column="title" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Type" column="type" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Owner" column="owner" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Period" column="period" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+          </TableHead>
           <tbody>
             {visible.map((goal) => (
-              <tr key={goal.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-2 text-text">{goal.title}</td>
-                <td className="px-4 py-2">
+              <Tr key={goal.id}>
+                <Td className="text-text">{goal.title}</Td>
+                <Td>
                   <span className="rounded-edge-sm bg-surface2 px-2 py-0.5 text-xs font-medium text-text-muted">{goal.goal_type}</span>
-                </td>
-                <td className="px-4 py-2 text-text-muted">
+                </Td>
+                <Td className="text-text-muted">
                   <EmployeeCell employeeId={goal.owner_employee_id} name={employeeName(goal.owner_employee_id)} />
-                </td>
-                <td className="px-4 py-2">
+                </Td>
+                <Td>
                   <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${GOAL_STATUS_STYLES[goal.status]}`}>{goal.status}</span>
-                </td>
-                <td className="px-4 py-2 text-text-muted">
+                </Td>
+                <Td className="text-text-muted">
                   {goal.period_start} to {goal.period_end}
-                </td>
-              </tr>
+                </Td>
+              </Tr>
             ))}
             {visible.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-text-dim">
-                  {goals.length === 0 ? "No company/org unit goals within your scope." : "No goals match your search or filters."}
-                </td>
-              </tr>
+              <TableEmptyRow
+                colSpan={5}
+                message={goals.length === 0 ? "No company/org unit goals within your scope." : "No goals match your search or filters."}
+              />
             )}
           </tbody>
-        </table>
+        </Table>
       </Card>
     </div>
   );
@@ -919,41 +889,35 @@ function KpisSection({ kpis, employeeName }: { kpis: Kpi[]; employeeName: (id: s
             options={[{ value: "all", label: "All" }, ...KPI_STATUSES.map((s) => ({ value: s, label: s }))]}
           />
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-              <SortHeader label="Name" column="name" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Person" column="person" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Progress" column="progress" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Weight" column="weight" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-              <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
-            </tr>
-          </thead>
+        <Table>
+          <TableHead>
+            <SortHeader label="Name" column="name" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Person" column="person" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Progress" column="progress" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Weight" column="weight" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+            <SortHeader label="Status" column="status" sortColumn={sortColumn} sortDirection={sortDirection} onSort={toggleSort} />
+          </TableHead>
           <tbody>
             {visible.map((kpi) => (
-              <tr key={kpi.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-2 text-text">{kpi.name}</td>
-                <td className="px-4 py-2 text-text-muted">
+              <Tr key={kpi.id}>
+                <Td className="text-text">{kpi.name}</Td>
+                <Td className="text-text-muted">
                   <EmployeeCell employeeId={kpi.employee_id} name={employeeName(kpi.employee_id)} />
-                </td>
-                <td className="px-4 py-2 text-text-muted">
+                </Td>
+                <Td className="text-text-muted">
                   {kpi.current_value} / {kpi.target_value} {kpi.unit} · {Math.round(ratio(kpi) * 100)}%
-                </td>
-                <td className="px-4 py-2 text-text-muted">{kpi.weight}</td>
-                <td className="px-4 py-2">
+                </Td>
+                <Td className="text-text-muted">{kpi.weight}</Td>
+                <Td>
                   <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${KPI_STATUS_STYLES[kpi.status]}`}>{kpi.status}</span>
-                </td>
-              </tr>
+                </Td>
+              </Tr>
             ))}
             {visible.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-text-dim">
-                  {kpis.length === 0 ? "No KPIs within your scope." : "No KPIs match your search or filters."}
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={5} message={kpis.length === 0 ? "No KPIs within your scope." : "No KPIs match your search or filters."} />
             )}
           </tbody>
-        </table>
+        </Table>
       </Card>
     </div>
   );

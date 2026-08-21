@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type {
   Company,
@@ -15,7 +15,7 @@ import type {
   TaskStatus,
   TaskStatusHistoryEntry,
 } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState, SuccessBanner } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState, SuccessBanner, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 import { CompletionWorkflow } from "@/components/completion/CompletionWorkflow";
 
 const NEW_CATEGORY_VALUE = "__new__";
@@ -30,11 +30,6 @@ const TASK_STATUS_STYLES: Record<TaskStatus, string> = {
   done: "bg-success-soft text-success",
   cancelled: "bg-surface2 text-text-dim",
 };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
 
 function employeeName(employees: Employee[] | undefined, id: string | null): string {
   const emp = employees?.find((e) => e.id === id);
@@ -221,16 +216,14 @@ export default function Tasks() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-                <th className="px-4 py-2">Title</th>
-                <th className="px-4 py-2">Project</th>
-                <th className="px-4 py-2">Category</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2">Score</th>
-              </tr>
-            </thead>
+          <Table>
+            <TableHead>
+              <Th>Title</Th>
+              <Th>Project</Th>
+              <Th>Category</Th>
+              <Th>Status</Th>
+              <Th>Score</Th>
+            </TableHead>
             <tbody>
               {tasksQuery.isLoading && (
                 <tr>
@@ -242,29 +235,27 @@ export default function Tasks() {
               {(tasksQuery.data ?? []).map((task) => {
                 const latestSubmission = latestSubmissionByTaskId.get(task.id);
                 return (
-                  <tr
+                  <Tr
                     key={task.id}
                     onClick={() => {
                       setSelectedTaskId(task.id);
                       setLastAssignment(null);
                     }}
-                    className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
-                      selectedTaskId === task.id ? "bg-nav-active" : ""
-                    }`}
+                    selected={selectedTaskId === task.id}
                   >
-                    <td className="px-4 py-2 text-text">{task.title}</td>
-                    <td className="px-4 py-2 text-text-muted">
+                    <Td className="text-text">{task.title}</Td>
+                    <Td className="text-text-muted">
                       {projectsQuery.data?.find((p) => p.id === task.project_id)?.name ?? "Standalone"}
-                    </td>
-                    <td className="px-4 py-2 text-text-muted">
+                    </Td>
+                    <Td className="text-text-muted">
                       {categoriesQuery.data?.find((c) => c.id === task.task_category_id)?.name ?? "—"}
-                    </td>
-                    <td className="px-4 py-2">
+                    </Td>
+                    <Td>
                       <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${TASK_STATUS_STYLES[task.status]}`}>
                         {task.status.replace("_", " ")}
                       </span>
-                    </td>
-                    <td className="px-4 py-2 text-text-muted">
+                    </Td>
+                    <Td className="text-text-muted">
                       {!latestSubmission
                         ? "—"
                         : latestSubmission.status === "approved"
@@ -272,19 +263,13 @@ export default function Tasks() {
                           : latestSubmission.status === "rejected"
                             ? "Rejected"
                             : "Pending review"}
-                    </td>
-                  </tr>
+                    </Td>
+                  </Tr>
                 );
               })}
-              {tasksQuery.data?.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-text-dim">
-                    No tasks assigned to you.
-                  </td>
-                </tr>
-              )}
+              {tasksQuery.data?.length === 0 && <TableEmptyRow colSpan={5} message="No tasks assigned to you." />}
             </tbody>
-          </table>
+          </Table>
         </Card>
 
         <Card className="p-4">
@@ -390,7 +375,11 @@ export default function Tasks() {
                       {c.body}
                     </li>
                   ))}
-                  {commentsQuery.data?.length === 0 && <li className="text-sm text-text-dim">No comments yet.</li>}
+                  {commentsQuery.data?.length === 0 && (
+                    <li>
+                      <EmptyState message="No comments yet." />
+                    </li>
+                  )}
                 </ul>
                 <form onSubmit={handleAddComment} className="mt-2 flex gap-2">
                   <input
@@ -489,7 +478,8 @@ function CreateTaskForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-edge-lg bg-surface p-4 shadow-edge-sm">
+    <Card className="p-4">
+      <form onSubmit={handleSubmit}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <div>
           <FieldLabel>Task title</FieldLabel>
@@ -579,6 +569,7 @@ function CreateTaskForm({
         {pending ? "Creating..." : "Create task"}
       </Button>
       {error && <ErrorBanner message={error} />}
-    </form>
+      </form>
+    </Card>
   );
 }

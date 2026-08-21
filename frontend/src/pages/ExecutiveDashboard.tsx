@@ -1,17 +1,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Company, DashboardData, OrgUnit } from "@/lib/types";
 import { Card, ErrorBanner, LoadingState } from "@/components/ui";
 
 type ScopeType = "company" | "org_unit";
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
 
 function StatusCard({ title, counts }: { title: string; counts: Record<string, number> }) {
   const total = Object.values(counts).reduce((a, b) => a + b, 0);

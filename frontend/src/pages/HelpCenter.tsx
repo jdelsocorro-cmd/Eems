@@ -2,14 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import type { HelpArticle, HelpCategory } from "@/lib/types";
 import { Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
 
 // Detects a YouTube/Vimeo/Loom URL sitting alone on its own line and swaps
 // it for an embedded iframe -- the "embedded videos" requirement without

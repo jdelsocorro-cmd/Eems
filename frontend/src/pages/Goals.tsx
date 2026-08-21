@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type {
   Company,
@@ -19,7 +20,7 @@ import type {
   Project,
   Task,
 } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 import { EmployeeLink } from "@/components/EmployeeLink";
 
 type EvidenceKind = "task" | "project" | "milestone";
@@ -118,11 +119,6 @@ function employeeName(employees: Employee[] | undefined, id: string | null): str
   return emp ? `${emp.first_name} ${emp.last_name}` : id;
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
-
 export default function Goals() {
   const { session } = useAuth();
   const queryClient = useQueryClient();
@@ -197,20 +193,18 @@ export default function Goals() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-                <th className="px-4 py-2">Title</th>
-                <th className="px-4 py-2">Type</th>
-                <th className="px-4 py-2">Owner</th>
-                <th className="px-4 py-2">
-                  <span className="inline-flex items-center gap-1.5">
-                    Status
-                    <InfoTooltip content={GOAL_STATUS_LEGEND} side="bottom" />
-                  </span>
-                </th>
-              </tr>
-            </thead>
+          <Table>
+            <TableHead>
+              <Th>Title</Th>
+              <Th>Type</Th>
+              <Th>Owner</Th>
+              <Th>
+                <span className="inline-flex items-center gap-1.5">
+                  Status
+                  <InfoTooltip content={GOAL_STATUS_LEGEND} side="bottom" />
+                </span>
+              </Th>
+            </TableHead>
             <tbody>
               {goalsQuery.isLoading && (
                 <tr>
@@ -220,38 +214,26 @@ export default function Goals() {
                 </tr>
               )}
               {(goalsQuery.data ?? []).map((goal) => (
-                <tr
-                  key={goal.id}
-                  onClick={() => setSelectedGoalId(goal.id)}
-                  className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
-                    selectedGoalId === goal.id ? "bg-nav-active" : ""
-                  }`}
-                >
-                  <td className="px-4 py-2 text-text">{goal.title}</td>
-                  <td className="px-4 py-2 text-text-muted">{goal.goal_type}</td>
-                  <td className="px-4 py-2 text-text-muted" onClick={(e) => e.stopPropagation()}>
+                <Tr key={goal.id} onClick={() => setSelectedGoalId(goal.id)} selected={selectedGoalId === goal.id}>
+                  <Td className="text-text">{goal.title}</Td>
+                  <Td className="text-text-muted">{goal.goal_type}</Td>
+                  <Td className="text-text-muted" onClick={(e) => e.stopPropagation()}>
                     {goal.owner_employee_id ? (
                       <EmployeeLink employeeId={goal.owner_employee_id} name={employeeName(employeesQuery.data, goal.owner_employee_id)} />
                     ) : (
                       employeeName(employeesQuery.data, goal.owner_employee_id)
                     )}
-                  </td>
-                  <td className="px-4 py-2">
+                  </Td>
+                  <Td>
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${GOAL_STATUS_STYLES[goal.status]}`}>
                       {goal.status}
                     </span>
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
-              {goalsQuery.data?.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-text-dim">
-                    No goals yet.
-                  </td>
-                </tr>
-              )}
+              {goalsQuery.data?.length === 0 && <TableEmptyRow colSpan={4} message="No goals yet." />}
             </tbody>
-          </table>
+          </Table>
         </Card>
 
         <Card className="p-4">
@@ -315,7 +297,7 @@ export default function Goals() {
                   {(kpisQuery.data ?? []).map((kpi) => (
                     <KpiRow key={kpi.id} kpi={kpi} />
                   ))}
-                  {kpisQuery.data?.length === 0 && <p className="text-sm text-text-dim">No KPIs linked yet.</p>}
+                  {kpisQuery.data?.length === 0 && <EmptyState message="No KPIs linked yet." />}
                 </div>
                 {createKpi.isError && <ErrorBanner message={errorMessage(createKpi.error)} />}
                 <NewKpiForm
@@ -376,7 +358,8 @@ function CreateGoalForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-edge-lg bg-surface p-4 shadow-edge-sm">
+    <Card className="p-4">
+      <form onSubmit={handleSubmit}>
       <h3 className="mb-3 text-sm font-semibold text-text">New goal</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
@@ -504,7 +487,8 @@ function CreateGoalForm({
         {pending ? "Creating..." : "Create goal"}
       </Button>
       {error && <ErrorBanner message={error} />}
-    </form>
+      </form>
+    </Card>
   );
 }
 
@@ -726,7 +710,7 @@ function KpiRow({ kpi }: { kpi: Kpi }) {
     <div className="rounded-edge-sm bg-surface2/50 p-2">
       <div className="flex items-center justify-between text-sm text-text">
         <button type="button" onClick={() => setExpanded((v) => !v)} className="flex items-center gap-1.5 text-left">
-          <span className="text-text-dim">{expanded ? "▾" : "▸"}</span>
+          <span className="text-text-dim">{expanded ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}</span>
           <span>{kpi.name}</span>
         </button>
         <span className="text-text-muted">
@@ -757,7 +741,11 @@ function KpiRow({ kpi }: { kpi: Kpi }) {
                 </button>
               </li>
             ))}
-            {linkedItems.length === 0 && <li className="text-xs text-text-dim">No evidence linked yet.</li>}
+            {linkedItems.length === 0 && (
+              <li>
+                <EmptyState message="No evidence linked yet." />
+              </li>
+            )}
           </ul>
           {unlink.isError && <ErrorBanner message={errorMessage(unlink.error)} />}
 

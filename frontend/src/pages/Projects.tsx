@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Company, Employee, Milestone, MilestoneStatus, Project, ProjectMember, ProjectStatus, Task, TaskStatus } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 import { CompletionWorkflow } from "@/components/completion/CompletionWorkflow";
 import { EmployeeLink } from "@/components/EmployeeLink";
 
@@ -25,11 +25,6 @@ const PROJECT_STATUS_STYLES: Record<ProjectStatus, string> = {
   completed: "bg-edge-teal/10 text-edge-teal",
   cancelled: "bg-danger/10 text-danger",
 };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
 
 function employeeName(employees: Employee[] | undefined, id: string | null): string {
   if (!id) return "Unassigned";
@@ -160,14 +155,12 @@ export default function Projects() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">Owner</th>
-                <th className="px-4 py-2">Status</th>
-              </tr>
-            </thead>
+          <Table>
+            <TableHead>
+              <Th>Name</Th>
+              <Th>Owner</Th>
+              <Th>Status</Th>
+            </TableHead>
             <tbody>
               {projectsQuery.isLoading && (
                 <tr>
@@ -177,33 +170,21 @@ export default function Projects() {
                 </tr>
               )}
               {(projectsQuery.data ?? []).map((project) => (
-                <tr
-                  key={project.id}
-                  onClick={() => setSelectedProjectId(project.id)}
-                  className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
-                    selectedProjectId === project.id ? "bg-nav-active" : ""
-                  }`}
-                >
-                  <td className="px-4 py-2 text-text">{project.name}</td>
-                  <td className="px-4 py-2 text-text-muted" onClick={(e) => e.stopPropagation()}>
+                <Tr key={project.id} onClick={() => setSelectedProjectId(project.id)} selected={selectedProjectId === project.id}>
+                  <Td className="text-text">{project.name}</Td>
+                  <Td className="text-text-muted" onClick={(e) => e.stopPropagation()}>
                     <EmployeeLink employeeId={project.owner_employee_id} name={employeeName(employeesQuery.data, project.owner_employee_id)} />
-                  </td>
-                  <td className="px-4 py-2">
+                  </Td>
+                  <Td>
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${PROJECT_STATUS_STYLES[project.status]}`}>
                       {project.status.replace("_", " ")}
                     </span>
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
-              {projectsQuery.data?.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-text-dim">
-                    No projects yet.
-                  </td>
-                </tr>
-              )}
+              {projectsQuery.data?.length === 0 && <TableEmptyRow colSpan={3} message="No projects yet." />}
             </tbody>
-          </table>
+          </Table>
         </Card>
 
         <Card className="p-4">
@@ -268,7 +249,11 @@ export default function Projects() {
                       </button>
                     </li>
                   ))}
-                  {membersQuery.data?.length === 0 && <li className="text-sm text-text-dim">No members yet.</li>}
+                  {membersQuery.data?.length === 0 && (
+                    <li>
+                      <EmptyState message="No members yet." />
+                    </li>
+                  )}
                 </ul>
                 {removeMember.isError && <ErrorBanner message={errorMessage(removeMember.error)} />}
                 <select
@@ -317,7 +302,11 @@ export default function Projects() {
                       </select>
                     </li>
                   ))}
-                  {tasksQuery.data?.length === 0 && <li className="text-sm text-text-dim">No tasks yet.</li>}
+                  {tasksQuery.data?.length === 0 && (
+                    <li>
+                      <EmptyState message="No tasks yet." />
+                    </li>
+                  )}
                 </ul>
                 {updateTaskStatus.isError && <ErrorBanner message={errorMessage(updateTaskStatus.error)} />}
                 <NewTaskForm
@@ -350,7 +339,11 @@ export default function Projects() {
                       </select>
                     </li>
                   ))}
-                  {milestonesQuery.data?.length === 0 && <li className="text-sm text-text-dim">No milestones yet.</li>}
+                  {milestonesQuery.data?.length === 0 && (
+                    <li>
+                      <EmptyState message="No milestones yet." />
+                    </li>
+                  )}
                 </ul>
                 {updateMilestoneStatus.isError && <ErrorBanner message={errorMessage(updateMilestoneStatus.error)} />}
                 <NewMilestoneForm
@@ -414,7 +407,8 @@ function CreateProjectForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-edge-lg bg-surface p-4 shadow-edge-sm">
+    <Card className="p-4">
+      <form onSubmit={handleSubmit}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <div>
           <FieldLabel>Project name</FieldLabel>
@@ -480,7 +474,8 @@ function CreateProjectForm({
         {pending ? "Creating..." : "Create project"}
       </Button>
       {error && <ErrorBanner message={error} />}
-    </form>
+      </form>
+    </Card>
   );
 }
 

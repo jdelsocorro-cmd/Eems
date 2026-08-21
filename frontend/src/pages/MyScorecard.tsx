@@ -1,15 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Employee, Goal, Kpi, KpiScore, Project, Recognition } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
+import { Button, Card, EmptyState, ErrorBanner, LoadingState, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 
 function ratio(kpi: Kpi): number {
   if (kpi.direction === "higher_is_better") return kpi.target_value === 0 ? 0 : kpi.current_value / kpi.target_value;
@@ -94,15 +89,13 @@ export default function MyScorecard() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-                <th className="px-4 py-2">KPI</th>
-                <th className="px-4 py-2">Progress</th>
-                <th className="px-4 py-2">Weight</th>
-                <th className="px-4 py-2">Log</th>
-              </tr>
-            </thead>
+          <Table>
+            <TableHead>
+              <Th>KPI</Th>
+              <Th>Progress</Th>
+              <Th>Weight</Th>
+              <Th>Log</Th>
+            </TableHead>
             <tbody>
               {kpisQuery.isLoading && (
                 <tr>
@@ -112,33 +105,27 @@ export default function MyScorecard() {
                 </tr>
               )}
               {activeKpis.map((kpi) => (
-                <tr key={kpi.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-2 text-text">
+                <Tr key={kpi.id}>
+                  <Td className="text-text">
                     {kpi.name}
                     <span className="ml-1 text-xs text-text-dim">({kpi.direction.replace(/_/g, " ")})</span>
-                  </td>
-                  <td className="px-4 py-2 text-text-muted">
+                  </Td>
+                  <Td className="text-text-muted">
                     {kpi.current_value} / {kpi.target_value} {kpi.unit} &middot; {Math.round(ratio(kpi) * 100)}%
-                  </td>
-                  <td className="px-4 py-2 text-text-muted">{kpi.weight}</td>
-                  <td className="px-4 py-2">
+                  </Td>
+                  <Td className="text-text-muted">{kpi.weight}</Td>
+                  <Td>
                     <ProgressLogCell
                       kpi={kpi}
                       onSave={(value) => logProgress.mutate({ id: kpi.id, current_value: value })}
                       pending={logProgress.isPending}
                     />
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
-              {activeKpis.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-text-dim">
-                    No active KPIs.
-                  </td>
-                </tr>
-              )}
+              {activeKpis.length === 0 && <TableEmptyRow colSpan={4} message="No active KPIs." />}
             </tbody>
-          </table>
+          </Table>
           {logProgress.isError && <ErrorBanner message={errorMessage(logProgress.error)} />}
         </Card>
 

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import type { Company, Employee, EmployeeRole, OrgUnit, Permission, Position, Role, ScopeType } from "@/lib/types";
 import { Button, Card, ErrorBanner, LoadingState } from "@/components/ui";
 
@@ -13,11 +13,6 @@ const SCOPE_DESCRIPTIONS: Record<ScopeType, string> = {
   position_subtree: "Applies to the selected position and everyone who reports up through it.",
   self: "Applies only to this person's own record -- no target needed.",
 };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
 
 export default function RbacAdmin() {
   const queryClient = useQueryClient();

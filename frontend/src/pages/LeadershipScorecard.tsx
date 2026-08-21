@@ -1,18 +1,13 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import type { Company, Employee, OrgUnit, Position, PositionAssignment, PositionScore } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, LoadingState, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 
 interface TreeNode {
   position: Position;
   children: TreeNode[];
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
 }
 
 // Every leader's score here already bakes in their whole subtree
@@ -111,15 +106,15 @@ export default function LeadershipScorecard() {
     return nodes.flatMap((node) => {
       const score = latestScoreByPosition.get(node.position.id);
       const row = (
-        <tr key={node.position.id} className="border-b border-border last:border-0">
-          <td className="px-4 py-2 text-text" style={{ paddingLeft: `${1 + depth * 1.25}rem` }}>
+        <Tr key={node.position.id}>
+          <Td className="text-text" style={{ paddingLeft: `${1 + depth * 1.25}rem` }}>
             {node.position.title}
-          </td>
-          <td className="px-4 py-2 text-text-muted">{occupantName(node.position.id)}</td>
-          <td className="px-4 py-2 text-text-muted">
+          </Td>
+          <Td className="text-text-muted">{occupantName(node.position.id)}</Td>
+          <Td className="text-text-muted">
             {score ? (score.computed_score === null ? "No active KPIs" : `${score.computed_score}%`) : "--"}
-          </td>
-        </tr>
+          </Td>
+        </Tr>
       );
       return [row, ...renderRows(node.children, depth + 1)];
     });
@@ -149,14 +144,12 @@ export default function LeadershipScorecard() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-                <th className="px-4 py-2">Position</th>
-                <th className="px-4 py-2">Occupant</th>
-                <th className="px-4 py-2">Rolled-up score</th>
-              </tr>
-            </thead>
+          <Table>
+            <TableHead>
+              <Th>Position</Th>
+              <Th>Occupant</Th>
+              <Th>Rolled-up score</Th>
+            </TableHead>
             <tbody>
               {isLoading && (
                 <tr>
@@ -166,15 +159,9 @@ export default function LeadershipScorecard() {
                 </tr>
               )}
               {renderRows(tree, 0)}
-              {!isLoading && tree.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-text-dim">
-                    No positions yet.
-                  </td>
-                </tr>
-              )}
+              {!isLoading && tree.length === 0 && <TableEmptyRow colSpan={3} message="No positions yet." />}
             </tbody>
-          </table>
+          </Table>
         </Card>
 
         <Card className="p-4">

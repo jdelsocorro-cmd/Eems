@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import type { Company, HelpArticle, HelpArticleRole, HelpArticleStatus, HelpArticleVersion, HelpCategory, Role } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 
 const STATUSES: HelpArticleStatus[] = ["draft", "published", "archived"];
 
@@ -12,11 +12,6 @@ const STATUS_STYLES: Record<HelpArticleStatus, string> = {
   published: "bg-success-soft text-success",
   archived: "bg-danger/10 text-danger",
 };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
 
 export default function HelpAdmin() {
   const queryClient = useQueryClient();
@@ -134,13 +129,11 @@ export default function HelpAdmin() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-                <th className="px-4 py-2">Title</th>
-                <th className="px-4 py-2">Status</th>
-              </tr>
-            </thead>
+          <Table>
+            <TableHead>
+              <Th>Title</Th>
+              <Th>Status</Th>
+            </TableHead>
             <tbody>
               {articlesQuery.isLoading && (
                 <tr>
@@ -150,33 +143,25 @@ export default function HelpAdmin() {
                 </tr>
               )}
               {(articlesQuery.data ?? []).map((article) => (
-                <tr
+                <Tr
                   key={article.id}
                   onClick={() => {
                     setSelectedArticleId(article.id);
                     setShowVersions(false);
                   }}
-                  className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
-                    selectedArticleId === article.id ? "bg-nav-active" : ""
-                  }`}
+                  selected={selectedArticleId === article.id}
                 >
-                  <td className="px-4 py-2 text-text">{article.title}</td>
-                  <td className="px-4 py-2">
+                  <Td className="text-text">{article.title}</Td>
+                  <Td>
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[article.status]}`}>
                       {article.status}
                     </span>
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
-              {articlesQuery.data?.length === 0 && (
-                <tr>
-                  <td colSpan={2} className="px-4 py-6 text-center text-text-dim">
-                    No articles yet.
-                  </td>
-                </tr>
-              )}
+              {articlesQuery.data?.length === 0 && <TableEmptyRow colSpan={2} message="No articles yet." />}
             </tbody>
-          </table>
+          </Table>
         </Card>
 
         <Card className="p-4 lg:col-span-2">
@@ -263,7 +248,8 @@ function NewArticleForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-edge-lg bg-surface p-4 shadow-edge-sm">
+    <Card className="p-4">
+      <form onSubmit={handleSubmit}>
       <h3 className="mb-3 text-sm font-semibold text-text">New article</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
@@ -312,7 +298,8 @@ function NewArticleForm({
         {pending ? "Creating..." : "Create article (draft)"}
       </Button>
       {error && <ErrorBanner message={error} />}
-    </form>
+      </form>
+    </Card>
   );
 }
 

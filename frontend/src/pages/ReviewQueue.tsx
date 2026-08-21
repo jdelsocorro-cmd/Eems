@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { IconChevronRight } from "@tabler/icons-react";
 
-import { apiClient } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import type {
   CompletionEntityType,
   CompletionEvidenceLink,
@@ -11,7 +12,7 @@ import type {
   Project,
   Task,
 } from "@/lib/types";
-import { Card, EmptyState, LoadingState } from "@/components/ui";
+import { Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
 import { CompletionWorkflow } from "@/components/completion/CompletionWorkflow";
 import { EmployeeLink } from "@/components/EmployeeLink";
 
@@ -69,8 +70,9 @@ export default function ReviewQueue() {
       </div>
 
       {isLoading && <LoadingState label="Loading..." />}
+      {submissionsQuery.isError && <ErrorBanner message={errorMessage(submissionsQuery.error)} />}
 
-      {!isLoading && (submissionsQuery.data ?? []).length === 0 && (
+      {!isLoading && !submissionsQuery.isError && (submissionsQuery.data ?? []).length === 0 && (
         <EmptyState message="Nothing waiting on your review right now." />
       )}
 
@@ -98,7 +100,8 @@ export default function ReviewQueue() {
       <div>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-muted">Recently Reviewed</h2>
         {reviewedQuery.isLoading && <LoadingState label="Loading..." />}
-        {!reviewedQuery.isLoading && (reviewedQuery.data ?? []).length === 0 && (
+        {reviewedQuery.isError && <ErrorBanner message={errorMessage(reviewedQuery.error)} />}
+        {!reviewedQuery.isLoading && !reviewedQuery.isError && (reviewedQuery.data ?? []).length === 0 && (
           <EmptyState message="You haven't reviewed anything yet." />
         )}
         <div className="flex flex-col gap-2">
@@ -156,7 +159,7 @@ function ReviewedEntry({
           <span className="truncate font-medium">{entityName}</span>
         </span>
         <span className="shrink-0 text-xs text-text-dim">
-          {status === "approved" ? `${submission.completion_score}%` : "▸"}
+          {status === "approved" ? `${submission.completion_score}%` : <IconChevronRight size={13} />}
         </span>
       </button>
       {expanded && (

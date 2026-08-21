@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiClient, ApiError } from "@/lib/apiClient";
+import { apiClient, errorMessage } from "@/lib/apiClient";
 import type { Company, FieldStrategy, ImportBatch, ImportBatchRow, ImportMode, ImportRowAction } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 
 const IMPORT_MODE_LABELS: Record<ImportMode, string> = {
   insert_only: "Insert New Only",
@@ -31,11 +31,6 @@ const ACTION_STYLES: Record<ImportRowAction, string> = {
   skip: "bg-surface2 text-text-muted",
   reject: "bg-danger/10 text-danger",
 };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.detail;
-  return "Something went wrong.";
-}
 
 // Employees-only in Phase 1 -- new modules are a config entry in the
 // backend's IMPORT_MODULE_REGISTRY, not a frontend change, once each has
@@ -122,13 +117,11 @@ export default function BulkImportAdmin() {
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Import History</h2>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-                <th className="px-4 py-2">File</th>
-                <th className="px-4 py-2">Status</th>
-              </tr>
-            </thead>
+          <Table>
+            <TableHead>
+              <Th>File</Th>
+              <Th>Status</Th>
+            </TableHead>
             <tbody>
               {batchesQuery.isLoading && (
                 <tr>
@@ -138,36 +131,28 @@ export default function BulkImportAdmin() {
                 </tr>
               )}
               {(batchesQuery.data ?? []).map((batch) => (
-                <tr
+                <Tr
                   key={batch.id}
                   onClick={() => {
                     setSelectedBatchId(batch.id);
                     setRowFilter("all");
                   }}
-                  className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface2 ${
-                    selectedBatchId === batch.id ? "bg-nav-active" : ""
-                  }`}
+                  selected={selectedBatchId === batch.id}
                 >
-                  <td className="px-4 py-2 text-text">
+                  <Td className="text-text">
                     <p className="truncate">{batch.file_name}</p>
                     <p className="text-xs text-text-dim">{new Date(batch.created_at).toLocaleString()}</p>
-                  </td>
-                  <td className="px-4 py-2">
+                  </Td>
+                  <Td>
                     <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[batch.status]}`}>
                       {batch.status}
                     </span>
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
-              {batchesQuery.data?.length === 0 && (
-                <tr>
-                  <td colSpan={2} className="px-4 py-6 text-center text-text-dim">
-                    No imports yet.
-                  </td>
-                </tr>
-              )}
+              {batchesQuery.data?.length === 0 && <TableEmptyRow colSpan={2} message="No imports yet." />}
             </tbody>
-          </table>
+          </Table>
         </Card>
 
         <Card className="p-4 lg:col-span-2">
@@ -226,15 +211,13 @@ export default function BulkImportAdmin() {
               </div>
 
               <div className="max-h-[420px] overflow-y-auto rounded-edge-sm border border-border">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-surface">
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
-                      <th className="px-3 py-2">Row</th>
-                      <th className="px-3 py-2">Matching key</th>
-                      <th className="px-3 py-2">Action</th>
-                      <th className="px-3 py-2">Notes</th>
-                    </tr>
-                  </thead>
+                <Table>
+                  <TableHead className="sticky top-0 bg-surface">
+                    <Th>Row</Th>
+                    <Th>Matching key</Th>
+                    <Th>Action</Th>
+                    <Th>Notes</Th>
+                  </TableHead>
                   <tbody>
                     {rowsQuery.isLoading && (
                       <tr>
@@ -244,26 +227,20 @@ export default function BulkImportAdmin() {
                       </tr>
                     )}
                     {(rowsQuery.data ?? []).map((row) => (
-                      <tr key={row.id} className="border-b border-border last:border-0">
-                        <td className="px-3 py-1.5 text-text-muted">{row.row_number}</td>
-                        <td className="px-3 py-1.5 text-text">{row.matching_key_value ?? "—"}</td>
-                        <td className="px-3 py-1.5">
+                      <Tr key={row.id}>
+                        <Td className="text-text-muted">{row.row_number}</Td>
+                        <Td className="text-text">{row.matching_key_value ?? "—"}</Td>
+                        <Td>
                           <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${ACTION_STYLES[row.action]}`}>
                             {row.action}
                           </span>
-                        </td>
-                        <td className="px-3 py-1.5 text-xs text-danger">{row.validation_errors?.join("; ") ?? ""}</td>
-                      </tr>
+                        </Td>
+                        <Td className="text-xs text-danger">{row.validation_errors?.join("; ") ?? ""}</Td>
+                      </Tr>
                     ))}
-                    {!rowsQuery.isLoading && rowsQuery.data?.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-3 py-6 text-center text-text-dim">
-                          No rows match this filter.
-                        </td>
-                      </tr>
-                    )}
+                    {!rowsQuery.isLoading && rowsQuery.data?.length === 0 && <TableEmptyRow colSpan={4} message="No rows match this filter." />}
                   </tbody>
-                </table>
+                </Table>
               </div>
             </div>
           )}
@@ -310,7 +287,8 @@ function UploadForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-edge-lg bg-surface p-4 shadow-edge-sm">
+    <Card className="p-4">
+      <form onSubmit={handleSubmit}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
         <div>
           <FieldLabel>Module</FieldLabel>
@@ -395,6 +373,7 @@ function UploadForm({
           Download sample CSV
         </a>
       </div>
-    </form>
+      </form>
+    </Card>
   );
 }
