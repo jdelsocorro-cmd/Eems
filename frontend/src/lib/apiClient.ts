@@ -85,4 +85,12 @@ export const apiClient = {
   getBlob: (path: string) => requestBlob(path),
 };
 
+// Was redefined identically in UserManagement.tsx before this -- one shared
+// definition so every page's ErrorBanner/mutation-error handling formats
+// ApiError the same way instead of drifting per page.
+export function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.detail;
+  return "Something went wrong.";
+}
+
 export { ApiError };

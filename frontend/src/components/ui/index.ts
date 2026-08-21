@@ -6,3 +6,5 @@ export { ErrorBanner } from "./ErrorBanner";
 export { SuccessBanner } from "./SuccessBanner";
 export { InfoTooltip, FieldLabel } from "./InfoTooltip";
 export { LoadingState, Spinner } from "./LoadingState";
+export { SortHeader } from "./SortHeader";
+export { Table, TableHead, Th, Tr, Td, TableEmptyRow } from "./Table";
