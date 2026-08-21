@@ -108,7 +108,7 @@ const KPI_DIRECTION_LEGEND = (
 const GOAL_STATUS_STYLES: Record<GoalStatus, string> = {
   draft: "bg-surface2 text-text-muted",
   active: "bg-success-soft text-success",
-  completed: "bg-edge-teal/10 text-edge-teal",
+  completed: "bg-success-soft text-success",
   archived: "bg-surface2 text-text-dim",
   cancelled: "bg-danger/10 text-danger",
 };

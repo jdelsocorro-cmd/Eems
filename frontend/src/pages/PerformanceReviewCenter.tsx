@@ -375,7 +375,7 @@ const TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "in_review", "blocke
 
 const TASK_STATUS_STYLES: Record<TaskStatus, string> = {
   todo: "bg-surface2 text-text-muted",
-  in_progress: "bg-edge-teal/10 text-edge-teal",
+  in_progress: "bg-success-soft text-success",
   in_review: "bg-warning-soft text-warning",
   blocked: "bg-danger/10 text-danger",
   done: "bg-success-soft text-success",
@@ -505,7 +505,7 @@ const PROJECT_STATUS_STYLES: Record<ProjectStatus, string> = {
   planning: "bg-surface2 text-text-muted",
   active: "bg-success-soft text-success",
   on_hold: "bg-warning-soft text-warning",
-  completed: "bg-edge-teal/10 text-edge-teal",
+  completed: "bg-success-soft text-success",
   cancelled: "bg-danger/10 text-danger",
 };
 
@@ -640,7 +640,7 @@ const GOAL_STATUSES: GoalStatus[] = ["draft", "active", "completed", "archived",
 const GOAL_STATUS_STYLES: Record<GoalStatus, string> = {
   draft: "bg-surface2 text-text-muted",
   active: "bg-success-soft text-success",
-  completed: "bg-edge-teal/10 text-edge-teal",
+  completed: "bg-success-soft text-success",
   archived: "bg-surface2 text-text-dim",
   cancelled: "bg-danger/10 text-danger",
 };
@@ -649,7 +649,7 @@ const KPI_STATUSES: KpiStatus[] = ["active", "completed", "archived"];
 
 const KPI_STATUS_STYLES: Record<KpiStatus, string> = {
   active: "bg-success-soft text-success",
-  completed: "bg-edge-teal/10 text-edge-teal",
+  completed: "bg-success-soft text-success",
   archived: "bg-surface2 text-text-dim",
 };
 

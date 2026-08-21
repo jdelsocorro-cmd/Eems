@@ -24,7 +24,7 @@ const TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "in_review", "blocke
 
 const TASK_STATUS_STYLES: Record<TaskStatus, string> = {
   todo: "bg-surface2 text-text-muted",
-  in_progress: "bg-edge-teal/10 text-edge-teal",
+  in_progress: "bg-success-soft text-success",
   in_review: "bg-warning-soft text-warning",
   blocked: "bg-danger/10 text-danger",
   done: "bg-success-soft text-success",

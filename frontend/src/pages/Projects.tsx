@@ -22,7 +22,7 @@ const PROJECT_STATUS_STYLES: Record<ProjectStatus, string> = {
   planning: "bg-surface2 text-text-muted",
   active: "bg-success-soft text-success",
   on_hold: "bg-warning-soft text-warning",
-  completed: "bg-edge-teal/10 text-edge-teal",
+  completed: "bg-success-soft text-success",
   cancelled: "bg-danger/10 text-danger",
 };
 

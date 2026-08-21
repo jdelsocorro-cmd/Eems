@@ -27,7 +27,7 @@ const STATUS_STYLES: Record<ImportBatch["status"], string> = {
 
 const ACTION_STYLES: Record<ImportRowAction, string> = {
   insert: "bg-success-soft text-success",
-  update: "bg-edge-teal/10 text-edge-teal",
+  update: "bg-success-soft text-success",
   skip: "bg-surface2 text-text-muted",
   reject: "bg-danger/10 text-danger",
 };

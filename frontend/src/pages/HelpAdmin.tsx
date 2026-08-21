@@ -434,7 +434,7 @@ function ArticleEditor({
                 type="button"
                 onClick={() => onToggleRole(role.id, !enabled)}
                 className={`rounded-edge-sm px-2 py-1 text-xs ${
-                  enabled ? "bg-edge-teal/10 text-edge-teal" : "bg-surface2 text-text-muted"
+                  enabled ? "bg-success-soft text-success" : "bg-surface2 text-text-muted"
                 }`}
               >
                 {role.name}

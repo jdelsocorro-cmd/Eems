@@ -84,14 +84,31 @@
   --c-border-hover: rgba(13, 26, 48, 0.2);
   --c-accent: #00a87a;
   --c-accent-soft: rgba(0, 168, 122, 0.1);
-  --c-blue: #0880ba;
+  /* --c-blue/--c-green/--c-yellow/--c-red are the text color half of every
+     status pill (bg-*-soft/10 + text-*) across the app -- table statuses,
+     ticket severity, KPI/goal states. Computed against WCAG AA (4.5:1) for
+     each color's own soft-tint background rather than eyeballed; yellow/red
+     previously fell through unchanged from the dark theme's :root values
+     (never re-tuned for this light theme) and were badly out of compliance
+     (1.84:1 / 2.87:1). See project memory for the computed values. */
+  --c-blue: #0772a6;
   --c-blue-soft: rgba(8, 128, 186, 0.1);
-  --c-green: #00a87a;
+  --c-green: #007d5b;
   --c-green-soft: rgba(0, 168, 122, 0.1);
+  --c-yellow: #9a6207;
+  --c-yellow-soft: rgba(245, 166, 35, 0.14);
+  --c-red: #da0f21;
   --c-nav-active: rgba(0, 168, 122, 0.08);
   --c-text: #0d1a30;
   --c-text-muted: #5a7090;
-  --c-text-dim: #a0b0c8;
+  /* Was #a0b0c8 (1.99:1 / 2.20:1 against this theme's surfaces -- badly
+     below the 4.5:1 AA minimum). EmptyState's message text and LoadingState's
+     label both render at this color, so effectively every empty state and
+     loading spinner caption in the app was under half the required contrast.
+     A genuinely lighter third tier isn't AA-compliant against these light
+     surfaces at this hue -- matching text-muted is the honest fix, not a
+     new arbitrary color. */
+  --c-text-dim: #5a7090;
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.09);
   --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.13);

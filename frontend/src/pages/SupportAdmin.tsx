@@ -10,7 +10,7 @@ const STATUSES: SupportTicketStatus[] = ["new", "acknowledged", "in_progress", "
 const STATUS_STYLES: Record<SupportTicketStatus, string> = {
   new: "bg-warning-soft text-warning",
   acknowledged: "bg-info-soft text-info",
-  in_progress: "bg-edge-teal/10 text-edge-teal",
+  in_progress: "bg-success-soft text-success",
   resolved: "bg-success-soft text-success",
   closed: "bg-surface2 text-text-dim",
 };
