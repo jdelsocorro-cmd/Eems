@@ -1,5 +1,21 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import {
+  IconArrowsMaximize,
+  IconArrowsMinimize,
+  IconBuilding,
+  IconChevronsDown,
+  IconChevronsUp,
+  IconClockEdit,
+  IconDownload,
+  IconFocus2,
+  IconHierarchy3,
+  IconMinus,
+  IconPlus,
+  IconUser,
+  IconUserStar,
+  IconUsers,
+} from "@tabler/icons-react";
 
 import { apiClient } from "@/lib/apiClient";
 import type { Company, Employee, OrgUnit, Position, PositionAssignment } from "@/lib/types";
@@ -53,6 +69,7 @@ export default function OrgChart() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [showFilter, setShowFilter] = useState<ShowFilter>("all");
+  const [activeDeptIds, setActiveDeptIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("chart");
   const [zoom, setZoom] = useState(1);
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
@@ -89,9 +106,23 @@ export default function OrgChart() {
   // department reads this same map, so the color always means the same
   // thing everywhere on the page.
   const orgUnitColorIndex = useMemo(() => new Map(unitsForCompany.map((u, i) => [u.id, i])), [unitsForCompany]);
+  const orgUnitNameById = useMemo(() => new Map(unitsForCompany.map((u) => [u.id, u.name])), [unitsForCompany]);
 
   function colorIndexForPosition(position: Position): number {
     return orgUnitColorIndex.get(position.org_unit_id) ?? 0;
+  }
+
+  function departmentNameForPosition(position: Position): string {
+    return orgUnitNameById.get(position.org_unit_id) ?? "—";
+  }
+
+  function toggleDept(id: string) {
+    setActiveDeptIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   const tree = useMemo(() => {
@@ -190,6 +221,15 @@ export default function OrgChart() {
     const emp = employeeForPosition.get(node.position.id);
     if (showFilter === "vacant") return !emp;
     return !!emp && emp.status === "active";
+  };
+
+  // Department chips are a second, independent filter axis from Show
+  // (employee status) -- a node must pass both to render at full opacity.
+  // Applied per-node rather than per top-level branch, since a manager's
+  // subtree isn't guaranteed to share one department in this data model.
+  const passesDeptFilter = (node: TreeNode): boolean => {
+    if (activeDeptIds.size === 0) return true;
+    return activeDeptIds.has(node.position.org_unit_id);
   };
 
   function toggle(id: string) {
@@ -311,7 +351,9 @@ export default function OrgChart() {
       matchesSearch={matchesSearch}
       isDirectMatch={isDirectMatch}
       passesShowFilter={passesShowFilter}
+      passesDeptFilter={passesDeptFilter}
       colorIndexForPosition={colorIndexForPosition}
+      departmentNameForPosition={departmentNameForPosition}
       canViewProfiles={canViewProfiles}
       onSelectEmployee={setSelectedEmployeeId}
     />
@@ -378,31 +420,37 @@ export default function OrgChart() {
 
       {viewMode === "chart" && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <OrgChartLegend departments={unitsForCompany.map((u) => ({ id: u.id, name: u.name, colorIndex: orgUnitColorIndex.get(u.id) ?? 0 }))} />
+          <OrgChartLegend
+            departments={unitsForCompany.map((u) => ({ id: u.id, name: u.name, colorIndex: orgUnitColorIndex.get(u.id) ?? 0 }))}
+            activeIds={activeDeptIds}
+            onToggle={toggleDept}
+            onClear={() => setActiveDeptIds(new Set())}
+          />
           <Toolbar>
-            <Button variant="toolbar" size="sm" onClick={expandAll}>
-              Expand all
+            <Button variant="toolbar" size="sm" onClick={expandAll} className="flex items-center gap-1.5">
+              <IconChevronsDown size={14} /> Expand all
             </Button>
-            <Button variant="toolbar" size="sm" onClick={collapseAll}>
-              Collapse all
+            <Button variant="toolbar" size="sm" onClick={collapseAll} className="flex items-center gap-1.5">
+              <IconChevronsUp size={14} /> Collapse all
             </Button>
             <ToolbarDivider />
             <Button variant="toolbar" size="sm" onClick={() => zoomBy(-ZOOM_STEP)}>
-              −
+              <IconMinus size={14} />
             </Button>
             <span className="w-10 text-center text-text-dim">{Math.round(zoom * 100)}%</span>
             <Button variant="toolbar" size="sm" onClick={() => zoomBy(ZOOM_STEP)}>
-              +
+              <IconPlus size={14} />
             </Button>
-            <Button variant="toolbar" size="sm" onClick={fitToScreen}>
-              Fit to screen
+            <Button variant="toolbar" size="sm" onClick={fitToScreen} className="flex items-center gap-1.5">
+              <IconFocus2 size={14} /> Fit to screen
             </Button>
-            <Button variant="toolbar" size="sm" onClick={toggleFullscreen}>
+            <Button variant="toolbar" size="sm" onClick={toggleFullscreen} className="flex items-center gap-1.5">
+              {isFullscreen ? <IconArrowsMinimize size={14} /> : <IconArrowsMaximize size={14} />}
               {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
             </Button>
             <ToolbarDivider />
-            <Button variant="toolbar" size="sm" onClick={exportPng} disabled={isExporting || visibleRoots.length === 0}>
-              {isExporting ? "Exporting..." : "Export as PNG"}
+            <Button variant="primary" size="sm" onClick={exportPng} disabled={isExporting || visibleRoots.length === 0} className="flex items-center gap-1.5">
+              <IconDownload size={14} /> {isExporting ? "Exporting..." : "Export as PNG"}
             </Button>
           </Toolbar>
         </div>
@@ -426,7 +474,9 @@ export default function OrgChart() {
                   matchesSearch={matchesSearch}
                   isDirectMatch={isDirectMatch}
                   passesShowFilter={passesShowFilter}
+                  passesDeptFilter={passesDeptFilter}
                   colorIndexForPosition={colorIndexForPosition}
+                  departmentNameForPosition={departmentNameForPosition}
                   canViewProfiles={canViewProfiles}
                   onSelectEmployee={setSelectedEmployeeId}
                 />
@@ -471,23 +521,34 @@ function StatStrip({
   // same number as Managers (confirmed live: both read 23). Two tiles that
   // can never disagree don't convey two pieces of information; showing
   // both just reads as a stat-strip bug.
-  const tiles: { label: string; value: string }[] = [
-    { label: "Total Employees", value: String(stats.totalEmployees) },
-    { label: "Departments", value: String(stats.departments) },
-    { label: "Managers", value: String(stats.managers) },
-    { label: "Span of Control", value: stats.spanOfControl > 0 ? stats.spanOfControl.toFixed(1) + " avg" : "—" },
-    { label: "Last Position Change", value: stats.lastUpdated ?? "—" },
+  const tiles = [
+    { label: "Total Employees", value: String(stats.totalEmployees), sub: "Across all departments", icon: IconUsers, accent: "bg-edge-teal" },
+    { label: "Departments", value: String(stats.departments), sub: "Active org units", icon: IconBuilding, accent: "bg-info" },
+    { label: "Managers", value: String(stats.managers), sub: "Incl. vacant seats", icon: IconUserStar, accent: "bg-[#542fc6]" },
+    {
+      label: "Span of Control",
+      value: stats.spanOfControl > 0 ? stats.spanOfControl.toFixed(1) + " avg" : "—",
+      sub: "Direct reports per manager",
+      icon: IconHierarchy3,
+      accent: "bg-warning",
+    },
+    { label: "Last Position Change", value: stats.lastUpdated ?? "—", sub: "Most recent update", icon: IconClockEdit, accent: "bg-[#c62fa0]" },
   ];
 
   return (
-    <Card className="flex flex-1 flex-wrap gap-x-6 gap-y-2 p-3">
+    <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {tiles.map((t) => (
-        <div key={t.label} className="min-w-[110px]">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-text-muted">{t.label}</p>
-          <p className="mt-0.5 text-lg font-semibold text-text">{t.value}</p>
-        </div>
+        <Card key={t.label} className="relative overflow-hidden p-3.5">
+          <div className={`absolute inset-x-0 top-0 h-[3px] ${t.accent}`} />
+          <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-text-muted">
+            <t.icon size={14} className="text-text-dim" />
+            {t.label}
+          </p>
+          <p className="mt-2 text-xl font-semibold leading-none text-text">{t.value}</p>
+          <p className="mt-1.5 text-[11px] text-text-dim">{t.sub}</p>
+        </Card>
       ))}
-    </Card>
+    </div>
   );
 }
 
@@ -506,7 +567,9 @@ interface NodeSharedProps {
   matchesSearch: (node: TreeNode) => boolean;
   isDirectMatch: (node: TreeNode) => boolean;
   passesShowFilter: (node: TreeNode) => boolean;
+  passesDeptFilter: (node: TreeNode) => boolean;
   colorIndexForPosition: (position: Position) => number;
+  departmentNameForPosition: (position: Position) => string;
   canViewProfiles: boolean;
   onSelectEmployee: (employeeId: string) => void;
 }
@@ -549,23 +612,35 @@ function EmployeeNameControl({
 }
 
 function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
-  const { collapsed, onToggle, employeeForPosition, matchesSearch, isDirectMatch, passesShowFilter, colorIndexForPosition, canViewProfiles, onSelectEmployee } =
-    shared;
+  const {
+    collapsed,
+    onToggle,
+    employeeForPosition,
+    matchesSearch,
+    isDirectMatch,
+    passesShowFilter,
+    passesDeptFilter,
+    colorIndexForPosition,
+    departmentNameForPosition,
+    canViewProfiles,
+    onSelectEmployee,
+  } = shared;
   const isCollapsed = collapsed.has(node.position.id);
   const employee = employeeForPosition.get(node.position.id);
   const hasChildren = node.children.length > 0;
   const visibleChildren = node.children.filter(matchesSearch);
   const colorIndex = colorIndexForPosition(node.position);
+  const departmentName = departmentNameForPosition(node.position);
   const borderClass = DEPARTMENT_BORDER_CLASSES[colorIndex % DEPARTMENT_BORDER_CLASSES.length];
   const isRoot = depth === 0;
-  const dimmed = !passesShowFilter(node);
+  const dimmed = !passesShowFilter(node) || !passesDeptFilter(node);
 
   return (
     <div className="flex flex-col items-center">
       <button
         type="button"
         onClick={() => hasChildren && onToggle(node.position.id)}
-        className={`group relative flex w-52 flex-col gap-1.5 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(depth, borderClass)} ${
+        className={`group relative flex w-52 flex-col gap-2 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(depth, borderClass)} ${
           hasChildren ? "cursor-pointer" : "cursor-default"
         } ${isDirectMatch(node) ? "ring-2 ring-edge-teal ring-offset-1 ring-offset-surface" : ""} ${dimmed ? "opacity-35" : ""}`}
       >
@@ -576,13 +651,14 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
               lastName={employee.last_name}
               colorIndex={colorIndex}
               size="sm"
+              variant={isRoot ? "soft" : "solid"}
               className={isRoot ? "bg-white/15 text-white" : undefined}
             />
           ) : (
             <span
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${isRoot ? "bg-white/10 text-white/50" : "bg-surface3 text-text-dim"}`}
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed ${isRoot ? "border-white/30 text-white/50" : "border-text-dim text-text-dim"}`}
             >
-              —
+              <IconUser size={13} />
             </span>
           )}
           <div className="min-w-0 flex-1">
@@ -595,15 +671,26 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
                 className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}
               />
             ) : (
-              <span className="inline-block w-fit rounded-edge-sm bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">Vacant</span>
+              <span className={`block truncate text-[11px] italic leading-tight ${isRoot ? "text-white/50" : "text-text-dim"}`}>Open position</span>
             )}
           </div>
         </div>
-        {hasChildren && (
-          <span className={`text-[10px] ${isRoot ? "text-white/50" : "text-text-dim"}`}>
-            {isCollapsed ? "▸" : "▾"} {node.children.length} direct report{node.children.length === 1 ? "" : "s"}
+
+        <div className={`flex items-center justify-between border-t pt-1.5 ${isRoot ? "border-white/15" : "border-border"}`}>
+          <span className={`flex min-w-0 items-center gap-1.5 truncate text-[10px] font-medium ${isRoot ? "text-white/60" : "text-text-dim"}`}>
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(colorIndex)}`} />
+            <span className="truncate">{departmentName}</span>
           </span>
-        )}
+          {hasChildren ? (
+            <span
+              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${isRoot ? "bg-white/10 text-white/70" : "bg-surface3 text-text-muted"}`}
+            >
+              {isCollapsed ? "▸" : "▾"} {node.children.length} report{node.children.length === 1 ? "" : "s"}
+            </span>
+          ) : !employee ? (
+            <span className="shrink-0 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning">Vacant</span>
+          ) : null}
+        </div>
       </button>
 
       {hasChildren && !isCollapsed && visibleChildren.length > 0 && (
@@ -620,14 +707,14 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
 }
 
 function TreeListRow({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
-  const { collapsed, onToggle, employeeForPosition, matchesSearch, isDirectMatch, passesShowFilter, colorIndexForPosition, canViewProfiles, onSelectEmployee } =
+  const { collapsed, onToggle, employeeForPosition, matchesSearch, isDirectMatch, passesShowFilter, passesDeptFilter, colorIndexForPosition, canViewProfiles, onSelectEmployee } =
     shared;
   const isCollapsed = collapsed.has(node.position.id);
   const employee = employeeForPosition.get(node.position.id);
   const hasChildren = node.children.length > 0;
   const visibleChildren = node.children.filter(matchesSearch);
   const colorIndex = colorIndexForPosition(node.position);
-  const dimmed = !passesShowFilter(node);
+  const dimmed = !passesShowFilter(node) || !passesDeptFilter(node);
 
   return (
     <div>
@@ -647,7 +734,9 @@ function TreeListRow({ node, depth, ...shared }: { node: TreeNode; depth: number
             <EmployeeNameControl employee={employee} canViewProfiles={canViewProfiles} onSelectEmployee={onSelectEmployee} className="text-text-muted" />
           </>
         ) : (
-          <span className="rounded-edge-sm bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">Vacant</span>
+          <span className="flex items-center gap-1 rounded-edge-sm bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">
+            <IconUser size={10} /> Vacant
+          </span>
         )}
         {hasChildren && <span className="ml-auto text-xs text-text-dim">{node.children.length} direct report(s)</span>}
       </div>
