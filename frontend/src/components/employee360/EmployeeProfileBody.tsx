@@ -161,8 +161,15 @@ function PerformanceTab({
       {latestScore ? (
         <div className="mb-4">
           <p className="text-3xl font-semibold text-text">{latestScore.computed_score === null ? "--" : `${latestScore.computed_score}%`}</p>
+          {/* A score row can exist with computed_score = null -- the
+              rollup snapshots one row per position every run regardless of
+              whether its occupant had any active KPIs at the time. Showing
+              the period dates in that case just leaves the "--" above
+              unexplained (confirmed live: no way to tell why it's "--"
+              without separately reading the History list below). Say why,
+              the same "No active KPIs" wording that list already uses. */}
           <p className="text-xs text-text-dim">
-            {latestScore.period_start} to {latestScore.period_end}
+            {latestScore.computed_score === null ? "No active KPIs for this period" : `${latestScore.period_start} to ${latestScore.period_end}`}
           </p>
         </div>
       ) : (
