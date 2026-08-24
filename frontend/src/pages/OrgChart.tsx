@@ -27,6 +27,7 @@ import { EmployeeAvatar } from "@/components/orgchart/EmployeeAvatar";
 import { OrgChartLegend, legendSwatchClass } from "@/components/orgchart/OrgChartLegend";
 import { OrgChartMinimap, type MinimapNode } from "@/components/orgchart/OrgChartMinimap";
 import { EmployeeSidePanel } from "@/components/orgchart/EmployeeSidePanel";
+import { DepartmentGrid, fillRateBadgeClass, type DepartmentStat } from "@/components/orgchart/DepartmentGrid";
 import "./OrgChart.css";
 
 interface TreeNode {
@@ -34,8 +35,40 @@ interface TreeNode {
   children: TreeNode[];
 }
 
-type ViewMode = "chart" | "list";
+type ViewMode = "chart" | "list" | "department";
 type ShowFilter = "all" | "active" | "vacant";
+
+// Shared by the whole-company tree and each department's own scoped tree
+// (Departments view, List view's swimlanes) -- a position is a "root" for
+// whatever positions array it's given whenever isRoot says so. The
+// whole-company tree's rule is "no manager"; a department's scoped tree
+// additionally treats "manager belongs to a different org_unit_id" as a
+// root, so a department's own swimlane/card shows its real entry point(s)
+// instead of orphaning positions whose manager isn't in view.
+function buildTree(positions: Position[], isRoot: (p: Position) => boolean): TreeNode[] {
+  const byId = new Map(positions.map((p) => [p.id, p]));
+  const childrenOf = new Map<string, Position[]>();
+  const roots: Position[] = [];
+
+  for (const p of positions) {
+    if (!isRoot(p) && p.reports_to_position_id && byId.has(p.reports_to_position_id)) {
+      const list = childrenOf.get(p.reports_to_position_id) ?? [];
+      list.push(p);
+      childrenOf.set(p.reports_to_position_id, list);
+    } else {
+      roots.push(p);
+    }
+  }
+
+  function build(position: Position): TreeNode {
+    return {
+      position,
+      children: (childrenOf.get(position.id) ?? []).map(build),
+    };
+  }
+
+  return roots.map(build);
+}
 
 const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 1.5;
@@ -69,6 +102,7 @@ const DEPARTMENT_BORDER_CLASSES = [
 export default function OrgChart() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsedDepartments, setCollapsedDepartments] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [showFilter, setShowFilter] = useState<ShowFilter>("all");
   const [activeDeptIds, setActiveDeptIds] = useState<Set<string>>(new Set());
@@ -127,32 +161,24 @@ export default function OrgChart() {
     });
   }
 
-  const tree = useMemo(() => {
+  function toggleDepartmentCollapsed(id: string) {
+    setCollapsedDepartments((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const companyPositions = useMemo(() => {
     if (!positionsQuery.data) return [];
-    const positions = positionsQuery.data.filter((p) => unitIdsForCompany.has(p.org_unit_id));
-    const byId = new Map(positions.map((p) => [p.id, p]));
-    const childrenOf = new Map<string, Position[]>();
-    const roots: Position[] = [];
-
-    for (const p of positions) {
-      if (p.reports_to_position_id && byId.has(p.reports_to_position_id)) {
-        const list = childrenOf.get(p.reports_to_position_id) ?? [];
-        list.push(p);
-        childrenOf.set(p.reports_to_position_id, list);
-      } else {
-        roots.push(p);
-      }
-    }
-
-    function build(position: Position): TreeNode {
-      return {
-        position,
-        children: (childrenOf.get(position.id) ?? []).map(build),
-      };
-    }
-
-    return roots.map(build);
+    return positionsQuery.data.filter((p) => unitIdsForCompany.has(p.org_unit_id));
   }, [positionsQuery.data, unitIdsForCompany]);
+
+  const tree = useMemo(
+    () => buildTree(companyPositions, (p) => !p.reports_to_position_id),
+    [companyPositions],
+  );
 
   const employeeForPosition = useMemo(() => {
     const map = new Map<string, Employee>();
@@ -164,6 +190,36 @@ export default function OrgChart() {
     }
     return map;
   }, [assignmentsQuery.data, employeesQuery.data]);
+
+  // Per-department snapshot, computed once and shared by Departments view
+  // (decision 3) and List view's swimlanes (decision 4) -- headcount/fill
+  // rate always reflect the department's true state, independent of the
+  // Show/search filters that only apply when browsing individual people.
+  // deptTree's roots are department-scoped (a position roots its own
+  // department's tree if it has no manager OR its manager sits in a
+  // different org_unit_id), so a department's swimlane/card always shows
+  // its own real entry point(s) instead of orphaning positions whose
+  // manager isn't in view.
+  const departmentStats = useMemo(() => {
+    const companyPositionsById = new Map(companyPositions.map((p) => [p.id, p]));
+    return unitsForCompany.map((unit) => {
+      const positions = companyPositions.filter((p) => p.org_unit_id === unit.id);
+      const headcount = positions.filter((p) => employeeForPosition.has(p.id)).length;
+      const deptTree = buildTree(
+        positions,
+        (p) => !p.reports_to_position_id || companyPositionsById.get(p.reports_to_position_id)?.org_unit_id !== unit.id,
+      );
+      return {
+        unit,
+        colorIndex: orgUnitColorIndex.get(unit.id) ?? 0,
+        positions,
+        headcount,
+        totalPositions: positions.length,
+        fillRate: positions.length > 0 ? headcount / positions.length : 0,
+        deptTree,
+      };
+    });
+  }, [unitsForCompany, companyPositions, employeeForPosition, orgUnitColorIndex]);
 
   // Company-wide stats -- computed over the FULL tree regardless of what's
   // currently expanded/collapsed/searched, since these describe the
@@ -333,6 +389,14 @@ export default function OrgChart() {
   const isLoading = companiesQuery.isLoading || positionsQuery.isLoading || unitsQuery.isLoading;
   const visibleRoots = tree.filter(matchesSearch);
 
+  // List view's swimlanes -- skip a department entirely once search has
+  // narrowed it down to nothing, same "hide, don't dim" rule search already
+  // uses elsewhere; with no search, every department shows (including the
+  // fully-vacant ones), since seeing "0 of 3 filled" is real information.
+  const visibleDepartmentGroups = departmentStats
+    .map((dept) => ({ dept, roots: dept.deptTree.filter(matchesSearch) }))
+    .filter(({ roots }) => !search.trim() || roots.length > 0);
+
   function buildMinimapTree(nodes: TreeNode[]): MinimapNode[] {
     return nodes.map((n) => ({
       position: n.position,
@@ -413,6 +477,9 @@ export default function OrgChart() {
           <Button variant="toolbar" size="sm" active={viewMode === "list"} onClick={() => setViewMode("list")}>
             List
           </Button>
+          <Button variant="toolbar" size="sm" active={viewMode === "department"} onClick={() => setViewMode("department")}>
+            Departments
+          </Button>
         </Toolbar>
       </div>
 
@@ -420,7 +487,7 @@ export default function OrgChart() {
         <StatStrip stats={stats} />
       </div>
 
-      {viewMode === "chart" && (
+      {(viewMode === "chart" || viewMode === "list") && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <OrgChartLegend
             departments={unitsForCompany.map((u) => ({ id: u.id, name: u.name, colorIndex: orgUnitColorIndex.get(u.id) ?? 0 }))}
@@ -428,33 +495,35 @@ export default function OrgChart() {
             onToggle={toggleDept}
             onClear={() => setActiveDeptIds(new Set())}
           />
-          <Toolbar>
-            <Button variant="toolbar" size="sm" onClick={expandAll} className="flex items-center gap-1.5">
-              <IconChevronsDown size={14} /> Expand all
-            </Button>
-            <Button variant="toolbar" size="sm" onClick={collapseAll} className="flex items-center gap-1.5">
-              <IconChevronsUp size={14} /> Collapse all
-            </Button>
-            <ToolbarDivider />
-            <Button variant="toolbar" size="sm" onClick={() => zoomBy(-ZOOM_STEP)}>
-              <IconMinus size={14} />
-            </Button>
-            <span className="w-10 text-center text-text-dim">{Math.round(zoom * 100)}%</span>
-            <Button variant="toolbar" size="sm" onClick={() => zoomBy(ZOOM_STEP)}>
-              <IconPlus size={14} />
-            </Button>
-            <Button variant="toolbar" size="sm" onClick={fitToScreen} className="flex items-center gap-1.5">
-              <IconFocus2 size={14} /> Fit to screen
-            </Button>
-            <Button variant="toolbar" size="sm" onClick={toggleFullscreen} className="flex items-center gap-1.5">
-              {isFullscreen ? <IconArrowsMinimize size={14} /> : <IconArrowsMaximize size={14} />}
-              {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-            </Button>
-            <ToolbarDivider />
-            <Button variant="primary" size="sm" onClick={exportPng} disabled={isExporting || visibleRoots.length === 0} className="flex items-center gap-1.5">
-              <IconDownload size={14} /> {isExporting ? "Exporting..." : "Export as PNG"}
-            </Button>
-          </Toolbar>
+          {viewMode === "chart" && (
+            <Toolbar>
+              <Button variant="toolbar" size="sm" onClick={expandAll} className="flex items-center gap-1.5">
+                <IconChevronsDown size={14} /> Expand all
+              </Button>
+              <Button variant="toolbar" size="sm" onClick={collapseAll} className="flex items-center gap-1.5">
+                <IconChevronsUp size={14} /> Collapse all
+              </Button>
+              <ToolbarDivider />
+              <Button variant="toolbar" size="sm" onClick={() => zoomBy(-ZOOM_STEP)}>
+                <IconMinus size={14} />
+              </Button>
+              <span className="w-10 text-center text-text-dim">{Math.round(zoom * 100)}%</span>
+              <Button variant="toolbar" size="sm" onClick={() => zoomBy(ZOOM_STEP)}>
+                <IconPlus size={14} />
+              </Button>
+              <Button variant="toolbar" size="sm" onClick={fitToScreen} className="flex items-center gap-1.5">
+                <IconFocus2 size={14} /> Fit to screen
+              </Button>
+              <Button variant="toolbar" size="sm" onClick={toggleFullscreen} className="flex items-center gap-1.5">
+                {isFullscreen ? <IconArrowsMinimize size={14} /> : <IconArrowsMaximize size={14} />}
+                {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              </Button>
+              <ToolbarDivider />
+              <Button variant="primary" size="sm" onClick={exportPng} disabled={isExporting || visibleRoots.length === 0} className="flex items-center gap-1.5">
+                <IconDownload size={14} /> {isExporting ? "Exporting..." : "Export as PNG"}
+              </Button>
+            </Toolbar>
+          )}
         </div>
       )}
 
@@ -463,27 +532,82 @@ export default function OrgChart() {
           {isLoading && <LoadingState label="Loading org chart..." />}
           {!isLoading && tree.length === 0 && <EmptyState message="No positions in this company yet." />}
 
-          {viewMode === "list" && visibleRoots.length > 0 && (
-            <div>
-              {visibleRoots.map((node) => (
-                <TreeListRow
-                  key={node.position.id}
-                  node={node}
-                  depth={0}
-                  collapsed={collapsed}
-                  onToggle={toggle}
-                  employeeForPosition={employeeForPosition}
-                  matchesSearch={matchesSearch}
-                  isDirectMatch={isDirectMatch}
-                  passesShowFilter={passesShowFilter}
-                  passesDeptFilter={passesDeptFilter}
-                  colorIndexForPosition={colorIndexForPosition}
-                  departmentNameForPosition={departmentNameForPosition}
-                  canViewProfiles={canViewProfiles}
-                  onSelectEmployee={setSelectedEmployeeId}
-                />
-              ))}
+          {viewMode === "list" && visibleDepartmentGroups.length > 0 && (
+            <div className="flex flex-col gap-3">
+              {visibleDepartmentGroups.map(({ dept, roots }) => {
+                const isDeptCollapsed = collapsedDepartments.has(dept.unit.id);
+                const borderClass = DEPARTMENT_BORDER_CLASSES[dept.colorIndex % DEPARTMENT_BORDER_CLASSES.length];
+                return (
+                  <div key={dept.unit.id} className="overflow-hidden rounded-edge-md border border-border">
+                    <button
+                      type="button"
+                      onClick={() => toggleDepartmentCollapsed(dept.unit.id)}
+                      className={`flex w-full items-center gap-2 border-l-4 bg-surface2 px-3 py-2 text-left ${borderClass}`}
+                    >
+                      <span className="text-text-muted">{isDeptCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />}</span>
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${legendSwatchClass(dept.colorIndex)}`} />
+                      <span className="text-sm font-semibold text-text">{dept.unit.name}</span>
+                      <span className="ml-auto shrink-0 rounded-full bg-surface3 px-2 py-0.5 text-[10px] font-semibold text-text-muted">
+                        {dept.headcount} of {dept.totalPositions} filled
+                      </span>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${fillRateBadgeClass(dept.fillRate)}`}>
+                        {Math.round(dept.fillRate * 100)}% staffed
+                      </span>
+                    </button>
+                    {!isDeptCollapsed && (
+                      <div className="bg-surface py-1">
+                        {roots.map((node) => (
+                          <TreeListRow
+                            key={node.position.id}
+                            node={node}
+                            depth={0}
+                            collapsed={collapsed}
+                            onToggle={toggle}
+                            employeeForPosition={employeeForPosition}
+                            matchesSearch={matchesSearch}
+                            isDirectMatch={isDirectMatch}
+                            passesShowFilter={passesShowFilter}
+                            passesDeptFilter={passesDeptFilter}
+                            colorIndexForPosition={colorIndexForPosition}
+                            departmentNameForPosition={departmentNameForPosition}
+                            canViewProfiles={canViewProfiles}
+                            onSelectEmployee={setSelectedEmployeeId}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+          )}
+          {viewMode === "list" && !isLoading && tree.length > 0 && visibleDepartmentGroups.length === 0 && (
+            <EmptyState message="No positions or people match your search." />
+          )}
+
+          {viewMode === "department" && tree.length > 0 && (
+            <DepartmentGrid
+              departments={departmentStats.map((dept) => {
+                const [headRoot, ...extraRoots] = dept.deptTree;
+                const headEmployee = headRoot ? employeeForPosition.get(headRoot.position.id) : undefined;
+                const stat: DepartmentStat = {
+                  id: dept.unit.id,
+                  name: dept.unit.name,
+                  colorIndex: dept.colorIndex,
+                  headcount: dept.headcount,
+                  totalPositions: dept.totalPositions,
+                  fillRate: dept.fillRate,
+                  headTitle: headRoot?.position.title ?? null,
+                  headEmployeeName: headEmployee ? `${headEmployee.first_name} ${headEmployee.last_name}` : null,
+                  extraLeads: extraRoots.length,
+                };
+                return stat;
+              })}
+              onSelect={(unitId) => {
+                setActiveDeptIds(new Set([unitId]));
+                setViewMode("list");
+              }}
+            />
           )}
 
           {viewMode === "chart" &&
