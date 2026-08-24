@@ -543,11 +543,11 @@ export default function OrgChart() {
                     <button
                       type="button"
                       onClick={() => toggleDepartmentCollapsed(dept.unit.id)}
-                      className={`flex w-full items-center gap-2 border-l-4 bg-surface2 px-3 py-2 text-left ${borderClass}`}
+                      className={`flex w-full items-center gap-2.5 border-l-4 bg-surface2 px-3 py-2.5 text-left ${borderClass}`}
                     >
-                      <span className="text-text-muted">{isDeptCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />}</span>
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${legendSwatchClass(dept.colorIndex)}`} />
-                      <span className="text-sm font-semibold text-text">{dept.unit.name}</span>
+                      <span className="text-text-muted">{isDeptCollapsed ? <IconChevronRight size={13} /> : <IconChevronDown size={13} />}</span>
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${legendSwatchClass(dept.colorIndex)}`} />
+                      <span className="text-base font-bold text-text">{dept.unit.name}</span>
                       <span className="ml-auto shrink-0 rounded-full bg-surface3 px-2 py-0.5 text-[10px] font-semibold text-text-muted">
                         {dept.headcount} of {dept.totalPositions} filled
                       </span>
@@ -858,7 +858,7 @@ function TreeListRow({ node, depth, ...shared }: { node: TreeNode; depth: number
       <div
         onClick={() => hasChildren && onToggle(node.position.id)}
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
-        className={`flex items-center gap-2 rounded-edge-sm py-1.5 pr-2 text-sm ${hasChildren ? "cursor-pointer hover:bg-surface2" : ""} ${
+        className={`flex items-center gap-2.5 rounded-edge-sm py-1.5 pr-2 text-sm ${hasChildren ? "cursor-pointer hover:bg-surface2" : ""} ${
           isDirectMatch(node) ? "bg-nav-active" : ""
         } ${dimmed ? "opacity-35" : ""}`}
       >
@@ -871,9 +871,15 @@ function TreeListRow({ node, depth, ...shared }: { node: TreeNode; depth: number
             <EmployeeNameControl employee={employee} canViewProfiles={canViewProfiles} onSelectEmployee={onSelectEmployee} className="text-text-muted" />
           </>
         ) : (
-          <span className="flex items-center gap-1 rounded-edge-sm bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">
-            <IconUser size={10} /> Vacant
-          </span>
+          // Deliberately quieter than a colored pill here -- the swimlane
+          // header above already carries the department's staffed/vacant
+          // signal via its fill-rate badge (see fillRateBadgeClass); a
+          // matching amber pill on every single vacant row underneath it
+          // competed with that rollup for attention instead of supporting
+          // it. Plain italic text still says "this seat is open" without
+          // the visual loudness Chart view's badge form needs (where
+          // there's no swimlane-level context to lean on instead).
+          <span className="text-xs italic leading-tight text-text-dim">Open position</span>
         )}
         {hasChildren && <span className="ml-auto text-xs text-text-dim">{node.children.length} direct report(s)</span>}
       </div>
