@@ -543,11 +543,11 @@ export default function OrgChart() {
                     <button
                       type="button"
                       onClick={() => toggleDepartmentCollapsed(dept.unit.id)}
-                      className={`flex w-full items-center gap-2.5 border-l-4 bg-surface2 px-3 py-2.5 text-left ${borderClass}`}
+                      className={`flex w-full items-center gap-2 border-l-4 bg-surface2 px-3 py-2 text-left ${borderClass}`}
                     >
-                      <span className="text-text-muted">{isDeptCollapsed ? <IconChevronRight size={13} /> : <IconChevronDown size={13} />}</span>
-                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${legendSwatchClass(dept.colorIndex)}`} />
-                      <span className="text-base font-bold text-text">{dept.unit.name}</span>
+                      <span className="text-text-muted">{isDeptCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />}</span>
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${legendSwatchClass(dept.colorIndex)}`} />
+                      <span className="text-[13px] font-bold text-text">{dept.unit.name}</span>
                       <span className="ml-auto shrink-0 rounded-full bg-surface3 px-2 py-0.5 text-[10px] font-semibold text-text-muted">
                         {dept.headcount} of {dept.totalPositions} filled
                       </span>
