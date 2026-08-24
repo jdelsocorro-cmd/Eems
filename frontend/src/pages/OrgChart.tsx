@@ -537,8 +537,9 @@ export default function OrgChart() {
               {visibleDepartmentGroups.map(({ dept, roots }) => {
                 const isDeptCollapsed = collapsedDepartments.has(dept.unit.id);
                 const borderClass = DEPARTMENT_BORDER_CLASSES[dept.colorIndex % DEPARTMENT_BORDER_CLASSES.length];
+                const isDeptDimmed = activeDeptIds.size > 0 && !activeDeptIds.has(dept.unit.id);
                 return (
-                  <div key={dept.unit.id} className="overflow-hidden rounded-edge-md border border-border">
+                  <div key={dept.unit.id} className={`overflow-hidden rounded-edge-md border border-border ${isDeptDimmed ? "opacity-35" : ""}`}>
                     <button
                       type="button"
                       onClick={() => toggleDepartmentCollapsed(dept.unit.id)}
@@ -567,7 +568,14 @@ export default function OrgChart() {
                             matchesSearch={matchesSearch}
                             isDirectMatch={isDirectMatch}
                             passesShowFilter={passesShowFilter}
-                            passesDeptFilter={passesDeptFilter}
+                            // The whole swimlane already dims above when this
+                            // department isn't in activeDeptIds (every row in
+                            // it would agree, by construction -- a swimlane
+                            // only contains its own department's positions),
+                            // so rows here always "pass" that axis -- applying
+                            // it again would compound two opacity-35s into a
+                            // near-invisible ~0.12.
+                            passesDeptFilter={() => true}
                             colorIndexForPosition={colorIndexForPosition}
                             departmentNameForPosition={departmentNameForPosition}
                             canViewProfiles={canViewProfiles}
