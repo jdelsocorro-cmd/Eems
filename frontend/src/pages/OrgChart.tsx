@@ -341,6 +341,28 @@ export default function OrgChart() {
     return ids;
   }
 
+  // Auto-collapse on first load of a company: only nodes that actually
+  // BRANCH (more than one child) get collapsed, regardless of depth -- a
+  // single-child chain (e.g. Sr. Sales Manager -> Sr. Sales Development
+  // Representative -> Sales Development Representative) adds no extra
+  // visual width, so collapsing it under the same flat "depth >= 1" rule
+  // that keeps a wide, 30+ position chart readable was hiding real
+  // positions in any department shaped as a narrow chain instead of a wide
+  // tree -- confirmed live: Sales' 3rd-level position was fully correct in
+  // the data, just hidden two collapses deep by that rule. The root's
+  // direct reports stay visible either way (depth 0 is exempt, same as
+  // before); "Collapse all" (collectIdsAtDepth(0), below) is a separate,
+  // deliberate full-collapse action and is untouched by this rule.
+  function collectBranchingIdsBelowRoot(): Set<string> {
+    const ids = new Set<string>();
+    function walk(node: TreeNode, depth: number) {
+      if (depth >= 1 && node.children.length > 1) ids.add(node.position.id);
+      node.children.forEach((child) => walk(child, depth + 1));
+    }
+    tree.forEach((root) => walk(root, 0));
+    return ids;
+  }
+
   // First view of a company shows just the top and its direct reports --
   // full depth all at once is what made a 30+ position chart unreadable.
   // Re-collapsing only happens when the selected company actually changes,
@@ -349,7 +371,7 @@ export default function OrgChart() {
   useEffect(() => {
     if (tree.length > 0 && autoCollapsedForCompanyRef.current !== activeCompanyId) {
       autoCollapsedForCompanyRef.current = activeCompanyId;
-      setCollapsed(collectIdsAtDepth(1));
+      setCollapsed(collectBranchingIdsBelowRoot());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree, activeCompanyId]);
