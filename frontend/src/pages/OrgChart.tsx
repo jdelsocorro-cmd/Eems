@@ -200,12 +200,28 @@ export default function OrgChart() {
   const positionsById = useMemo(() => new Map(companyPositions.map((p) => [p.id, p])), [companyPositions]);
 
   // Candidates for the Assign Consultant panel's "Existing Employee" mode --
-  // active employees with no current primary assignment. Reuses data
-  // already fetched (employeesQuery/assignmentsQuery), no new query.
-  const unassignedEmployees = useMemo(() => {
-    const assignedIds = new Set((assignmentsQuery.data ?? []).filter((a) => a.is_primary).map((a) => a.employee_id));
-    return (employeesQuery.data ?? []).filter((e) => e.status === "active" && !assignedIds.has(e.id));
-  }, [employeesQuery.data, assignmentsQuery.data]);
+  // every active employee, not just unassigned ones, so an admin can move
+  // someone out of their current seat into this one -- mirrors
+  // UserManagement.tsx's standalone PositionPicker, which reassigns any
+  // employee the same way and isn't limited to unassigned people either.
+  // Reuses data already fetched, no new query.
+  const assignableEmployees = useMemo(() => {
+    return (employeesQuery.data ?? []).filter((e) => e.status === "active");
+  }, [employeesQuery.data]);
+
+  // What seat (if any) each employee would be moved OUT of -- surfaced in
+  // the picker since POST /position-assignments silently closes an
+  // employee's prior assignment when they're reassigned, and the picker now
+  // offers people who already hold a position, not just spares.
+  const currentPositionTitleByEmployee = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of assignmentsQuery.data ?? []) {
+      if (!a.is_primary) continue;
+      const position = positionsById.get(a.position_id);
+      if (position) map.set(a.employee_id, position.title);
+    }
+    return map;
+  }, [assignmentsQuery.data, positionsById]);
 
   // Per-department snapshot, computed once and shared by Departments view
   // (decision 3) and List view's swimlanes (decision 4) -- headcount/fill
@@ -672,7 +688,8 @@ export default function OrgChart() {
               : null
           }
           directReportsCount={assigningNode.children.length}
-          unassignedEmployees={unassignedEmployees}
+          employees={assignableEmployees}
+          currentPositionTitleByEmployee={currentPositionTitleByEmployee}
           canAssignExisting={canAssignExisting}
           canCreateNew={canCreateNew}
           onClose={() => setAssigningNode(null)}

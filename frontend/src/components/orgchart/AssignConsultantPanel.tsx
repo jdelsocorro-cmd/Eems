@@ -28,7 +28,8 @@ export function AssignConsultantPanel({
   departmentName,
   reportsToTitle,
   directReportsCount,
-  unassignedEmployees,
+  employees,
+  currentPositionTitleByEmployee,
   canAssignExisting,
   canCreateNew,
   onClose,
@@ -37,7 +38,8 @@ export function AssignConsultantPanel({
   departmentName: string;
   reportsToTitle: string | null;
   directReportsCount: number;
-  unassignedEmployees: Employee[];
+  employees: Employee[];
+  currentPositionTitleByEmployee: Map<string, string>;
   canAssignExisting: boolean;
   canCreateNew: boolean;
   onClose: () => void;
@@ -150,7 +152,12 @@ export function AssignConsultantPanel({
 
         <div className="flex-1 overflow-y-auto p-4">
           {mode === "existing" && canAssignExisting && (
-            <ExistingEmployeeForm employees={unassignedEmployees} pending={pending} onAssign={handleAssignExisting} />
+            <ExistingEmployeeForm
+              employees={employees}
+              currentPositionTitleByEmployee={currentPositionTitleByEmployee}
+              pending={pending}
+              onAssign={handleAssignExisting}
+            />
           )}
           {mode === "new" && canCreateNew && <NewConsultantForm pending={pending} onSubmit={handleCreateAndAssign} />}
           {submitError && (
@@ -166,10 +173,12 @@ export function AssignConsultantPanel({
 
 function ExistingEmployeeForm({
   employees,
+  currentPositionTitleByEmployee,
   pending,
   onAssign,
 }: {
   employees: Employee[];
+  currentPositionTitleByEmployee: Map<string, string>;
   pending: boolean;
   onAssign: (employeeId: string) => void;
 }) {
@@ -181,6 +190,8 @@ function ExistingEmployeeForm({
     ? employees.filter((e) => `${e.first_name} ${e.last_name} ${e.work_email}`.toLowerCase().includes(q))
     : employees;
 
+  const selectedCurrentPosition = selectedId ? currentPositionTitleByEmployee.get(selectedId) : null;
+
   return (
     <div className="flex flex-col gap-3">
       <div className="relative">
@@ -188,34 +199,44 @@ function ExistingEmployeeForm({
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search unassigned employees..."
+          placeholder="Search employees..."
           className="w-full rounded-edge-sm border border-border bg-surface2 py-1.5 pl-7 pr-2 text-sm text-text outline-none focus:border-border-hover"
         />
       </div>
 
       {filtered.length === 0 ? (
         <p className="rounded-edge-sm border border-dashed border-border p-3 text-center text-xs text-text-dim">
-          {employees.length === 0 ? "No unassigned employees available." : "No matches."}
+          {employees.length === 0 ? "No employees available." : "No matches."}
         </p>
       ) : (
         <div className="flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: "40vh" }}>
-          {filtered.map((emp) => (
-            <label
-              key={emp.id}
-              className={`flex cursor-pointer items-center gap-2 rounded-edge-sm border px-2.5 py-2 text-sm ${
-                selectedId === emp.id ? "border-edge-teal bg-edge-teal/5" : "border-border hover:bg-surface2"
-              }`}
-            >
-              <input type="radio" name="existing-employee" checked={selectedId === emp.id} onChange={() => setSelectedId(emp.id)} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-text">
-                  {emp.first_name} {emp.last_name}
+          {filtered.map((emp) => {
+            const currentPosition = currentPositionTitleByEmployee.get(emp.id);
+            return (
+              <label
+                key={emp.id}
+                className={`flex cursor-pointer items-center gap-2 rounded-edge-sm border px-2.5 py-2 text-sm ${
+                  selectedId === emp.id ? "border-edge-teal bg-edge-teal/5" : "border-border hover:bg-surface2"
+                }`}
+              >
+                <input type="radio" name="existing-employee" checked={selectedId === emp.id} onChange={() => setSelectedId(emp.id)} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-text">
+                    {emp.first_name} {emp.last_name}
+                  </span>
+                  <span className="block truncate text-xs text-text-dim">{emp.work_email}</span>
+                  {currentPosition && <span className="block truncate text-xs text-warning">Currently: {currentPosition}</span>}
                 </span>
-                <span className="block truncate text-xs text-text-dim">{emp.work_email}</span>
-              </span>
-            </label>
-          ))}
+              </label>
+            );
+          })}
         </div>
+      )}
+
+      {selectedCurrentPosition && (
+        <p className="rounded-edge-sm border border-warning/30 bg-warning-soft px-2.5 py-2 text-xs text-warning">
+          This will move them out of <span className="font-medium">{selectedCurrentPosition}</span>, leaving it vacant.
+        </p>
       )}
 
       <Button type="button" disabled={!selectedId || pending} onClick={() => selectedId && onAssign(selectedId)}>
