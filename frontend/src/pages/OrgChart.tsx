@@ -72,6 +72,32 @@ function buildTree(positions: Position[], isRoot: (p: Position) => boolean): Tre
   return roots.map(build);
 }
 
+// Chart view: a manager's direct reports get visually clustered by
+// department the moment they span more than one -- a flat row mixing
+// Lesson Support, Account Management, and Teacher Recruitment positions
+// (Chief Operating Officer's real reports) reads as an undifferentiated
+// wall of cards with no sense of which belongs where. Grouped by
+// org_unit_id, sorted alphabetically by department name (same order the
+// legend/department chips already use, via unitsForCompany), so ordering
+// stays predictable. Every department present gets its own cluster, even a
+// singleton -- the point is separating departments from each other, not
+// just tidying up wide ones.
+function groupChildrenByDepartment(
+  children: TreeNode[],
+  departmentNameForPosition: (position: Position) => string,
+): { orgUnitId: string; nodes: TreeNode[] }[] {
+  const groups = new Map<string, TreeNode[]>();
+  for (const child of children) {
+    const orgUnitId = child.position.org_unit_id;
+    const list = groups.get(orgUnitId) ?? [];
+    list.push(child);
+    groups.set(orgUnitId, list);
+  }
+  return [...groups.entries()]
+    .map(([orgUnitId, nodes]) => ({ orgUnitId, nodes }))
+    .sort((a, b) => departmentNameForPosition(a.nodes[0].position).localeCompare(departmentNameForPosition(b.nodes[0].position)));
+}
+
 const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 1.5;
 const ZOOM_STEP = 0.1;
@@ -322,6 +348,16 @@ export default function OrgChart() {
     return activeDeptIds.has(node.position.org_unit_id);
   };
 
+  // Same axis as passesDeptFilter, keyed directly on an org_unit_id -- used
+  // to dim a whole department cluster box in Chart view as one unit, not
+  // just its individual cards (matching List view's swimlane-dimming
+  // precedent: dimming only the rows inside a collapsed section reads as
+  // "nothing happened" until it's expanded).
+  const passesDeptFilterForOrgUnit = (orgUnitId: string): boolean => {
+    if (activeDeptIds.size === 0) return true;
+    return activeDeptIds.has(orgUnitId);
+  };
+
   function toggle(id: string) {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -472,6 +508,7 @@ export default function OrgChart() {
       isDirectMatch={isDirectMatch}
       passesShowFilter={passesShowFilter}
       passesDeptFilter={passesDeptFilter}
+      passesDeptFilterForOrgUnit={passesDeptFilterForOrgUnit}
       colorIndexForPosition={colorIndexForPosition}
       departmentNameForPosition={departmentNameForPosition}
       canViewProfiles={canViewProfiles}
@@ -632,6 +669,7 @@ export default function OrgChart() {
                             // it again would compound two opacity-35s into a
                             // near-invisible ~0.12.
                             passesDeptFilter={() => true}
+                            passesDeptFilterForOrgUnit={() => true}
                             colorIndexForPosition={colorIndexForPosition}
                             departmentNameForPosition={departmentNameForPosition}
                             canViewProfiles={canViewProfiles}
@@ -778,6 +816,7 @@ interface NodeSharedProps {
   isDirectMatch: (node: TreeNode) => boolean;
   passesShowFilter: (node: TreeNode) => boolean;
   passesDeptFilter: (node: TreeNode) => boolean;
+  passesDeptFilterForOrgUnit: (orgUnitId: string) => boolean;
   colorIndexForPosition: (position: Position) => number;
   departmentNameForPosition: (position: Position) => string;
   canViewProfiles: boolean;
@@ -832,6 +871,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
     isDirectMatch,
     passesShowFilter,
     passesDeptFilter,
+    passesDeptFilterForOrgUnit,
     colorIndexForPosition,
     departmentNameForPosition,
     canViewProfiles,
@@ -935,11 +975,39 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
 
       {hasChildren && !isCollapsed && visibleChildren.length > 0 && (
         <ul className="org-tree">
-          {visibleChildren.map((child) => (
-            <li key={child.position.id}>
-              <OrgNode node={child} depth={depth + 1} {...shared} />
-            </li>
-          ))}
+          {(() => {
+            const departmentGroups = groupChildrenByDepartment(visibleChildren, departmentNameForPosition);
+            // Only cluster when there's actually more than one department to
+            // tell apart -- a single-department manager (the common case)
+            // renders exactly as before, one plain <li> per child.
+            if (departmentGroups.length <= 1) {
+              return visibleChildren.map((child) => (
+                <li key={child.position.id}>
+                  <OrgNode node={child} depth={depth + 1} {...shared} />
+                </li>
+              ));
+            }
+            return departmentGroups.map((group) => {
+              const groupColorIndex = colorIndexForPosition(group.nodes[0].position);
+              const groupDeptName = departmentNameForPosition(group.nodes[0].position);
+              const groupDimmed = !passesDeptFilterForOrgUnit(group.orgUnitId);
+              return (
+                <li key={group.orgUnitId}>
+                  <div className={`rounded-edge-md border border-border bg-surface2/40 p-3 ${groupDimmed ? "opacity-35" : ""}`}>
+                    <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(groupColorIndex)}`} />
+                      {groupDeptName}
+                    </div>
+                    <div className="flex flex-wrap items-start gap-3">
+                      {group.nodes.map((child) => (
+                        <OrgNode key={child.position.id} node={child} depth={depth + 1} {...shared} />
+                      ))}
+                    </div>
+                  </div>
+                </li>
+              );
+            });
+          })()}
         </ul>
       )}
     </div>
