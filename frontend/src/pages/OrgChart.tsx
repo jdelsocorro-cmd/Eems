@@ -15,6 +15,7 @@ import {
   IconMinus,
   IconPlus,
   IconUser,
+  IconUserPlus,
   IconUserStar,
   IconUsers,
 } from "@tabler/icons-react";
@@ -27,6 +28,7 @@ import { EmployeeAvatar } from "@/components/orgchart/EmployeeAvatar";
 import { OrgChartLegend, legendSwatchClass } from "@/components/orgchart/OrgChartLegend";
 import { OrgChartMinimap, type MinimapNode } from "@/components/orgchart/OrgChartMinimap";
 import { EmployeeSidePanel } from "@/components/orgchart/EmployeeSidePanel";
+import { AssignConsultantPanel } from "@/components/orgchart/AssignConsultantPanel";
 import { DepartmentGrid, fillRateBadgeClass, type DepartmentStat } from "@/components/orgchart/DepartmentGrid";
 import "./OrgChart.css";
 
@@ -112,8 +114,12 @@ export default function OrgChart() {
   const [isExporting, setIsExporting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [assigningNode, setAssigningNode] = useState<TreeNode | null>(null);
   const { has } = usePermissions();
   const canViewProfiles = has("employee", "view_360");
+  const canAssignExisting = has("org_structure", "manage");
+  const canCreateNew = has("employee", "create");
+  const canAssignVacant = canAssignExisting || canCreateNew;
 
   const contentRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -190,6 +196,16 @@ export default function OrgChart() {
     }
     return map;
   }, [assignmentsQuery.data, employeesQuery.data]);
+
+  const positionsById = useMemo(() => new Map(companyPositions.map((p) => [p.id, p])), [companyPositions]);
+
+  // Candidates for the Assign Consultant panel's "Existing Employee" mode --
+  // active employees with no current primary assignment. Reuses data
+  // already fetched (employeesQuery/assignmentsQuery), no new query.
+  const unassignedEmployees = useMemo(() => {
+    const assignedIds = new Set((assignmentsQuery.data ?? []).filter((a) => a.is_primary).map((a) => a.employee_id));
+    return (employeesQuery.data ?? []).filter((e) => e.status === "active" && !assignedIds.has(e.id));
+  }, [employeesQuery.data, assignmentsQuery.data]);
 
   // Per-department snapshot, computed once and shared by Departments view
   // (decision 3) and List view's swimlanes (decision 4) -- headcount/fill
@@ -422,6 +438,8 @@ export default function OrgChart() {
       departmentNameForPosition={departmentNameForPosition}
       canViewProfiles={canViewProfiles}
       onSelectEmployee={setSelectedEmployeeId}
+      canAssignVacant={canAssignVacant}
+      onOpenAssign={setAssigningNode}
     />
   ));
 
@@ -580,6 +598,8 @@ export default function OrgChart() {
                             departmentNameForPosition={departmentNameForPosition}
                             canViewProfiles={canViewProfiles}
                             onSelectEmployee={setSelectedEmployeeId}
+                            canAssignVacant={canAssignVacant}
+                            onOpenAssign={setAssigningNode}
                           />
                         ))}
                       </div>
@@ -641,6 +661,23 @@ export default function OrgChart() {
       </div>
 
       {selectedEmployeeId && <EmployeeSidePanel employeeId={selectedEmployeeId} onClose={() => setSelectedEmployeeId(null)} />}
+
+      {assigningNode && (
+        <AssignConsultantPanel
+          position={assigningNode.position}
+          departmentName={departmentNameForPosition(assigningNode.position)}
+          reportsToTitle={
+            assigningNode.position.reports_to_position_id
+              ? positionsById.get(assigningNode.position.reports_to_position_id)?.title ?? null
+              : null
+          }
+          directReportsCount={assigningNode.children.length}
+          unassignedEmployees={unassignedEmployees}
+          canAssignExisting={canAssignExisting}
+          canCreateNew={canCreateNew}
+          onClose={() => setAssigningNode(null)}
+        />
+      )}
     </div>
   );
 }
@@ -706,6 +743,8 @@ interface NodeSharedProps {
   departmentNameForPosition: (position: Position) => string;
   canViewProfiles: boolean;
   onSelectEmployee: (employeeId: string) => void;
+  canAssignVacant: boolean;
+  onOpenAssign: (node: TreeNode) => void;
 }
 
 function EmployeeNameControl({
@@ -758,6 +797,8 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
     departmentNameForPosition,
     canViewProfiles,
     onSelectEmployee,
+    canAssignVacant,
+    onOpenAssign,
   } = shared;
   const isCollapsed = collapsed.has(node.position.id);
   const employee = employeeForPosition.get(node.position.id);
@@ -828,6 +869,29 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
             <span className="shrink-0 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning">Vacant</span>
           ) : null}
         </div>
+
+        {!employee && canAssignVacant && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenAssign(node);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+                e.preventDefault();
+                onOpenAssign(node);
+              }
+            }}
+            className={`flex items-center justify-center gap-1 rounded-edge-sm border border-dashed py-1 text-[10px] font-semibold ${
+              isRoot ? "border-white/30 text-white/80 hover:bg-white/10" : "border-edge-teal/50 text-edge-teal hover:bg-edge-teal/10"
+            }`}
+          >
+            <IconUserPlus size={11} /> Assign Consultant
+          </span>
+        )}
       </button>
 
       {hasChildren && !isCollapsed && visibleChildren.length > 0 && (
@@ -844,8 +908,20 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
 }
 
 function TreeListRow({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
-  const { collapsed, onToggle, employeeForPosition, matchesSearch, isDirectMatch, passesShowFilter, passesDeptFilter, colorIndexForPosition, canViewProfiles, onSelectEmployee } =
-    shared;
+  const {
+    collapsed,
+    onToggle,
+    employeeForPosition,
+    matchesSearch,
+    isDirectMatch,
+    passesShowFilter,
+    passesDeptFilter,
+    colorIndexForPosition,
+    canViewProfiles,
+    onSelectEmployee,
+    canAssignVacant,
+    onOpenAssign,
+  } = shared;
   const isCollapsed = collapsed.has(node.position.id);
   const employee = employeeForPosition.get(node.position.id);
   const hasChildren = node.children.length > 0;
@@ -880,6 +956,18 @@ function TreeListRow({ node, depth, ...shared }: { node: TreeNode; depth: number
           // the visual loudness Chart view's badge form needs (where
           // there's no swimlane-level context to lean on instead).
           <span className="text-xs italic leading-tight text-text-dim">Open position</span>
+        )}
+        {!employee && canAssignVacant && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenAssign(node);
+            }}
+            className="flex items-center gap-1 rounded-full border border-dashed border-edge-teal/50 px-2 py-0.5 text-[10px] font-semibold text-edge-teal hover:bg-edge-teal/10"
+          >
+            <IconUserPlus size={10} /> Assign
+          </button>
         )}
         {hasChildren && <span className="ml-auto text-xs text-text-dim">{node.children.length} direct report(s)</span>}
       </div>
