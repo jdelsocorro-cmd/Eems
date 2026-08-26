@@ -854,7 +854,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
       <button
         type="button"
         onClick={() => hasChildren && onToggle(node.position.id)}
-        className={`group relative flex w-52 flex-col gap-2 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(depth, borderClass)} ${
+        className={`group relative flex w-64 flex-col gap-2 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(depth, borderClass)} ${
           hasChildren ? "cursor-pointer" : "cursor-default"
         } ${isDirectMatch(node) ? "ring-2 ring-edge-teal ring-offset-1 ring-offset-surface" : ""} ${dimmed ? "opacity-35" : ""}`}
       >
@@ -876,7 +876,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <span className={`block truncate text-xs font-semibold leading-tight ${isRoot ? "text-white" : "text-text"}`}>{node.position.title}</span>
+            <span className={`block text-xs font-semibold leading-snug ${isRoot ? "text-white" : "text-text"}`}>{node.position.title}</span>
             {employee ? (
               <EmployeeNameControl
                 employee={employee}
