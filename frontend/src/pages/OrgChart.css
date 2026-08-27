@@ -75,3 +75,32 @@
   height: 1.25rem;
   border-left: 1.5px solid var(--c-border-hover);
 }
+
+/* Expand feels alive instead of snapping in -- plays once on mount, so it
+   costs nothing structurally: a collapsed branch still isn't in the DOM at
+   all (unchanged from before), this only animates what was already about
+   to render the instant it appears. Collapse still has no matching
+   animation (an unmount can't reverse a CSS animation without a JS
+   coordination layer this app doesn't otherwise need) -- an accepted,
+   low-risk asymmetry rather than adding an animation dependency for one
+   direction. */
+@keyframes org-tree-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.org-tree-animate-in {
+  animation: org-tree-in 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .org-tree-animate-in {
+    animation: none;
+  }
+}

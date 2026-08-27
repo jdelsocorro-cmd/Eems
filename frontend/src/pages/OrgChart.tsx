@@ -12,6 +12,7 @@ import {
   IconDownload,
   IconFocus2,
   IconHierarchy3,
+  IconMap2,
   IconMinus,
   IconPlus,
   IconUser,
@@ -139,6 +140,7 @@ export default function OrgChart() {
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [isExporting, setIsExporting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [minimapVisible, setMinimapVisible] = useState(true);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [assigningNode, setAssigningNode] = useState<TreeNode | null>(null);
   const { has } = usePermissions();
@@ -611,6 +613,15 @@ export default function OrgChart() {
                 {isFullscreen ? <IconArrowsMinimize size={14} /> : <IconArrowsMaximize size={14} />}
                 {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
               </Button>
+              <Button
+                variant="toolbar"
+                size="sm"
+                active={minimapVisible}
+                onClick={() => setMinimapVisible((v) => !v)}
+                className="flex items-center gap-1.5"
+              >
+                <IconMap2 size={14} /> Minimap
+              </Button>
               <ToolbarDivider />
               <Button variant="primary" size="sm" onClick={exportPng} disabled={isExporting || visibleRoots.length === 0} className="flex items-center gap-1.5">
                 <IconDownload size={14} /> {isExporting ? "Exporting..." : "Export as PNG"}
@@ -729,7 +740,7 @@ export default function OrgChart() {
             ))}
         </Card>
 
-        {viewMode === "chart" && tree.length > 0 && (
+        {viewMode === "chart" && tree.length > 0 && minimapVisible && (
           <div className="absolute bottom-4 right-4">
             <OrgChartMinimap tree={minimapTree} viewportRef={viewportRef} contentSize={naturalSize} zoom={zoom} />
           </div>
@@ -863,15 +874,26 @@ function EmployeeNameControl({
 }
 
 function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
+  return (
+    <div className="flex flex-col items-center">
+      <OrgNodeCard node={node} depth={depth} {...shared} />
+      <OrgNodeChildren node={node} depth={depth} {...shared} />
+    </div>
+  );
+}
+
+// Just the card -- no recursion into children. Split out from OrgNode so a
+// department cluster box (OrgNodeChildren, below) can render a row of
+// member cards without also pulling each member's full descendant subtree
+// into the box -- see the box-sizing fix this split exists for.
+function OrgNodeCard({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
   const {
     collapsed,
     onToggle,
     employeeForPosition,
-    matchesSearch,
     isDirectMatch,
     passesShowFilter,
     passesDeptFilter,
-    passesDeptFilterForOrgUnit,
     colorIndexForPosition,
     departmentNameForPosition,
     canViewProfiles,
@@ -882,7 +904,6 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
   const isCollapsed = collapsed.has(node.position.id);
   const employee = employeeForPosition.get(node.position.id);
   const hasChildren = node.children.length > 0;
-  const visibleChildren = node.children.filter(matchesSearch);
   const colorIndex = colorIndexForPosition(node.position);
   const departmentName = departmentNameForPosition(node.position);
   const borderClass = DEPARTMENT_BORDER_CLASSES[colorIndex % DEPARTMENT_BORDER_CLASSES.length];
@@ -890,127 +911,157 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
   const dimmed = !passesShowFilter(node) || !passesDeptFilter(node);
 
   return (
-    <div className="flex flex-col items-center">
-      <button
-        type="button"
-        onClick={() => hasChildren && onToggle(node.position.id)}
-        className={`group relative flex w-64 flex-col gap-2 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(depth, borderClass)} ${
-          hasChildren ? "cursor-pointer" : "cursor-default"
-        } ${isDirectMatch(node) ? "ring-2 ring-edge-teal ring-offset-1 ring-offset-surface" : ""} ${dimmed ? "opacity-35" : ""}`}
-      >
-        <div className="flex items-center gap-2">
-          {employee ? (
-            <EmployeeAvatar
-              firstName={employee.first_name}
-              lastName={employee.last_name}
-              colorIndex={colorIndex}
-              size="sm"
-              variant={isRoot ? "soft" : "solid"}
-              className={isRoot ? "bg-white/15 text-white" : undefined}
-            />
-          ) : (
-            <span
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed ${isRoot ? "border-white/30 text-white/50" : "border-text-dim text-text-dim"}`}
-            >
-              <IconUser size={13} />
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <span className={`block text-xs font-semibold leading-snug ${isRoot ? "text-white" : "text-text"}`}>{node.position.title}</span>
-            {employee ? (
-              <EmployeeNameControl
-                employee={employee}
-                canViewProfiles={canViewProfiles}
-                onSelectEmployee={onSelectEmployee}
-                className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}
-              />
-            ) : (
-              <span className={`block truncate text-[11px] italic leading-tight ${isRoot ? "text-white/50" : "text-text-dim"}`}>Open position</span>
-            )}
-          </div>
-        </div>
-
-        <div className={`flex items-center justify-between border-t pt-1.5 ${isRoot ? "border-white/15" : "border-border"}`}>
-          <span className={`flex min-w-0 items-center gap-1.5 truncate text-[10px] font-medium ${isRoot ? "text-white/60" : "text-text-dim"}`}>
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(colorIndex)}`} />
-            <span className="truncate">{departmentName}</span>
-          </span>
-          {hasChildren ? (
-            <span
-              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${isRoot ? "bg-white/10 text-white/70" : "bg-surface3 text-text-muted"}`}
-            >
-              <span className="inline-flex items-center gap-0.5">
-                {isCollapsed ? <IconChevronRight size={10} /> : <IconChevronDown size={10} />}
-                {node.children.length} report{node.children.length === 1 ? "" : "s"}
-              </span>
-            </span>
-          ) : !employee ? (
-            <span className="shrink-0 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning">Vacant</span>
-          ) : null}
-        </div>
-
-        {!employee && canAssignVacant && (
+    <button
+      type="button"
+      onClick={() => hasChildren && onToggle(node.position.id)}
+      className={`group relative flex w-64 flex-col gap-2 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(depth, borderClass)} ${
+        hasChildren ? "cursor-pointer" : "cursor-default"
+      } ${isDirectMatch(node) ? "ring-2 ring-edge-teal ring-offset-1 ring-offset-surface" : ""} ${dimmed ? "opacity-35" : ""}`}
+    >
+      <div className="flex items-center gap-2">
+        {employee ? (
+          <EmployeeAvatar
+            firstName={employee.first_name}
+            lastName={employee.last_name}
+            colorIndex={colorIndex}
+            size="sm"
+            variant={isRoot ? "soft" : "solid"}
+            className={isRoot ? "bg-white/15 text-white" : undefined}
+          />
+        ) : (
           <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenAssign(node);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.stopPropagation();
-                e.preventDefault();
-                onOpenAssign(node);
-              }
-            }}
-            className={`flex items-center justify-center gap-1 rounded-edge-sm border border-dashed py-1 text-[10px] font-semibold ${
-              isRoot ? "border-white/30 text-white/80 hover:bg-white/10" : "border-edge-teal/50 text-edge-teal hover:bg-edge-teal/10"
-            }`}
+            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed ${isRoot ? "border-white/30 text-white/50" : "border-text-dim text-text-dim"}`}
           >
-            <IconUserPlus size={11} /> Assign Consultant
+            <IconUser size={13} />
           </span>
         )}
-      </button>
+        <div className="min-w-0 flex-1">
+          <span className={`block text-xs font-semibold leading-snug ${isRoot ? "text-white" : "text-text"}`}>{node.position.title}</span>
+          {employee ? (
+            <EmployeeNameControl
+              employee={employee}
+              canViewProfiles={canViewProfiles}
+              onSelectEmployee={onSelectEmployee}
+              className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}
+            />
+          ) : (
+            <span className={`block truncate text-[11px] italic leading-tight ${isRoot ? "text-white/50" : "text-text-dim"}`}>Open position</span>
+          )}
+        </div>
+      </div>
 
-      {hasChildren && !isCollapsed && visibleChildren.length > 0 && (
-        <ul className="org-tree">
-          {(() => {
-            const departmentGroups = groupChildrenByDepartment(visibleChildren, departmentNameForPosition);
-            // Only cluster when there's actually more than one department to
-            // tell apart -- a single-department manager (the common case)
-            // renders exactly as before, one plain <li> per child.
-            if (departmentGroups.length <= 1) {
-              return visibleChildren.map((child) => (
-                <li key={child.position.id}>
-                  <OrgNode node={child} depth={depth + 1} {...shared} />
-                </li>
-              ));
+      <div className={`flex items-center justify-between border-t pt-1.5 ${isRoot ? "border-white/15" : "border-border"}`}>
+        <span className={`flex min-w-0 items-center gap-1.5 truncate text-[10px] font-medium ${isRoot ? "text-white/60" : "text-text-dim"}`}>
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(colorIndex)}`} />
+          <span className="truncate">{departmentName}</span>
+        </span>
+        {hasChildren ? (
+          <span
+            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${isRoot ? "bg-white/10 text-white/70" : "bg-surface3 text-text-muted"}`}
+          >
+            <span className="inline-flex items-center gap-0.5">
+              {isCollapsed ? <IconChevronRight size={10} /> : <IconChevronDown size={10} />}
+              {node.children.length} report{node.children.length === 1 ? "" : "s"}
+            </span>
+          </span>
+        ) : !employee ? (
+          <span className="shrink-0 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning">Vacant</span>
+        ) : null}
+      </div>
+
+      {!employee && canAssignVacant && (
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenAssign(node);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation();
+              e.preventDefault();
+              onOpenAssign(node);
             }
-            return departmentGroups.map((group) => {
-              const groupColorIndex = colorIndexForPosition(group.nodes[0].position);
-              const groupDeptName = departmentNameForPosition(group.nodes[0].position);
-              const groupDimmed = !passesDeptFilterForOrgUnit(group.orgUnitId);
-              return (
-                <li key={group.orgUnitId}>
-                  <div className={`rounded-edge-md border border-border bg-surface2/40 p-3 ${groupDimmed ? "opacity-35" : ""}`}>
-                    <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(groupColorIndex)}`} />
-                      {groupDeptName}
-                    </div>
-                    <div className="flex flex-wrap items-start gap-3">
-                      {group.nodes.map((child) => (
-                        <OrgNode key={child.position.id} node={child} depth={depth + 1} {...shared} />
-                      ))}
-                    </div>
-                  </div>
-                </li>
-              );
-            });
-          })()}
-        </ul>
+          }}
+          className={`flex items-center justify-center gap-1 rounded-edge-sm border border-dashed py-1 text-[10px] font-semibold ${
+            isRoot ? "border-white/30 text-white/80 hover:bg-white/10" : "border-edge-teal/50 text-edge-teal hover:bg-edge-teal/10"
+          }`}
+        >
+          <IconUserPlus size={11} /> Assign Consultant
+        </span>
       )}
-    </div>
+    </button>
+  );
+}
+
+// A node's children, flat or department-clustered. Recursive: a clustered
+// member's own children (if any) render via this same function, so a
+// department box only ever wraps its direct members' cards -- never their
+// descendant subtrees, which is what caused the Executive cluster to
+// balloon to 7500+px (COO's entire downstream org rendering inside the
+// same box as her cluster-mate). A member's subtree hangs below the box
+// instead, unconstrained by its border, exactly like any other wide
+// manager's row today.
+function OrgNodeChildren({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
+  const { collapsed, matchesSearch, colorIndexForPosition, departmentNameForPosition, passesDeptFilterForOrgUnit } = shared;
+  const isCollapsed = collapsed.has(node.position.id);
+  const hasChildren = node.children.length > 0;
+  const visibleChildren = node.children.filter(matchesSearch);
+
+  if (!hasChildren || isCollapsed || visibleChildren.length === 0) return null;
+
+  return (
+    <ul className="org-tree org-tree-animate-in">
+      {(() => {
+        const departmentGroups = groupChildrenByDepartment(visibleChildren, departmentNameForPosition);
+        // Only cluster when there's actually more than one department to
+        // tell apart -- a single-department manager (the common case)
+        // renders exactly as before, one plain <li> per child.
+        if (departmentGroups.length <= 1) {
+          return visibleChildren.map((child) => (
+            <li key={child.position.id}>
+              <OrgNode node={child} depth={depth + 1} {...shared} />
+            </li>
+          ));
+        }
+        return departmentGroups.map((group) => {
+          const groupColorIndex = colorIndexForPosition(group.nodes[0].position);
+          const groupDeptName = departmentNameForPosition(group.nodes[0].position);
+          const groupDimmed = !passesDeptFilterForOrgUnit(group.orgUnitId);
+          // Same visibility rule OrgNodeChildren itself uses -- a member
+          // whose children are all search-filtered-out shouldn't get an
+          // empty collector <li> below the box.
+          const membersWithChildren = group.nodes.filter((n) => n.children.filter(matchesSearch).length > 0);
+          return (
+            <li key={group.orgUnitId}>
+              <div className={`flex flex-col items-center gap-2 ${groupDimmed ? "opacity-35" : ""}`}>
+                <div className="rounded-edge-md border border-border bg-surface2/40 p-3">
+                  <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(groupColorIndex)}`} />
+                    {groupDeptName}
+                  </div>
+                  <div className="flex flex-wrap items-start gap-3">
+                    {group.nodes.map((child) => (
+                      <OrgNodeCard key={child.position.id} node={child} depth={depth + 1} {...shared} />
+                    ))}
+                  </div>
+                </div>
+                {membersWithChildren.length > 0 && (
+                  <ul className="org-tree">
+                    {membersWithChildren.map((child) => (
+                      <li key={child.position.id}>
+                        <OrgNodeChildren node={child} depth={depth + 1} {...shared} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </li>
+          );
+        });
+      })()}
+    </ul>
   );
 }
 

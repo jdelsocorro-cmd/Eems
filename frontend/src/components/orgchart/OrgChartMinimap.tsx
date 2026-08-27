@@ -91,7 +91,7 @@ export function OrgChartMinimap({
     <div
       onClick={jumpTo}
       title="Click to jump"
-      className="relative cursor-pointer overflow-hidden rounded-edge-sm border border-border bg-surface2"
+      className="relative cursor-pointer overflow-hidden rounded-edge-sm border border-border bg-surface2 opacity-50 transition-opacity hover:opacity-100 focus-within:opacity-100"
       style={{ width: MINIMAP_WIDTH, height: MINIMAP_HEIGHT }}
     >
       <div className="flex h-full w-full items-start justify-center gap-2 overflow-hidden p-2">
