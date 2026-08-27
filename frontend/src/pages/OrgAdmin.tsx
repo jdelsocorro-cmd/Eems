@@ -152,7 +152,15 @@ export default function OrgAdmin() {
   }
 
   const selectedUnit = unitsForCompany.find((u) => u.id === selectedUnitId) ?? null;
-  const positionsForUnit = (positionsQuery.data ?? []).filter((p) => p.org_unit_id === selectedUnitId);
+  // GET /positions has no ORDER BY (Postgres returns whatever physical
+  // order it has, not creation order) -- sorting alphabetically here makes
+  // a freshly-added or duplicated position land next to its
+  // same-titled/similarly-named peers instead of wherever the DB happened
+  // to put it, so a duplicate seat (e.g. "Copy & Content Writer -
+  // Freelance" x2) is immediately obvious side by side.
+  const positionsForUnit = (positionsQuery.data ?? [])
+    .filter((p) => p.org_unit_id === selectedUnitId)
+    .sort((a, b) => a.title.localeCompare(b.title));
 
   function exportOrgStructure() {
     const unitIds = new Set(unitsForCompany.map((u) => u.id));
