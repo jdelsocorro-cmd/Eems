@@ -3,29 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconChevronDown, IconChevronRight, IconDownload } from "@tabler/icons-react";
 
 import { apiClient, errorMessage } from "@/lib/apiClient";
+import { downloadCsv } from "@/lib/csv";
 import type { Company, OrgUnit, Position } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
-
-// Quotes a field only when it actually needs it (contains a comma, quote,
-// or newline) -- doubling any embedded quotes per the CSV spec. Position
-// titles here are known to contain commas ("Recruitment and Campaign
-// Specialist (Level 2)" is fine, but titles with "/" like "VP of
-// Partnerships / Squad 3 Lead" could still trip a naive join).
-function csvField(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
-
-function downloadCsv(filename: string, rows: string[][]) {
-  const csv = rows.map((row) => row.map(csvField).join(",")).join("\r\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
 
 interface UnitNode {
   unit: OrgUnit;

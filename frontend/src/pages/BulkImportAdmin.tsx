@@ -2,8 +2,26 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient, errorMessage } from "@/lib/apiClient";
-import type { Company, FieldStrategy, ImportBatch, ImportBatchRow, ImportMode, ImportRowAction } from "@/lib/types";
+import { downloadCsv } from "@/lib/csv";
+import type { Company, FieldStrategy, ImportBatch, ImportBatchRow, ImportMode, ImportRowAction, OrgUnit, Position, PositionAssignment } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
+
+// Exact header Bulk Import's own employee module expects (bulk_import.py's
+// IMPORT_MODULE_REGISTRY importable_fields) -- a vacant-positions template
+// built from this is directly re-uploadable once filled in, no translation
+// step.
+const EMPLOYEE_IMPORT_HEADER = [
+  "work_email",
+  "first_name",
+  "last_name",
+  "employee_number",
+  "personal_email",
+  "phone",
+  "hire_date",
+  "employment_type",
+  "org_unit_name",
+  "position_code",
+];
 
 const IMPORT_MODE_LABELS: Record<ImportMode, string> = {
   insert_only: "Insert New Only",
@@ -44,6 +62,12 @@ export default function BulkImportAdmin() {
 
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiClient.get<Company[]>("/companies") });
   const batchesQuery = useQuery({ queryKey: ["import-batches"], queryFn: () => apiClient.get<ImportBatch[]>("/import-batches") });
+  const unitsQuery = useQuery({ queryKey: ["org-units"], queryFn: () => apiClient.get<OrgUnit[]>("/org-units") });
+  const positionsQuery = useQuery({ queryKey: ["positions"], queryFn: () => apiClient.get<Position[]>("/positions") });
+  const assignmentsQuery = useQuery({
+    queryKey: ["position-assignments", "current"],
+    queryFn: () => apiClient.get<PositionAssignment[]>("/position-assignments?current_only=true"),
+  });
 
   // Fetched independently, not derived from batchesQuery.data.find(...) --
   // the history list and the currently-selected batch are two different
@@ -109,7 +133,14 @@ export default function BulkImportAdmin() {
         </p>
       </div>
 
-      <UploadForm companies={companiesQuery.data ?? []} onSubmit={(form) => uploadBatch.mutate(form)} pending={uploadBatch.isPending} />
+      <UploadForm
+        companies={companiesQuery.data ?? []}
+        units={unitsQuery.data ?? []}
+        positions={positionsQuery.data ?? []}
+        assignments={assignmentsQuery.data ?? []}
+        onSubmit={(form) => uploadBatch.mutate(form)}
+        pending={uploadBatch.isPending}
+      />
       {uploadBatch.isError && <ErrorBanner message={errorMessage(uploadBatch.error)} />}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -261,10 +292,16 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
 
 function UploadForm({
   companies,
+  units,
+  positions,
+  assignments,
   onSubmit,
   pending,
 }: {
   companies: Company[];
+  units: OrgUnit[];
+  positions: Position[];
+  assignments: PositionAssignment[];
   onSubmit: (form: FormData) => void;
   pending: boolean;
 }) {
@@ -284,6 +321,30 @@ function UploadForm({
     form.append("field_strategy", fieldStrategy);
     form.append("file", file);
     onSubmit(form);
+  }
+
+  // One row per vacant position in the selected company, org_unit_name and
+  // position_code already filled in -- same header Bulk Import's employee
+  // module expects (EMPLOYEE_IMPORT_HEADER), so the filled-in file uploads
+  // right back into this same form with no reformatting. A row still
+  // missing its name/email after filling in only some rows rejects
+  // individually on upload rather than blocking the rows that were filled
+  // in (bulk_import.py's required_fields check is per-row).
+  const unitNameById = new Map(units.map((u) => [u.id, u.name]));
+  const companyUnitIds = new Set(units.filter((u) => u.company_id === companyId).map((u) => u.id));
+  const filledPositionIds = new Set(assignments.filter((a) => a.is_primary).map((a) => a.position_id));
+  const vacantPositions = positions
+    .filter((p) => companyUnitIds.has(p.org_unit_id) && p.is_active && !filledPositionIds.has(p.id))
+    .slice()
+    .sort((a, b) => (unitNameById.get(a.org_unit_id) ?? "").localeCompare(unitNameById.get(b.org_unit_id) ?? "") || a.title.localeCompare(b.title));
+
+  function handleDownloadVacantTemplate() {
+    const rows = [
+      EMPLOYEE_IMPORT_HEADER,
+      ...vacantPositions.map((p) => ["", "", "", "", "", "", "", "", unitNameById.get(p.org_unit_id) ?? "", p.code]),
+    ];
+    const companyName = companies.find((c) => c.id === companyId)?.name ?? "company";
+    downloadCsv(`${companyName.replace(/\s+/g, "-").toLowerCase()}-vacant-positions-template.csv`, rows);
   }
 
   return (
@@ -361,7 +422,7 @@ function UploadForm({
           />
         </div>
       </div>
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={pending || !file || !companyId}>
           {pending ? "Uploading..." : "Upload & Preview"}
         </Button>
@@ -372,6 +433,16 @@ function UploadForm({
         >
           Download sample CSV
         </a>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={!companyId || vacantPositions.length === 0}
+          onClick={handleDownloadVacantTemplate}
+          title={!companyId ? "Select a company first" : undefined}
+        >
+          {companyId ? `Download vacant-positions template (${vacantPositions.length})` : "Download vacant-positions template"}
+        </Button>
       </div>
       </form>
     </Card>
