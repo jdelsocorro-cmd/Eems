@@ -6,6 +6,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import type { Employee, EmploymentType, OrgUnit, Position, PositionAssignment } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, LoadingState, SortHeader, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 import { EmployeeLink } from "@/components/EmployeeLink";
+import { PositionPicker } from "@/components/PositionPicker";
 
 const STATUS_STYLES: Record<Employee["status"], string> = {
   active: "bg-success-soft text-success",
@@ -440,63 +441,6 @@ export default function UserManagement() {
           )}
         </Card>
       </div>
-    </div>
-  );
-}
-
-function PositionPicker({
-  positions,
-  units,
-  onAssign,
-}: {
-  positions: Position[];
-  units: OrgUnit[];
-  onAssign: (positionId: string) => void;
-}) {
-  const [search, setSearch] = useState("");
-  const unitsById = new Map(units.map((u) => [u.id, u]));
-
-  const q = search.trim().toLowerCase();
-  const filtered = q
-    ? positions.filter((p) => `${p.title} ${unitsById.get(p.org_unit_id)?.name ?? ""}`.toLowerCase().includes(q))
-    : positions;
-
-  const grouped = new Map<string, Position[]>();
-  for (const p of filtered) {
-    const groupLabel = unitsById.get(p.org_unit_id)?.name ?? "Ungrouped";
-    const list = grouped.get(groupLabel) ?? [];
-    list.push(p);
-    grouped.set(groupLabel, list);
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Filter positions..."
-        className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
-      />
-      <select
-        defaultValue=""
-        onChange={(e) => {
-          if (e.target.value) onAssign(e.target.value);
-        }}
-        className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
-      >
-        <option value="" disabled>
-          Choose a position...
-        </option>
-        {[...grouped.entries()].map(([groupLabel, groupPositions]) => (
-          <optgroup key={groupLabel} label={groupLabel}>
-            {groupPositions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
     </div>
   );
 }

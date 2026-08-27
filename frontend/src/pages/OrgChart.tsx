@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   IconArrowsMaximize,
   IconArrowsMinimize,
+  IconArrowsRightLeft,
   IconBuilding,
   IconChevronDown,
   IconChevronRight,
@@ -30,6 +31,7 @@ import { OrgChartLegend, legendSwatchClass } from "@/components/orgchart/OrgChar
 import { OrgChartMinimap, type MinimapNode } from "@/components/orgchart/OrgChartMinimap";
 import { EmployeeSidePanel } from "@/components/orgchart/EmployeeSidePanel";
 import { AssignConsultantPanel } from "@/components/orgchart/AssignConsultantPanel";
+import { ReassignManagerPanel } from "@/components/orgchart/ReassignManagerPanel";
 import { DepartmentGrid, fillRateBadgeClass, type DepartmentStat } from "@/components/orgchart/DepartmentGrid";
 import "./OrgChart.css";
 
@@ -143,6 +145,7 @@ export default function OrgChart() {
   const [minimapVisible, setMinimapVisible] = useState(true);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [assigningNode, setAssigningNode] = useState<TreeNode | null>(null);
+  const [reassigningNode, setReassigningNode] = useState<TreeNode | null>(null);
   const { has } = usePermissions();
   const canViewProfiles = has("employee", "view_360");
   const canAssignExisting = has("org_structure", "manage");
@@ -517,6 +520,8 @@ export default function OrgChart() {
       onSelectEmployee={setSelectedEmployeeId}
       canAssignVacant={canAssignVacant}
       onOpenAssign={setAssigningNode}
+      canReassign={canAssignExisting}
+      onOpenReassign={setReassigningNode}
     />
   ));
 
@@ -687,6 +692,8 @@ export default function OrgChart() {
                             onSelectEmployee={setSelectedEmployeeId}
                             canAssignVacant={canAssignVacant}
                             onOpenAssign={setAssigningNode}
+                            canReassign={false}
+                            onOpenReassign={() => {}}
                           />
                         ))}
                       </div>
@@ -766,6 +773,20 @@ export default function OrgChart() {
           onClose={() => setAssigningNode(null)}
         />
       )}
+
+      {reassigningNode && (
+        <ReassignManagerPanel
+          position={reassigningNode.position}
+          currentReportsToTitle={
+            reassigningNode.position.reports_to_position_id
+              ? positionsById.get(reassigningNode.position.reports_to_position_id)?.title ?? null
+              : null
+          }
+          positions={companyPositions}
+          units={unitsForCompany}
+          onClose={() => setReassigningNode(null)}
+        />
+      )}
     </div>
   );
 }
@@ -834,6 +855,8 @@ interface NodeSharedProps {
   onSelectEmployee: (employeeId: string) => void;
   canAssignVacant: boolean;
   onOpenAssign: (node: TreeNode) => void;
+  canReassign: boolean;
+  onOpenReassign: (node: TreeNode) => void;
 }
 
 function EmployeeNameControl({
@@ -901,6 +924,8 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
     onSelectEmployee,
     canAssignVacant,
     onOpenAssign,
+    canReassign,
+    onOpenReassign,
   } = shared;
   const isCollapsed = collapsed.has(node.position.id);
   const employee = employeeForPosition.get(node.position.id);
@@ -957,18 +982,41 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(colorIndex)}`} />
             <span className="truncate">{departmentName}</span>
           </span>
-          {hasChildren ? (
-            <span
-              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${isRoot ? "bg-white/10 text-white/70" : "bg-surface3 text-text-muted"}`}
-            >
-              <span className="inline-flex items-center gap-0.5">
-                {isCollapsed ? <IconChevronRight size={10} /> : <IconChevronDown size={10} />}
-                {node.children.length} report{node.children.length === 1 ? "" : "s"}
+          <span className="flex shrink-0 items-center gap-1">
+            {hasChildren ? (
+              <span
+                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${isRoot ? "bg-white/10 text-white/70" : "bg-surface3 text-text-muted"}`}
+              >
+                <span className="inline-flex items-center gap-0.5">
+                  {isCollapsed ? <IconChevronRight size={10} /> : <IconChevronDown size={10} />}
+                  {node.children.length} report{node.children.length === 1 ? "" : "s"}
+                </span>
               </span>
-            </span>
-          ) : !employee ? (
-            <span className="shrink-0 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning">Vacant</span>
-          ) : null}
+            ) : !employee ? (
+              <span className="shrink-0 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning">Vacant</span>
+            ) : null}
+            {!isRoot && canReassign && (
+              <span
+                role="button"
+                tabIndex={0}
+                title="Reassign manager"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenReassign(node);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onOpenReassign(node);
+                  }
+                }}
+                className={`flex shrink-0 items-center justify-center rounded-full p-1 ${isRoot ? "text-white/60 hover:bg-white/10" : "text-text-dim hover:bg-surface3 hover:text-text"}`}
+              >
+                <IconArrowsRightLeft size={11} />
+              </span>
+            )}
+          </span>
         </div>
 
         {!employee && canAssignVacant && (
