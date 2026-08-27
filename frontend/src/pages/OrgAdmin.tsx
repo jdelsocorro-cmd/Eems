@@ -1,10 +1,31 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronRight, IconDownload } from "@tabler/icons-react";
 
 import { apiClient, errorMessage } from "@/lib/apiClient";
 import type { Company, OrgUnit, Position } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
+
+// Quotes a field only when it actually needs it (contains a comma, quote,
+// or newline) -- doubling any embedded quotes per the CSV spec. Position
+// titles here are known to contain commas ("Recruitment and Campaign
+// Specialist (Level 2)" is fine, but titles with "/" like "VP of
+// Partnerships / Squad 3 Lead" could still trip a naive join).
+function csvField(value: string): string {
+  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+function downloadCsv(filename: string, rows: string[][]) {
+  const csv = rows.map((row) => row.map(csvField).join(",")).join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 interface UnitNode {
   unit: OrgUnit;
@@ -153,15 +174,47 @@ export default function OrgAdmin() {
   const selectedUnit = unitsForCompany.find((u) => u.id === selectedUnitId) ?? null;
   const positionsForUnit = (positionsQuery.data ?? []).filter((p) => p.org_unit_id === selectedUnitId);
 
+  function exportOrgStructure() {
+    const unitIds = new Set(unitsForCompany.map((u) => u.id));
+    const unitNameById = new Map(unitsForCompany.map((u) => [u.id, u.name]));
+    const positionsForCompany = (positionsQuery.data ?? []).filter((p) => unitIds.has(p.org_unit_id));
+    const positionTitleById = new Map(positionsForCompany.map((p) => [p.id, p.title]));
+
+    const rows: string[][] = [
+      ["Department", "Position", "Code", "Reports To", "Employment Type", "Seniority Level", "Headcount Cap", "Status"],
+      ...positionsForCompany
+        .slice()
+        .sort((a, b) => (unitNameById.get(a.org_unit_id) ?? "").localeCompare(unitNameById.get(b.org_unit_id) ?? "") || a.title.localeCompare(b.title))
+        .map((p) => [
+          unitNameById.get(p.org_unit_id) ?? "",
+          p.title,
+          p.code,
+          p.reports_to_position_id ? (positionTitleById.get(p.reports_to_position_id) ?? "") : "(root)",
+          p.employment_type.replace("_", " "),
+          String(p.seniority_level),
+          String(p.headcount_cap),
+          p.is_active ? "Active" : "Inactive",
+        ]),
+    ];
+
+    const companyName = (companiesQuery.data ?? []).find((c) => c.id === activeCompanyId)?.name ?? "org-structure";
+    downloadCsv(`${companyName.replace(/\s+/g, "-").toLowerCase()}-org-structure.csv`, rows);
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold text-text">Org Admin</h1>
-        <p className="mt-0.5 text-xs text-text-muted">
-          Click a unit to select it. Use <span className="font-medium">+ child</span> to add nested units of any depth (division,
-          department, team -- whatever labels fit), <span className="font-medium">Move under...</span> to reorganize units, and{" "}
-          <span className="font-medium">In: Move to...</span> on a position to move it between units; every change is audit-logged.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-text">Org Admin</h1>
+          <p className="mt-0.5 text-xs text-text-muted">
+            Click a unit to select it. Use <span className="font-medium">+ child</span> to add nested units of any depth (division,
+            department, team -- whatever labels fit), <span className="font-medium">Move under...</span> to reorganize units, and{" "}
+            <span className="font-medium">In: Move to...</span> on a position to move it between units; every change is audit-logged.
+          </p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={exportOrgStructure} className="flex shrink-0 items-center gap-1.5">
+          <IconDownload size={14} /> Export CSV
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
