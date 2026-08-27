@@ -873,20 +873,21 @@ function EmployeeNameControl({
   );
 }
 
+// Card and its own subtree render together, always -- a node's
+// <div class="flex flex-col items-center"> naturally sizes to fit its own
+// subtree, and sibling nodes in an <ul class="org-tree"> lay out side by
+// side with connector lines that are structurally guaranteed correct,
+// since the card and its children are the same DOM unit. (A prior version
+// split this into a card-only component plus a separately-positioned
+// "collector" row for department clusters, to keep a cluster's box
+// compact -- that put the box row and the subtree row in two independent,
+// separately-centered flex containers with no shared coordinate system, so
+// a connector line pointing from "below the box" to a specific branch was
+// geometrically arbitrary. Measured live: branches off by 400-1300px from
+// their actual parent card, some closer to the wrong neighboring manager
+// than their own. Reverted -- see OrgNodeChildren's clustered branch below
+// for how compactness is achieved instead, without breaking this.)
 function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
-  return (
-    <div className="flex flex-col items-center">
-      <OrgNodeCard node={node} depth={depth} {...shared} />
-      <OrgNodeChildren node={node} depth={depth} {...shared} />
-    </div>
-  );
-}
-
-// Just the card -- no recursion into children. Split out from OrgNode so a
-// department cluster box (OrgNodeChildren, below) can render a row of
-// member cards without also pulling each member's full descendant subtree
-// into the box -- see the box-sizing fix this split exists for.
-function OrgNodeCard({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
   const {
     collapsed,
     onToggle,
@@ -911,98 +912,98 @@ function OrgNodeCard({ node, depth, ...shared }: { node: TreeNode; depth: number
   const dimmed = !passesShowFilter(node) || !passesDeptFilter(node);
 
   return (
-    <button
-      type="button"
-      onClick={() => hasChildren && onToggle(node.position.id)}
-      className={`group relative flex w-64 flex-col gap-2 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(depth, borderClass)} ${
-        hasChildren ? "cursor-pointer" : "cursor-default"
-      } ${isDirectMatch(node) ? "ring-2 ring-edge-teal ring-offset-1 ring-offset-surface" : ""} ${dimmed ? "opacity-35" : ""}`}
-    >
-      <div className="flex items-center gap-2">
-        {employee ? (
-          <EmployeeAvatar
-            firstName={employee.first_name}
-            lastName={employee.last_name}
-            colorIndex={colorIndex}
-            size="sm"
-            variant={isRoot ? "soft" : "solid"}
-            className={isRoot ? "bg-white/15 text-white" : undefined}
-          />
-        ) : (
-          <span
-            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed ${isRoot ? "border-white/30 text-white/50" : "border-text-dim text-text-dim"}`}
-          >
-            <IconUser size={13} />
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
-          <span className={`block text-xs font-semibold leading-snug ${isRoot ? "text-white" : "text-text"}`}>{node.position.title}</span>
+    <div className="flex flex-col items-center">
+      <button
+        type="button"
+        onClick={() => hasChildren && onToggle(node.position.id)}
+        className={`group relative flex w-64 flex-col gap-2 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(depth, borderClass)} ${
+          hasChildren ? "cursor-pointer" : "cursor-default"
+        } ${isDirectMatch(node) ? "ring-2 ring-edge-teal ring-offset-1 ring-offset-surface" : ""} ${dimmed ? "opacity-35" : ""}`}
+      >
+        <div className="flex items-center gap-2">
           {employee ? (
-            <EmployeeNameControl
-              employee={employee}
-              canViewProfiles={canViewProfiles}
-              onSelectEmployee={onSelectEmployee}
-              className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}
+            <EmployeeAvatar
+              firstName={employee.first_name}
+              lastName={employee.last_name}
+              colorIndex={colorIndex}
+              size="sm"
+              variant={isRoot ? "soft" : "solid"}
+              className={isRoot ? "bg-white/15 text-white" : undefined}
             />
           ) : (
-            <span className={`block truncate text-[11px] italic leading-tight ${isRoot ? "text-white/50" : "text-text-dim"}`}>Open position</span>
-          )}
-        </div>
-      </div>
-
-      <div className={`flex items-center justify-between border-t pt-1.5 ${isRoot ? "border-white/15" : "border-border"}`}>
-        <span className={`flex min-w-0 items-center gap-1.5 truncate text-[10px] font-medium ${isRoot ? "text-white/60" : "text-text-dim"}`}>
-          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(colorIndex)}`} />
-          <span className="truncate">{departmentName}</span>
-        </span>
-        {hasChildren ? (
-          <span
-            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${isRoot ? "bg-white/10 text-white/70" : "bg-surface3 text-text-muted"}`}
-          >
-            <span className="inline-flex items-center gap-0.5">
-              {isCollapsed ? <IconChevronRight size={10} /> : <IconChevronDown size={10} />}
-              {node.children.length} report{node.children.length === 1 ? "" : "s"}
+            <span
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed ${isRoot ? "border-white/30 text-white/50" : "border-text-dim text-text-dim"}`}
+            >
+              <IconUser size={13} />
             </span>
-          </span>
-        ) : !employee ? (
-          <span className="shrink-0 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning">Vacant</span>
-        ) : null}
-      </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <span className={`block text-xs font-semibold leading-snug ${isRoot ? "text-white" : "text-text"}`}>{node.position.title}</span>
+            {employee ? (
+              <EmployeeNameControl
+                employee={employee}
+                canViewProfiles={canViewProfiles}
+                onSelectEmployee={onSelectEmployee}
+                className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}
+              />
+            ) : (
+              <span className={`block truncate text-[11px] italic leading-tight ${isRoot ? "text-white/50" : "text-text-dim"}`}>Open position</span>
+            )}
+          </div>
+        </div>
 
-      {!employee && canAssignVacant && (
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenAssign(node);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
+        <div className={`flex items-center justify-between border-t pt-1.5 ${isRoot ? "border-white/15" : "border-border"}`}>
+          <span className={`flex min-w-0 items-center gap-1.5 truncate text-[10px] font-medium ${isRoot ? "text-white/60" : "text-text-dim"}`}>
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(colorIndex)}`} />
+            <span className="truncate">{departmentName}</span>
+          </span>
+          {hasChildren ? (
+            <span
+              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${isRoot ? "bg-white/10 text-white/70" : "bg-surface3 text-text-muted"}`}
+            >
+              <span className="inline-flex items-center gap-0.5">
+                {isCollapsed ? <IconChevronRight size={10} /> : <IconChevronDown size={10} />}
+                {node.children.length} report{node.children.length === 1 ? "" : "s"}
+              </span>
+            </span>
+          ) : !employee ? (
+            <span className="shrink-0 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning">Vacant</span>
+          ) : null}
+        </div>
+
+        {!employee && canAssignVacant && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
               e.stopPropagation();
-              e.preventDefault();
               onOpenAssign(node);
-            }
-          }}
-          className={`flex items-center justify-center gap-1 rounded-edge-sm border border-dashed py-1 text-[10px] font-semibold ${
-            isRoot ? "border-white/30 text-white/80 hover:bg-white/10" : "border-edge-teal/50 text-edge-teal hover:bg-edge-teal/10"
-          }`}
-        >
-          <IconUserPlus size={11} /> Assign Consultant
-        </span>
-      )}
-    </button>
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+                e.preventDefault();
+                onOpenAssign(node);
+              }
+            }}
+            className={`flex items-center justify-center gap-1 rounded-edge-sm border border-dashed py-1 text-[10px] font-semibold ${
+              isRoot ? "border-white/30 text-white/80 hover:bg-white/10" : "border-edge-teal/50 text-edge-teal hover:bg-edge-teal/10"
+            }`}
+          >
+            <IconUserPlus size={11} /> Assign Consultant
+          </span>
+        )}
+      </button>
+
+      <OrgNodeChildren node={node} depth={depth} {...shared} />
+    </div>
   );
 }
 
 // A node's children, flat or department-clustered. Recursive: a clustered
-// member's own children (if any) render via this same function, so a
-// department box only ever wraps its direct members' cards -- never their
-// descendant subtrees, which is what caused the Executive cluster to
-// balloon to 7500+px (COO's entire downstream org rendering inside the
-// same box as her cluster-mate). A member's subtree hangs below the box
-// instead, unconstrained by its border, exactly like any other wide
-// manager's row today.
+// member's own children (if any) render via this same function, so
+// clustering re-applies at every level a manager's own reports happen to
+// span multiple departments.
 function OrgNodeChildren({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
   const { collapsed, matchesSearch, colorIndexForPosition, departmentNameForPosition, passesDeptFilterForOrgUnit } = shared;
   const isCollapsed = collapsed.has(node.position.id);
@@ -1029,33 +1030,26 @@ function OrgNodeChildren({ node, depth, ...shared }: { node: TreeNode; depth: nu
           const groupColorIndex = colorIndexForPosition(group.nodes[0].position);
           const groupDeptName = departmentNameForPosition(group.nodes[0].position);
           const groupDimmed = !passesDeptFilterForOrgUnit(group.orgUnitId);
-          // Same visibility rule OrgNodeChildren itself uses -- a member
-          // whose children are all search-filtered-out shouldn't get an
-          // empty collector <li> below the box.
-          const membersWithChildren = group.nodes.filter((n) => n.children.filter(matchesSearch).length > 0);
           return (
             <li key={group.orgUnitId}>
-              <div className={`flex flex-col items-center gap-2 ${groupDimmed ? "opacity-35" : ""}`}>
-                <div className="rounded-edge-md border border-border bg-surface2/40 p-3">
-                  <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(groupColorIndex)}`} />
-                    {groupDeptName}
-                  </div>
-                  <div className="flex flex-wrap items-start gap-3">
-                    {group.nodes.map((child) => (
-                      <OrgNodeCard key={child.position.id} node={child} depth={depth + 1} {...shared} />
-                    ))}
-                  </div>
+              <div className={`flex flex-col items-center gap-1 ${groupDimmed ? "opacity-35" : ""}`}>
+                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(groupColorIndex)}`} />
+                  {groupDeptName}
                 </div>
-                {membersWithChildren.length > 0 && (
-                  <ul className="org-tree">
-                    {membersWithChildren.map((child) => (
-                      <li key={child.position.id}>
-                        <OrgNodeChildren node={child} depth={depth + 1} {...shared} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                {/* No box/border here deliberately -- each member is a full
+                    OrgNode (card + its own subtree, together), so this row
+                    can be as wide as the widest member's subtree needs
+                    without anything trying to visually contain it. A
+                    border trying to wrap that width is what broke both the
+                    box-sizing (fc454f5) and the connector-line alignment
+                    (this fix) in the two designs that came before this
+                    one. */}
+                <div className="flex flex-wrap items-start justify-center gap-3">
+                  {group.nodes.map((child) => (
+                    <OrgNode key={child.position.id} node={child} depth={depth + 1} {...shared} />
+                  ))}
+                </div>
               </div>
             </li>
           );
