@@ -565,37 +565,25 @@ export default function OrgChart() {
     return ids;
   }
 
-  // Auto-collapse on first load of a company: only nodes that actually
-  // BRANCH (more than one child) get collapsed, regardless of depth -- a
-  // single-child chain (e.g. Sr. Sales Manager -> Sr. Sales Development
-  // Representative -> Sales Development Representative) adds no extra
-  // visual width, so collapsing it under the same flat "depth >= 1" rule
-  // that keeps a wide, 30+ position chart readable was hiding real
-  // positions in any department shaped as a narrow chain instead of a wide
-  // tree -- confirmed live: Sales' 3rd-level position was fully correct in
-  // the data, just hidden two collapses deep by that rule. The root's
-  // direct reports stay visible either way (depth 0 is exempt, same as
-  // before); "Collapse all" (collectIdsAtDepth(0), below) is a separate,
-  // deliberate full-collapse action and is untouched by this rule.
-  function collectBranchingIdsBelowRoot(): Set<string> {
-    const ids = new Set<string>();
-    function walk(node: TreeNode, depth: number) {
-      if (depth >= 1 && node.children.length > 1) ids.add(node.position.id);
-      node.children.forEach((child) => walk(child, depth + 1));
-    }
-    tree.forEach((root) => walk(root, 0));
-    return ids;
-  }
-
-  // First view of a company shows just the top and its direct reports --
-  // full depth all at once is what made a 30+ position chart unreadable.
-  // Re-collapsing only happens when the selected company actually changes,
-  // never on a background refetch, so it doesn't fight the user's own
-  // expand/collapse clicks.
+  // First view of a company opens already focused on its root (the CEO) --
+  // not a separate "default view" from Focus Mode, the SAME one-level
+  // mechanism Focus Mode already uses. Superseded a branching-aware
+  // auto-collapse rule that tried to solve the same "don't dump the whole
+  // company on screen at once" problem a different way (collapse anyone
+  // with >1 child, regardless of depth) -- confirmed live this was the
+  // wrong fix to keep alongside a real Focus Mode: at the top level the CEO
+  // usually branches into 5-9 departments, so that rule collapsed the CEO's
+  // own row too, and depending on which children happened to branch,
+  // different companies could still overflow the screen width inconsistent
+  // with what Focus Mode guarantees everywhere else. Landing on the root
+  // gets the identical "always fits, click to drill" guarantee for free,
+  // with only one mechanism controlling it instead of two that could
+  // disagree. Seeded once per company (never on a background refetch) so
+  // it doesn't fight the user's own focus/expand/collapse clicks.
   useEffect(() => {
     if (tree.length > 0 && autoCollapsedForCompanyRef.current !== activeCompanyId) {
       autoCollapsedForCompanyRef.current = activeCompanyId;
-      setCollapsed(collectBranchingIdsBelowRoot());
+      setFocusedPositionId(tree[0]?.position.id ?? null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree, activeCompanyId]);
@@ -709,6 +697,16 @@ export default function OrgChart() {
 
   function expandAll() {
     setCollapsed(new Set());
+  }
+
+  // "Home" is the root focused, not focus cleared to null -- null would
+  // fall through to chartRootEntries' unfocused branch, the old wide
+  // multi-department view this same change replaced. Both the "Back to
+  // Organizational Chart" link and the breadcrumb's own root segment use
+  // this, so there's one definition of what "home" means, not two that
+  // could drift.
+  function goToRoot() {
+    setFocusedPositionId(tree[0]?.position.id ?? null);
   }
 
   function collapseAll() {
@@ -1095,17 +1093,21 @@ export default function OrgChart() {
             />
           )}
 
-          {viewMode === "chart" && focusedNode && (
+          {/* focusedDepth > 0 -- the root itself is the default landing
+              state now, not a drilled-down one, so this "back"/breadcrumb
+              chrome only earns its place once the user has actually
+              clicked one level deeper than home. */}
+          {viewMode === "chart" && focusedNode && focusedDepth > 0 && (
             <div className="mb-4 flex flex-col items-start gap-1.5">
               <button
                 type="button"
-                onClick={() => setFocusedPositionId(null)}
+                onClick={goToRoot}
                 className="flex items-center gap-1.5 text-sm font-medium text-edge-teal hover:underline"
               >
                 <IconArrowLeft size={14} /> Back to Organizational Chart
               </button>
               <div className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
-                <button type="button" onClick={() => setFocusedPositionId(null)} className="hover:text-text hover:underline">
+                <button type="button" onClick={goToRoot} className="hover:text-text hover:underline">
                   Organizational Chart
                 </button>
                 {focusBreadcrumb.map((position, index) => {
