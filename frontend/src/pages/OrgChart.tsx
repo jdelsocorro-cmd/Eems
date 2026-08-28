@@ -780,10 +780,7 @@ export default function OrgChart() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold uppercase tracking-wide text-text">Org Chart</h1>
-        <p className="mt-1 text-sm text-text-muted">Explore organizational structure, reporting relationships, and team composition.</p>
-      </div>
+      <h1 className="text-base font-semibold text-text">Org Chart</h1>
 
       <div className="flex flex-wrap items-end gap-3 rounded-edge-md bg-surface2 p-3">
         <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-text-muted">
@@ -814,24 +811,39 @@ export default function OrgChart() {
           </select>
         </label>
 
-        <div className="flex flex-1 flex-col gap-1">
+        <div className="relative min-w-[200px] flex-1">
+          <IconSearch size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-dim" />
+          {/* Ambient, borderless filter -- deliberately quieter than the "Find
+              anyone" button so the two read as different *kinds* of control,
+              not two competing search boxes: this one narrows what's already
+              on screen as you type, that one is a deliberate jump anywhere
+              in the company via ⌘K. */}
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or title..."
-            className="min-w-[200px] flex-1 rounded-edge-sm border border-border bg-surface px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
+            placeholder="Filter by name or title..."
+            className="w-full rounded-edge-sm border border-transparent bg-surface3 py-1.5 pl-8 pr-2 text-sm text-text outline-none focus:border-border-hover focus:bg-surface"
           />
         </div>
 
         <button
           type="button"
           onClick={() => setIsPaletteOpen(true)}
-          className="flex items-center gap-2 rounded-edge-sm border border-border bg-surface px-2.5 py-1.5 text-xs font-medium text-text-muted transition hover:border-border-hover hover:text-text"
+          className="flex items-center gap-2 rounded-edge-sm border border-border bg-surface px-2.5 py-1.5 text-sm font-medium text-text-muted transition hover:border-border-hover hover:text-text"
         >
           <IconSearch size={13} className="text-text-dim" />
           Find anyone
           <span className="rounded bg-surface3 px-1.5 py-0.5 text-[10px] font-semibold text-text-dim">⌘K</span>
         </button>
+
+        {(viewMode === "chart" || viewMode === "list") && (
+          <OrgChartLegend
+            departments={unitsForCompany.map((u) => ({ id: u.id, name: u.name, colorIndex: orgUnitColorIndex.get(u.id) ?? 0 }))}
+            activeIds={activeDeptIds}
+            onToggle={toggleDept}
+            onClear={() => setActiveDeptIds(new Set())}
+          />
+        )}
 
         <Toolbar>
           <Button variant="toolbar" size="sm" active={viewMode === "chart"} onClick={() => setViewMode("chart")}>
@@ -846,18 +858,10 @@ export default function OrgChart() {
         </Toolbar>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <StatStrip stats={stats} />
-      </div>
+      <StatStrip stats={stats} />
 
       {(viewMode === "chart" || viewMode === "list") && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <OrgChartLegend
-            departments={unitsForCompany.map((u) => ({ id: u.id, name: u.name, colorIndex: orgUnitColorIndex.get(u.id) ?? 0 }))}
-            activeIds={activeDeptIds}
-            onToggle={toggleDept}
-            onClear={() => setActiveDeptIds(new Set())}
-          />
+        <div className="flex flex-wrap items-center justify-end gap-3">
           {viewMode === "chart" && (
             <Toolbar>
               <Button variant="toolbar" size="sm" onClick={expandAll} className="flex items-center gap-1.5">
@@ -1117,31 +1121,37 @@ function StatStrip({
   // can never disagree don't convey two pieces of information; showing
   // both just reads as a stat-strip bug.
   const tiles = [
-    { label: "Total Employees", value: String(stats.totalEmployees), sub: "Across all departments", icon: IconUsers, accent: "bg-edge-teal" },
-    { label: "Departments", value: String(stats.departments), sub: "Active org units", icon: IconBuilding, accent: "bg-info" },
-    { label: "Managers", value: String(stats.managers), sub: "Incl. vacant seats", icon: IconUserStar, accent: "bg-[#542fc6]" },
+    { label: "Total Employees", value: String(stats.totalEmployees), sub: "Across all departments", icon: IconUsers },
+    { label: "Departments", value: String(stats.departments), sub: "Active org units", icon: IconBuilding },
+    { label: "Managers", value: String(stats.managers), sub: "Incl. vacant seats", icon: IconUserStar },
     {
       label: "Span of Control",
       value: stats.spanOfControl > 0 ? stats.spanOfControl.toFixed(1) + " avg" : "—",
       sub: "Direct reports per manager",
       icon: IconHierarchy3,
-      accent: "bg-warning",
     },
-    { label: "Last Position Change", value: stats.lastUpdated ?? "—", sub: "Most recent update", icon: IconClockEdit, accent: "bg-[#c62fa0]" },
+    { label: "Last Position Change", value: stats.lastUpdated ?? "—", sub: "Most recent update", icon: IconClockEdit },
   ];
 
+  // A single slim band with dividers, not five separately-elevated cards --
+  // these are orientation numbers a user checks in passing, not decisions
+  // made from this screen, so they don't need card-level visual weight
+  // (each card previously ran a different accent hue too, competing with
+  // the chart itself for the first thing the eye lands on). One neutral
+  // treatment here keeps color meaningful where it actually signals
+  // something: the insight banner and the fill-rate ring below.
   return (
-    <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="flex flex-wrap items-stretch divide-x divide-border rounded-edge-md border border-border bg-surface">
       {tiles.map((t) => (
-        <Card key={t.label} className="relative overflow-hidden p-3.5">
-          <div className={`absolute inset-x-0 top-0 h-[3px] ${t.accent}`} />
-          <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-text-muted">
-            <t.icon size={14} className="text-text-dim" />
-            {t.label}
-          </p>
-          <p className="mt-2 text-xl font-semibold leading-none text-text">{t.value}</p>
-          <p className="mt-1.5 text-[11px] text-text-dim">{t.sub}</p>
-        </Card>
+        <div key={t.label} className="flex min-w-[150px] flex-1 items-center gap-2 px-3.5 py-2.5">
+          <t.icon size={15} className="shrink-0 text-text-dim" />
+          <div className="min-w-0">
+            <p className="truncate text-[10px] font-medium uppercase tracking-wide text-text-muted">{t.label}</p>
+            <p className="truncate text-sm font-semibold leading-tight text-text">
+              {t.value} <span className="font-normal text-text-dim">· {t.sub}</span>
+            </p>
+          </div>
+        </div>
       ))}
     </div>
   );
