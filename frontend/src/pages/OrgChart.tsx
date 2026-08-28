@@ -316,19 +316,44 @@ export default function OrgChart() {
   const focusedNode = focusedPositionId ? nodeById.get(focusedPositionId) ?? null : null;
   const focusedDepth = focusedPositionId ? depthById.get(focusedPositionId) ?? 0 : 0;
 
-  // If the focused position was sitting collapsed (manual or auto-collapse),
-  // focusing on it must not land the user on a single childless-looking
-  // card -- reveal just that one node's own children. Deeper descendants
-  // keep whatever collapse state the user already had.
+  // Every ancestor from the CEO down to the focused person, so the
+  // breadcrumb can jump back to any step of a multi-level drill-down, not
+  // just the immediate department. Walked via reports_to_position_id
+  // (positionsById) rather than stored anywhere -- it's fully derivable
+  // from focusedPositionId, so there's no separate history state that could
+  // drift out of sync with it.
+  const focusBreadcrumb = useMemo(() => {
+    if (!focusedPositionId) return [];
+    const chain: Position[] = [];
+    let current = positionsById.get(focusedPositionId);
+    while (current) {
+      chain.unshift(current);
+      current = current.reports_to_position_id ? positionsById.get(current.reports_to_position_id) : undefined;
+    }
+    return chain;
+  }, [focusedPositionId, positionsById]);
+
+  // Focus Mode shows exactly one level: the focused person's own direct
+  // reports, never their grandchildren -- confirmed against the redesigned
+  // mockup as the exact behavior wanted ("it all fits in one window"),
+  // replacing the old behavior of revealing the focused node's own children
+  // while leaving deeper descendants at whatever collapse state they
+  // already had (which could show 2-3 more levels for a branch that hadn't
+  // been auto-collapsed). Every card's identity click already calls
+  // onFocusPosition, so clicking any of the one level of children shown
+  // here re-fires this same effect for the new target -- drilling deeper is
+  // "click again," not a separate code path.
   useEffect(() => {
     if (!focusedPositionId) return;
+    const node = nodeById.get(focusedPositionId);
+    if (!node) return;
     setCollapsed((prev) => {
-      if (!prev.has(focusedPositionId)) return prev;
       const next = new Set(prev);
       next.delete(focusedPositionId);
+      node.children.forEach((child) => next.add(child.position.id));
       return next;
     });
-  }, [focusedPositionId]);
+  }, [focusedPositionId, nodeById]);
 
   // Candidates for the Assign Consultant panel's "Existing Employee" mode --
   // every active employee, not just unassigned ones, so an admin can move
@@ -1080,11 +1105,24 @@ export default function OrgChart() {
                 <IconArrowLeft size={14} /> Back to Organizational Chart
               </button>
               <div className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
-                <span>Organizational Chart</span>
-                <span className="text-text-dim">/</span>
-                <span>{departmentNameForPosition(focusedNode.position)}</span>
-                <span className="text-text-dim">/</span>
-                <span className="font-medium text-text">{focusedNode.position.title}</span>
+                <button type="button" onClick={() => setFocusedPositionId(null)} className="hover:text-text hover:underline">
+                  Organizational Chart
+                </button>
+                {focusBreadcrumb.map((position, index) => {
+                  const isCurrent = index === focusBreadcrumb.length - 1;
+                  return (
+                    <span key={position.id} className="flex items-center gap-1.5">
+                      <span className="text-text-dim">/</span>
+                      {isCurrent ? (
+                        <span className="font-medium text-text">{position.title}</span>
+                      ) : (
+                        <button type="button" onClick={() => setFocusedPositionId(position.id)} className="hover:text-text hover:underline">
+                          {position.title}
+                        </button>
+                      )}
+                    </span>
+                  );
+                })}
               </div>
               <span className="rounded-full bg-edge-teal/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-edge-teal">
                 Focused View
