@@ -1256,6 +1256,29 @@ function tierTagLabel(tier: OrgTier): string {
   }
 }
 
+// A real "Chief ___ Officer" title has a universally-recognized 3-4 letter
+// code (CEO, COO, CFO, CHRO...) that says more than the structural tier
+// label it would otherwise show -- everyone already knows what "COO" means
+// without needing this app's own tier vocabulary. Deliberately narrow: only
+// fires for that specific pattern (plus the one common non-"Officer" exec
+// title, Chief of Staff) rather than inventing an acronym for every title --
+// "Director of Branding & Marketing" as "DBM" would be a code nobody
+// recognizes, which is worse than the honest, informative tier label it
+// would replace. Falls back to null (caller uses tierTagLabel) for anything
+// that doesn't cleanly match a real, known code.
+function positionCode(title: string): string | null {
+  const officerMatch = title.match(/^chief\s+(.+?)\s+officer\b/i);
+  if (officerMatch) {
+    const middleInitials = officerMatch[1]
+      .split(/\s+/)
+      .map((word) => word[0])
+      .join("");
+    return `C${middleInitials}O`.toUpperCase();
+  }
+  if (/^chief\s+of\s+staff\b/i.test(title)) return "COS";
+  return null;
+}
+
 interface NodeSharedProps {
   collapsed: Set<string>;
   onToggle: (id: string) => void;
@@ -1383,7 +1406,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
             isRoot ? "bg-edge-teal text-edge-navy" : "bg-surface2 text-text-dim"
           }`}
         >
-          {tierTagLabel(tier)}
+          {positionCode(node.position.title) ?? tierTagLabel(tier)}
         </span>
 
         <div className="flex items-center gap-2">
