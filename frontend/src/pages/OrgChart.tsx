@@ -1242,41 +1242,24 @@ function tierAvatarSize(tier: OrgTier): "sm" | "md" {
 
 // Removes the last bit of guesswork in reading rank off border-weight/shadow
 // alone -- shown on every card regardless of tier, since "which tier is
-// this" should never require learned literacy of the styling system.
-function tierTagLabel(tier: OrgTier): string {
-  switch (tier) {
-    case "executive":
-      return "Exec";
-    case "department_head":
-      return "Director";
-    case "manager":
-      return "Manager";
-    case "individual_contributor":
-      return "IC";
-  }
-}
-
-// A real "Chief ___ Officer" title has a universally-recognized 3-4 letter
-// code (CEO, COO, CFO, CHRO...) that says more than the structural tier
-// label it would otherwise show -- everyone already knows what "COO" means
-// without needing this app's own tier vocabulary. Deliberately narrow: only
-// fires for that specific pattern (plus the one common non-"Officer" exec
-// title, Chief of Staff) rather than inventing an acronym for every title --
-// "Director of Branding & Marketing" as "DBM" would be a code nobody
-// recognizes, which is worse than the honest, informative tier label it
-// would replace. Falls back to null (caller uses tierTagLabel) for anything
-// that doesn't cleanly match a real, known code.
-function positionCode(title: string): string | null {
-  const officerMatch = title.match(/^chief\s+(.+?)\s+officer\b/i);
-  if (officerMatch) {
-    const middleInitials = officerMatch[1]
-      .split(/\s+/)
-      .map((word) => word[0])
-      .join("");
-    return `C${middleInitials}O`.toUpperCase();
-  }
-  if (/^chief\s+of\s+staff\b/i.test(title)) return "COS";
-  return null;
+// this" should never require learned literacy of the styling system. The
+// first letter of each of a title's first three words/segments (space or
+// "/" separated), capped at 3 characters. This reproduces real recognized
+// codes for free, with no special-casing needed -- Chief Executive Officer
+// -> CEO, Chief Operating Officer -> COO, "Chief Of Staff / Legal Counsel"
+// -> COS (the "/" splits like a space, so it never reaches "Legal Counsel")
+// -- and gives every other title, including ones with no standard
+// abbreviation, the same short shorthand: Account Manager 1 -> AM1, Senior
+// Account Manager -> SAM.
+function positionCode(title: string): string {
+  return title
+    .trim()
+    .split(/[\s/]+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
 }
 
 interface NodeSharedProps {
@@ -1406,7 +1389,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
             isRoot ? "bg-edge-teal text-edge-navy" : "bg-surface2 text-text-dim"
           }`}
         >
-          {positionCode(node.position.title) ?? tierTagLabel(tier)}
+          {positionCode(node.position.title)}
         </span>
 
         <div className="flex items-center gap-2">
