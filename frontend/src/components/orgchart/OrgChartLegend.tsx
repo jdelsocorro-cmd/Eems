@@ -94,7 +94,7 @@ export function OrgChartLegend({
         {activeIds.size > 0 && (
           <span className="rounded-full bg-edge-teal px-1.5 py-0.5 text-[10px] font-semibold text-edge-navy">{activeIds.size}</span>
         )}
-        <IconChevronDown size={13} className="text-text-dim" />
+        <IconChevronDown size={13} className={`text-text-dim transition-transform ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen && (

@@ -44,7 +44,7 @@ const NAV_ITEMS: {
   requiredPermission?: [string, string];
 }[] = [
   { to: "/", label: "Dashboard", section: "workspace", icon: IconLayoutDashboard },
-  { to: "/org-chart", label: "Org Chart", section: "workspace", icon: IconAffiliate },
+  { to: "/org-chart", label: "Organizational Chart", section: "workspace", icon: IconAffiliate },
   { to: "/projects", label: "Projects", section: "workspace", icon: IconFolder },
   { to: "/tasks", label: "My Tasks", section: "workspace", icon: IconListCheck },
   { to: "/review-queue", label: "Review Queue", section: "workspace", icon: IconClipboardList },

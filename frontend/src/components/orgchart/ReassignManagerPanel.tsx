@@ -37,7 +37,7 @@ export function ReassignManagerPanel({
     mutationFn: (newReportsToPositionId: string) =>
       apiClient.post<Position>(`/positions/${position.id}/reparent`, {
         new_reports_to_position_id: newReportsToPositionId,
-        reason: "Reassigned via Org Chart",
+        reason: "Reassigned via Organizational Chart",
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["positions"] });

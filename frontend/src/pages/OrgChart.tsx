@@ -780,7 +780,7 @@ export default function OrgChart() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-base font-semibold text-text">Org Chart</h1>
+      <h1 className="text-base font-semibold text-text">Organizational Chart</h1>
 
       <div className="flex flex-wrap items-end gap-3 rounded-edge-md bg-surface2 p-3">
         <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-text-muted">
@@ -861,7 +861,7 @@ export default function OrgChart() {
       <StatStrip stats={stats} />
 
       {(viewMode === "chart" || viewMode === "list") && (
-        <div className="flex flex-wrap items-center justify-end gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {viewMode === "chart" && (
             <Toolbar>
               <Button variant="toolbar" size="sm" onClick={expandAll} className="flex items-center gap-1.5">
@@ -1032,10 +1032,10 @@ export default function OrgChart() {
                 onClick={() => setFocusedPositionId(null)}
                 className="flex items-center gap-1.5 text-sm font-medium text-edge-teal hover:underline"
               >
-                <IconArrowLeft size={14} /> Back to Org Chart
+                <IconArrowLeft size={14} /> Back to Organizational Chart
               </button>
               <div className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
-                <span>Org Chart</span>
+                <span>Organizational Chart</span>
                 <span className="text-text-dim">/</span>
                 <span>{departmentNameForPosition(focusedNode.position)}</span>
                 <span className="text-text-dim">/</span>
@@ -1143,13 +1143,14 @@ function StatStrip({
   return (
     <div className="flex flex-wrap items-stretch divide-x divide-border rounded-edge-md border border-border bg-surface">
       {tiles.map((t) => (
-        <div key={t.label} className="flex min-w-[150px] flex-1 items-center gap-2 px-3.5 py-2.5">
+        <div key={t.label} className="flex min-w-[170px] flex-1 items-center gap-2 px-3.5 py-2">
           <t.icon size={15} className="shrink-0 text-text-dim" />
           <div className="min-w-0">
             <p className="truncate text-[10px] font-medium uppercase tracking-wide text-text-muted">{t.label}</p>
-            <p className="truncate text-sm font-semibold leading-tight text-text">
-              {t.value} <span className="font-normal text-text-dim">· {t.sub}</span>
+            <p className="truncate text-sm font-semibold leading-tight text-text" title={`${t.value} — ${t.sub}`}>
+              {t.value}
             </p>
+            <p className="truncate text-[10.5px] leading-tight text-text-dim">{t.sub}</p>
           </div>
         </div>
       ))}
