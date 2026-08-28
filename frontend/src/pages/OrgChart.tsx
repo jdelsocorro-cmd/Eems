@@ -964,7 +964,25 @@ export default function OrgChart() {
                     </button>
                     {!isDeptCollapsed && (
                       <div className={`overflow-x-auto bg-surface ${listCompact ? "[&_td]:py-1 [&_th]:py-1.5" : ""}`}>
-                        <Table>
+                        {/* table-fixed + an explicit colgroup -- each department
+                            renders its own independent <table>, and native table
+                            auto-layout sizes columns per-table from that table's
+                            own content. Left to the default, Reports/Status (and
+                            everything else) land at a different x position in
+                            every swimlane depending on how long that department's
+                            longest Position/Manager text happens to be, so the
+                            columns visibly zigzag scrolling down the page instead
+                            of forming one clean grid. Fixed, shared percentages
+                            make every swimlane's table agree on where each column
+                            is, regardless of its own content. */}
+                        <Table className="table-fixed">
+                          <colgroup>
+                            <col className="w-[24%]" />
+                            <col className="w-[26%]" />
+                            <col className="w-[26%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[14%]" />
+                          </colgroup>
                           <TableHead>
                             <SortHeader label="Employee" column="employee" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} />
                             <SortHeader label="Position" column="position" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} />
@@ -1645,10 +1663,16 @@ function ListRow({
   const isSelected = !!employee && employee.id === selectedEmployeeId;
 
   return (
-    <Tr selected={isSelected} className={`${isDirectMatch(node) ? "bg-nav-active" : ""} ${dimmed ? "opacity-35" : ""}`}>
+    <Tr selected={isSelected} className={`hover:bg-surface2 ${isDirectMatch(node) ? "bg-nav-active" : ""} ${dimmed ? "opacity-35" : ""}`}>
       <Td>
         <div className="flex items-center gap-2.5">
-          <span className={`h-2 w-2 shrink-0 rounded-full ${legendSwatchClass(colorIndex)}`} />
+          {employee ? (
+            <EmployeeAvatar firstName={employee.first_name} lastName={employee.last_name} colorIndex={colorIndex} size="sm" />
+          ) : (
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed border-text-dim text-text-dim">
+              <IconUser size={13} />
+            </span>
+          )}
           {employee ? (
             <EmployeeNameControl employee={employee} canViewProfiles={canViewProfiles} onSelectEmployee={onSelectEmployee} className="truncate font-medium text-text" />
           ) : (
