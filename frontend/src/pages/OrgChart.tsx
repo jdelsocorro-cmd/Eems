@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  IconArrowLeft,
   IconArrowsMaximize,
   IconArrowsMinimize,
   IconArrowsRightLeft,
@@ -13,7 +14,6 @@ import {
   IconDownload,
   IconFocus2,
   IconHierarchy3,
-  IconMap2,
   IconMinus,
   IconPlus,
   IconUser,
@@ -28,7 +28,6 @@ import { Button, Card, EmptyState, LoadingState, Table, TableHead, Th, Toolbar, 
 import { usePermissions } from "@/hooks/usePermissions";
 import { EmployeeAvatar } from "@/components/orgchart/EmployeeAvatar";
 import { OrgChartLegend, legendSwatchClass } from "@/components/orgchart/OrgChartLegend";
-import { OrgChartMinimap, type MinimapNode } from "@/components/orgchart/OrgChartMinimap";
 import { EmployeeSidePanel } from "@/components/orgchart/EmployeeSidePanel";
 import { AssignConsultantPanel } from "@/components/orgchart/AssignConsultantPanel";
 import { ReassignManagerPanel } from "@/components/orgchart/ReassignManagerPanel";
@@ -152,7 +151,6 @@ export default function OrgChart() {
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [isExporting, setIsExporting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [minimapVisible, setMinimapVisible] = useState(true);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [assigningNode, setAssigningNode] = useState<TreeNode | null>(null);
   const [reassigningNode, setReassigningNode] = useState<TreeNode | null>(null);
@@ -248,6 +246,54 @@ export default function OrgChart() {
   }, [assignmentsQuery.data, employeesQuery.data]);
 
   const positionsById = useMemo(() => new Map(companyPositions.map((p) => [p.id, p])), [companyPositions]);
+
+  // Focus Mode -- deliberately has no state of its own. It's fully derived
+  // from selectedEmployeeId, which already exists as the trigger for
+  // EmployeeSidePanel: selecting someone focuses the chart on their
+  // position's subtree, and closing the panel (its own X, or the "Back to
+  // Org Chart" button below) un-focuses in the same action, since both are
+  // the same underlying state. nodeById/depthById give O(1) lookup of any
+  // position's TreeNode and its TRUE depth in the real company hierarchy --
+  // depth matters because the focused node must keep its real tier styling
+  // (tierForNode/tierStyle below), not get rendered as a fake depth-0
+  // "Executive" root just because it's the top of what's currently shown.
+  const { nodeById, depthById } = useMemo(() => {
+    const nodeMap = new Map<string, TreeNode>();
+    const depthMap = new Map<string, number>();
+    function walk(node: TreeNode, depth: number) {
+      nodeMap.set(node.position.id, node);
+      depthMap.set(node.position.id, depth);
+      node.children.forEach((child) => walk(child, depth + 1));
+    }
+    tree.forEach((root) => walk(root, 0));
+    return { nodeById: nodeMap, depthById: depthMap };
+  }, [tree]);
+
+  const positionIdForEmployeeId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [positionId, employee] of employeeForPosition) {
+      map.set(employee.id, positionId);
+    }
+    return map;
+  }, [employeeForPosition]);
+
+  const focusedPositionId = selectedEmployeeId ? positionIdForEmployeeId.get(selectedEmployeeId) ?? null : null;
+  const focusedNode = focusedPositionId ? nodeById.get(focusedPositionId) ?? null : null;
+  const focusedDepth = focusedPositionId ? depthById.get(focusedPositionId) ?? 0 : 0;
+
+  // If the focused position was sitting collapsed (manual or auto-collapse),
+  // focusing on it must not land the user on a single childless-looking
+  // card -- reveal just that one node's own children. Deeper descendants
+  // keep whatever collapse state the user already had.
+  useEffect(() => {
+    if (!focusedPositionId) return;
+    setCollapsed((prev) => {
+      if (!prev.has(focusedPositionId)) return prev;
+      const next = new Set(prev);
+      next.delete(focusedPositionId);
+      return next;
+    });
+  }, [focusedPositionId]);
 
   // Candidates for the Assign Consultant panel's "Existing Employee" mode --
   // every active employee, not just unassigned ones, so an admin can move
@@ -440,7 +486,7 @@ export default function OrgChart() {
     if (contentRef.current) {
       setNaturalSize({ width: contentRef.current.scrollWidth, height: contentRef.current.scrollHeight });
     }
-  }, [tree, collapsed, search, viewMode]);
+  }, [tree, collapsed, search, viewMode, focusedPositionId]);
 
   useEffect(() => {
     function onFullscreenChange() {
@@ -511,20 +557,19 @@ export default function OrgChart() {
     .map((dept) => ({ dept, roots: dept.deptTree.filter(matchesSearch) }))
     .filter(({ roots }) => !search.trim() || roots.length > 0);
 
-  function buildMinimapTree(nodes: TreeNode[]): MinimapNode[] {
-    return nodes.map((n) => ({
-      position: n.position,
-      colorIndex: colorIndexForPosition(n.position),
-      children: buildMinimapTree(n.children),
-    }));
-  }
-  const minimapTree = useMemo(() => buildMinimapTree(tree), [tree, orgUnitColorIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Chart view normally renders every real root at depth 0. Focus Mode
+  // swaps that for a single entry -- the focused node at its TRUE depth in
+  // the company hierarchy (see nodeById/depthById above), so it keeps its
+  // real tier styling instead of rendering as a fake depth-0 root.
+  const chartRootEntries: { node: TreeNode; depth: number }[] = focusedNode
+    ? [{ node: focusedNode, depth: focusedDepth }].filter((entry) => matchesSearch(entry.node))
+    : visibleRoots.map((node) => ({ node, depth: 0 }));
 
-  const chartNodes = visibleRoots.map((node) => (
+  const chartNodes = chartRootEntries.map(({ node, depth }) => (
     <OrgNode
       key={node.position.id}
       node={node}
-      depth={0}
+      depth={depth}
       collapsed={collapsed}
       onToggle={toggle}
       employeeForPosition={employeeForPosition}
@@ -640,17 +685,8 @@ export default function OrgChart() {
                 {isFullscreen ? <IconArrowsMinimize size={14} /> : <IconArrowsMaximize size={14} />}
                 {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
               </Button>
-              <Button
-                variant="toolbar"
-                size="sm"
-                active={minimapVisible}
-                onClick={() => setMinimapVisible((v) => !v)}
-                className="flex items-center gap-1.5"
-              >
-                <IconMap2 size={14} /> Minimap
-              </Button>
               <ToolbarDivider />
-              <Button variant="primary" size="sm" onClick={exportPng} disabled={isExporting || visibleRoots.length === 0} className="flex items-center gap-1.5">
+              <Button variant="primary" size="sm" onClick={exportPng} disabled={isExporting || chartRootEntries.length === 0} className="flex items-center gap-1.5">
                 <IconDownload size={14} /> {isExporting ? "Exporting..." : "Export as PNG"}
               </Button>
             </Toolbar>
@@ -769,8 +805,30 @@ export default function OrgChart() {
             />
           )}
 
+          {viewMode === "chart" && focusedNode && (
+            <div className="mb-4 flex flex-col items-start gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSelectedEmployeeId(null)}
+                className="flex items-center gap-1.5 text-sm font-medium text-edge-teal hover:underline"
+              >
+                <IconArrowLeft size={14} /> Back to Org Chart
+              </button>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
+                <span>Org Chart</span>
+                <span className="text-text-dim">/</span>
+                <span>{departmentNameForPosition(focusedNode.position)}</span>
+                <span className="text-text-dim">/</span>
+                <span className="font-medium text-text">{focusedNode.position.title}</span>
+              </div>
+              <span className="rounded-full bg-edge-teal/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-edge-teal">
+                Focused View
+              </span>
+            </div>
+          )}
+
           {viewMode === "chart" &&
-            visibleRoots.length > 0 &&
+            chartRootEntries.length > 0 &&
             (naturalSize.width > 0 ? (
               <div style={{ width: naturalSize.width * zoom, height: naturalSize.height * zoom }}>
                 <div ref={contentRef} style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: "max-content" }} className="flex gap-10">
@@ -783,12 +841,6 @@ export default function OrgChart() {
               </div>
             ))}
         </Card>
-
-        {viewMode === "chart" && tree.length > 0 && minimapVisible && (
-          <div className="absolute bottom-4 right-4">
-            <OrgChartMinimap tree={minimapTree} viewportRef={viewportRef} contentSize={naturalSize} zoom={zoom} />
-          </div>
-        )}
       </div>
 
       {selectedEmployeeId && <EmployeeSidePanel employeeId={selectedEmployeeId} onClose={() => setSelectedEmployeeId(null)} />}
