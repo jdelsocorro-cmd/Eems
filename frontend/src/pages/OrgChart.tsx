@@ -956,9 +956,8 @@ export default function OrgChart() {
                           <TableHead>
                             <SortHeader label="Employee" column="employee" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} />
                             <SortHeader label="Position" column="position" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} />
-                            <Th>Org Unit</Th>
                             <Th>Manager</Th>
-                            <SortHeader label="Direct Reports" column="reports" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} />
+                            <SortHeader label="Reports" column="reports" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} />
                             <SortHeader label="Status" column="status" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} />
                           </TableHead>
                           <tbody>
@@ -968,7 +967,6 @@ export default function OrgChart() {
                                 node={node}
                                 employeeForPosition={employeeForPosition}
                                 colorIndexForPosition={colorIndexForPosition}
-                                departmentNameForPosition={departmentNameForPosition}
                                 managerTitleForPosition={managerTitleForPosition}
                                 canViewProfiles={canViewProfiles}
                                 onSelectEmployee={setSelectedEmployeeId}
@@ -1591,8 +1589,12 @@ function OrgNodeChildren({ node, depth, ...shared }: { node: TreeNode; depth: nu
 }
 
 // Renders as a real <Tr> (via the shared Table primitives), one per
-// department swimlane's <tbody> row -- Employee | Position | Org Unit |
-// Manager | Direct Reports | Status. Flat (rows arrive pre-flattened via
+// department swimlane's <tbody> row -- Employee | Position | Manager |
+// Reports | Status. No Org Unit column: every row in a given swimlane
+// belongs to that swimlane's own department by construction (see
+// visibleDepartmentGroups), so it would always repeat the swimlane header's
+// own name -- zero information, and it was wrapping to 2 lines on every row
+// at this column width besides. Flat (rows arrive pre-flattened via
 // flattenTree + compareListRows), so there's no indentation, expand/collapse,
 // or recursion here -- the Manager column is what carries "who reports to
 // whom" once nesting is gone. Deliberately not reusing NodeSharedProps: most
@@ -1602,7 +1604,6 @@ function ListRow({
   node,
   employeeForPosition,
   colorIndexForPosition,
-  departmentNameForPosition,
   managerTitleForPosition,
   canViewProfiles,
   onSelectEmployee,
@@ -1616,7 +1617,6 @@ function ListRow({
   node: TreeNode;
   employeeForPosition: Map<string, Employee>;
   colorIndexForPosition: (position: Position) => number;
-  departmentNameForPosition: (position: Position) => string;
   managerTitleForPosition: (position: Position) => string;
   canViewProfiles: boolean;
   onSelectEmployee: (employeeId: string) => void;
@@ -1660,7 +1660,6 @@ function ListRow({
         </div>
       </Td>
       <Td className="text-text-muted">{node.position.title}</Td>
-      <Td className="text-text-muted">{departmentNameForPosition(node.position)}</Td>
       <Td className="text-text-muted">{managerTitleForPosition(node.position)}</Td>
       <Td className="text-right text-text-muted">{node.children.length > 0 ? node.children.length : "—"}</Td>
       <Td>
