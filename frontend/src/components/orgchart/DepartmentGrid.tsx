@@ -48,10 +48,18 @@ export function FillRateRing({ fillRate, size = 32 }: { fillRate: number; size?:
   const circumference = 2 * Math.PI * radius;
   const dash = (pct / 100) * circumference;
   const fontSize = size >= 32 ? 9 : 7.5;
+  // At 0% the "filled" arc has zero length and never paints, so the
+  // background track is the ONLY stroke that ever renders -- leaving it
+  // neutral gray meant a fully-vacant department's ring never actually
+  // showed the warning color the three-tier system promises, silently
+  // failing the exact case (0% staffed) most worth flagging. Coloring the
+  // track itself amber specifically at 0% is what makes the warning state
+  // actually visible.
+  const trackColor = pct === 0 ? fillRateRingColor(fillRate) : undefined;
 
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" className="shrink-0 -rotate-90">
-      <circle cx="16" cy="16" r={radius} fill="none" strokeWidth="3" className="stroke-surface3" />
+      <circle cx="16" cy="16" r={radius} fill="none" strokeWidth="3" stroke={trackColor} className={trackColor ? undefined : "stroke-surface3"} />
       <circle
         cx="16"
         cy="16"

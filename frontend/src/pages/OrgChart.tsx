@@ -1035,7 +1035,20 @@ export default function OrgChart() {
           {viewMode === "department" && tree.length > 0 && (
             <DepartmentGrid
               departments={departmentStats.map((dept) => {
-                const [headRoot, ...extraRoots] = dept.deptTree;
+                // dept.deptTree's roots are "whoever's manager is outside
+                // this department" -- for Account Management that's real
+                // squad leads AND a Reporting Specialist who happens to
+                // report to the Workforce & BI Manager. Picking index 0
+                // (array/DB return order, no seniority meaning) could put
+                // an individual contributor with zero reports forward as
+                // the department's face on this dashboard. Sorting by
+                // report count first is a real, data-driven proxy for
+                // seniority here -- seniority_level itself is unpopulated
+                // for every real row (checked earlier this project), so it
+                // isn't usable, but an actual lead reliably has reports and
+                // an IC-level root reliably doesn't.
+                const sortedRoots = [...dept.deptTree].sort((a, b) => b.children.length - a.children.length);
+                const [headRoot, ...extraRoots] = sortedRoots;
                 const headEmployee = headRoot ? employeeForPosition.get(headRoot.position.id) : undefined;
                 const stat: DepartmentStat = {
                   id: dept.unit.id,
