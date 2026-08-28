@@ -24,7 +24,7 @@ import {
 
 import { apiClient } from "@/lib/apiClient";
 import type { Company, Employee, OrgUnit, Position, PositionAssignment } from "@/lib/types";
-import { Button, Card, EmptyState, LoadingState, Toolbar, ToolbarDivider } from "@/components/ui";
+import { Button, Card, EmptyState, LoadingState, Table, TableHead, Th, Toolbar, ToolbarDivider, Tr, Td } from "@/components/ui";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EmployeeAvatar } from "@/components/orgchart/EmployeeAvatar";
 import { OrgChartLegend, legendSwatchClass } from "@/components/orgchart/OrgChartLegend";
@@ -130,6 +130,16 @@ const DEPARTMENT_BORDER_CLASSES = [
   "border-l-[#2fc654]",
 ];
 
+// Same pill treatment UserManagement.tsx's STATUS_STYLES uses for the exact
+// same Employee["status"] values -- duplicated here (3 lines) rather than
+// importing across pages, since UserManagement.tsx doesn't export it and
+// pages in this app don't otherwise reach into each other's local consts.
+const STATUS_STYLES: Record<Employee["status"], string> = {
+  active: "bg-success-soft text-success",
+  on_leave: "bg-warning-soft text-warning",
+  offboarded: "bg-danger/10 text-danger",
+};
+
 export default function OrgChart() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -187,6 +197,15 @@ export default function OrgChart() {
 
   function departmentNameForPosition(position: Position): string {
     return orgUnitNameById.get(position.org_unit_id) ?? "—";
+  }
+
+  // List view's Manager column -- a title, not the manager's employee name,
+  // matching this page's own existing convention for "who reports to whom"
+  // (see assigningNode/reassigningNode's reportsToTitle below): a title
+  // stays meaningful even when that manager's own seat is vacant.
+  function managerTitleForPosition(position: Position): string {
+    if (!position.reports_to_position_id) return "—";
+    return positionsById.get(position.reports_to_position_id)?.title ?? "—";
   }
 
   function toggleDept(id: string) {
@@ -511,13 +530,16 @@ export default function OrgChart() {
       employeeForPosition={employeeForPosition}
       matchesSearch={matchesSearch}
       isDirectMatch={isDirectMatch}
+      isSearchActive={!!search.trim()}
       passesShowFilter={passesShowFilter}
       passesDeptFilter={passesDeptFilter}
       passesDeptFilterForOrgUnit={passesDeptFilterForOrgUnit}
       colorIndexForPosition={colorIndexForPosition}
       departmentNameForPosition={departmentNameForPosition}
+      managerTitleForPosition={managerTitleForPosition}
       canViewProfiles={canViewProfiles}
       onSelectEmployee={setSelectedEmployeeId}
+      selectedEmployeeId={selectedEmployeeId}
       canAssignVacant={canAssignVacant}
       onOpenAssign={setAssigningNode}
       canReassign={canAssignExisting}
@@ -528,17 +550,17 @@ export default function OrgChart() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-semibold text-text">Org Chart</h1>
-        <p className="mt-1 text-sm text-text-muted">Click a box to expand or collapse its reports. Click a name to preview their profile.</p>
+        <h1 className="text-xl font-semibold uppercase tracking-wide text-text">Org Chart</h1>
+        <p className="mt-1 text-sm text-text-muted">Explore organizational structure, reporting relationships, and team composition.</p>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-edge-md bg-surface2 p-3">
         <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-text-muted">
           Company
           <select
             value={activeCompanyId ?? ""}
             onChange={(e) => setSelectedCompanyId(e.target.value)}
-            className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm font-normal normal-case text-text"
+            className="rounded-edge-sm border border-border bg-surface px-2 py-1.5 text-sm font-normal normal-case text-text"
           >
             {(companiesQuery.data ?? []).map((c) => (
               <option key={c.id} value={c.id}>
@@ -553,7 +575,7 @@ export default function OrgChart() {
           <select
             value={showFilter}
             onChange={(e) => setShowFilter(e.target.value as ShowFilter)}
-            className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm font-normal normal-case text-text"
+            className="rounded-edge-sm border border-border bg-surface px-2 py-1.5 text-sm font-normal normal-case text-text"
           >
             <option value="all">All Employees</option>
             <option value="active">Active Only</option>
@@ -566,7 +588,7 @@ export default function OrgChart() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name or title..."
-            className="min-w-[200px] flex-1 rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
+            className="min-w-[200px] flex-1 rounded-edge-sm border border-border bg-surface px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
           />
         </div>
 
@@ -665,37 +687,52 @@ export default function OrgChart() {
                       </span>
                     </button>
                     {!isDeptCollapsed && (
-                      <div className="bg-surface py-1">
-                        {roots.map((node) => (
-                          <TreeListRow
-                            key={node.position.id}
-                            node={node}
-                            depth={0}
-                            collapsed={collapsed}
-                            onToggle={toggle}
-                            employeeForPosition={employeeForPosition}
-                            matchesSearch={matchesSearch}
-                            isDirectMatch={isDirectMatch}
-                            passesShowFilter={passesShowFilter}
-                            // The whole swimlane already dims above when this
-                            // department isn't in activeDeptIds (every row in
-                            // it would agree, by construction -- a swimlane
-                            // only contains its own department's positions),
-                            // so rows here always "pass" that axis -- applying
-                            // it again would compound two opacity-35s into a
-                            // near-invisible ~0.12.
-                            passesDeptFilter={() => true}
-                            passesDeptFilterForOrgUnit={() => true}
-                            colorIndexForPosition={colorIndexForPosition}
-                            departmentNameForPosition={departmentNameForPosition}
-                            canViewProfiles={canViewProfiles}
-                            onSelectEmployee={setSelectedEmployeeId}
-                            canAssignVacant={canAssignVacant}
-                            onOpenAssign={setAssigningNode}
-                            canReassign={false}
-                            onOpenReassign={() => {}}
-                          />
-                        ))}
+                      <div className="overflow-x-auto bg-surface">
+                        <Table>
+                          <TableHead>
+                            <Th>Employee</Th>
+                            <Th>Position</Th>
+                            <Th>Org Unit</Th>
+                            <Th>Manager</Th>
+                            <Th className="text-right">Direct Reports</Th>
+                            <Th>Status</Th>
+                          </TableHead>
+                          <tbody>
+                            {roots.map((node) => (
+                              <TreeListRow
+                                key={node.position.id}
+                                node={node}
+                                depth={0}
+                                collapsed={collapsed}
+                                onToggle={toggle}
+                                employeeForPosition={employeeForPosition}
+                                matchesSearch={matchesSearch}
+                                isDirectMatch={isDirectMatch}
+                                isSearchActive={!!search.trim()}
+                                passesShowFilter={passesShowFilter}
+                                // The whole swimlane already dims above when this
+                                // department isn't in activeDeptIds (every row in
+                                // it would agree, by construction -- a swimlane
+                                // only contains its own department's positions),
+                                // so rows here always "pass" that axis -- applying
+                                // it again would compound two opacity-35s into a
+                                // near-invisible ~0.12.
+                                passesDeptFilter={() => true}
+                                passesDeptFilterForOrgUnit={() => true}
+                                colorIndexForPosition={colorIndexForPosition}
+                                departmentNameForPosition={departmentNameForPosition}
+                                managerTitleForPosition={managerTitleForPosition}
+                                canViewProfiles={canViewProfiles}
+                                onSelectEmployee={setSelectedEmployeeId}
+                                selectedEmployeeId={selectedEmployeeId}
+                                canAssignVacant={canAssignVacant}
+                                onOpenAssign={setAssigningNode}
+                                canReassign={false}
+                                onOpenReassign={() => {}}
+                              />
+                            ))}
+                          </tbody>
+                        </Table>
                       </div>
                     )}
                   </div>
@@ -834,10 +871,52 @@ function StatStrip({
 
 const TIER_ROOT_STYLE = "bg-edge-navy text-white shadow-edge-md";
 
-function tierStyle(depth: number, borderClass: string): string {
-  if (depth === 0) return TIER_ROOT_STYLE;
-  if (depth === 1) return `${borderClass} border-l-4 bg-surface shadow-edge-md`;
-  return `${borderClass} border-l-4 bg-surface2 shadow-edge-sm`;
+// Executive/Department Head are structurally reliable by depth alone (one
+// hop from a root is invariant regardless of chain length elsewhere in the
+// tree). Depth stops being a reliable signal below that -- a narrow chain in
+// one department can put an IC at a shallower depth than a manager in a
+// wider one -- so Manager vs. Individual Contributor is split on
+// hasChildren instead, not depth. positions.seniority_level was considered
+// and rejected as a signal: checked live, it's 0 for all 76 real rows,
+// completely unpopulated.
+type OrgTier = "executive" | "department_head" | "manager" | "individual_contributor";
+
+function tierForNode(depth: number, hasChildren: boolean): OrgTier {
+  if (depth === 0) return "executive";
+  if (depth === 1) return "department_head";
+  return hasChildren ? "manager" : "individual_contributor";
+}
+
+// Differentiated by border weight / elevation / background only -- no new
+// colors. The department hue (borderClass) stays the one accent color at
+// every tier; tier changes how much visual weight that same accent gets.
+function tierStyle(tier: OrgTier, borderClass: string): string {
+  switch (tier) {
+    case "executive":
+      return TIER_ROOT_STYLE;
+    case "department_head":
+      return `${borderClass} border-l-4 bg-surface shadow-edge-md`;
+    case "manager":
+      return `${borderClass} border-l-4 bg-surface2 shadow-edge-sm`;
+    case "individual_contributor":
+      return `${borderClass} border-l-2 bg-surface2`;
+  }
+}
+
+function tierNameTextClass(tier: OrgTier, isRoot: boolean): string {
+  if (isRoot) return "text-sm font-semibold text-white";
+  switch (tier) {
+    case "department_head":
+      return "text-[13px] font-semibold text-text";
+    case "manager":
+      return "text-xs font-semibold text-text";
+    default:
+      return "text-xs font-medium text-text";
+  }
+}
+
+function tierAvatarSize(tier: OrgTier): "sm" | "md" {
+  return tier === "executive" || tier === "department_head" ? "md" : "sm";
 }
 
 interface NodeSharedProps {
@@ -846,13 +925,16 @@ interface NodeSharedProps {
   employeeForPosition: Map<string, Employee>;
   matchesSearch: (node: TreeNode) => boolean;
   isDirectMatch: (node: TreeNode) => boolean;
+  isSearchActive: boolean;
   passesShowFilter: (node: TreeNode) => boolean;
   passesDeptFilter: (node: TreeNode) => boolean;
   passesDeptFilterForOrgUnit: (orgUnitId: string) => boolean;
   colorIndexForPosition: (position: Position) => number;
   departmentNameForPosition: (position: Position) => string;
+  managerTitleForPosition: (position: Position) => string;
   canViewProfiles: boolean;
   onSelectEmployee: (employeeId: string) => void;
+  selectedEmployeeId: string | null;
   canAssignVacant: boolean;
   onOpenAssign: (node: TreeNode) => void;
   canReassign: boolean;
@@ -922,6 +1004,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
     departmentNameForPosition,
     canViewProfiles,
     onSelectEmployee,
+    selectedEmployeeId,
     canAssignVacant,
     onOpenAssign,
     canReassign,
@@ -934,6 +1017,8 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
   const departmentName = departmentNameForPosition(node.position);
   const borderClass = DEPARTMENT_BORDER_CLASSES[colorIndex % DEPARTMENT_BORDER_CLASSES.length];
   const isRoot = depth === 0;
+  const tier = tierForNode(depth, hasChildren);
+  const isSelected = !!employee && employee.id === selectedEmployeeId;
   const dimmed = !passesShowFilter(node) || !passesDeptFilter(node);
 
   return (
@@ -941,9 +1026,15 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
       <button
         type="button"
         onClick={() => hasChildren && onToggle(node.position.id)}
-        className={`group relative flex w-64 flex-col gap-2 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(depth, borderClass)} ${
+        className={`group relative flex w-64 flex-col gap-2 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(tier, borderClass)} ${
           hasChildren ? "cursor-pointer" : "cursor-default"
-        } ${isDirectMatch(node) ? "ring-2 ring-edge-teal ring-offset-1 ring-offset-surface" : ""} ${dimmed ? "opacity-35" : ""}`}
+        } ${
+          isDirectMatch(node)
+            ? "ring-2 ring-edge-teal ring-offset-1 ring-offset-surface"
+            : isSelected
+              ? "ring-1 ring-edge-teal/50 shadow-edge-glow"
+              : ""
+        } ${dimmed ? "opacity-35" : ""}`}
       >
         <div className="flex items-center gap-2">
           {employee ? (
@@ -951,7 +1042,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
               firstName={employee.first_name}
               lastName={employee.last_name}
               colorIndex={colorIndex}
-              size="sm"
+              size={tierAvatarSize(tier)}
               variant={isRoot ? "soft" : "solid"}
               className={isRoot ? "bg-white/15 text-white" : undefined}
             />
@@ -963,17 +1054,17 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <span className={`block text-xs font-semibold leading-snug ${isRoot ? "text-white" : "text-text"}`}>{node.position.title}</span>
             {employee ? (
               <EmployeeNameControl
                 employee={employee}
                 canViewProfiles={canViewProfiles}
                 onSelectEmployee={onSelectEmployee}
-                className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}
+                className={`block truncate leading-snug ${tierNameTextClass(tier, isRoot)}`}
               />
             ) : (
               <span className={`block truncate text-[11px] italic leading-tight ${isRoot ? "text-white/50" : "text-text-dim"}`}>Open position</span>
             )}
+            <span className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}>{node.position.title}</span>
           </div>
         </div>
 
@@ -1019,6 +1110,27 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
           </span>
         </div>
 
+        {isSelected && employee && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectEmployee(employee.id);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+                e.preventDefault();
+                onSelectEmployee(employee.id);
+              }
+            }}
+            className={`-mt-1 block text-[10px] font-medium ${isRoot ? "text-white/80 hover:text-white" : "text-edge-teal hover:underline"}`}
+          >
+            View Employee 360 →
+          </span>
+        )}
+
         {!employee && canAssignVacant && (
           <span
             role="button"
@@ -1053,12 +1165,18 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
 // clustering re-applies at every level a manager's own reports happen to
 // span multiple departments.
 function OrgNodeChildren({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
-  const { collapsed, matchesSearch, colorIndexForPosition, departmentNameForPosition, passesDeptFilterForOrgUnit } = shared;
+  const { collapsed, matchesSearch, isSearchActive, colorIndexForPosition, departmentNameForPosition, passesDeptFilterForOrgUnit } = shared;
   const isCollapsed = collapsed.has(node.position.id);
   const hasChildren = node.children.length > 0;
   const visibleChildren = node.children.filter(matchesSearch);
 
-  if (!hasChildren || isCollapsed || visibleChildren.length === 0) return null;
+  // While a search is active, a branch reveals its matching descendants
+  // regardless of manual/auto collapse state -- otherwise a match sitting
+  // inside a previously-collapsed branch would simply vanish instead of
+  // being found, contradicting the whole point of search. Collapse state
+  // itself is never mutated here, so it's exactly as the user left it the
+  // moment search is cleared.
+  if (!hasChildren || (isCollapsed && !isSearchActive) || visibleChildren.length === 0) return null;
 
   return (
     <ul className="org-tree org-tree-animate-in">
@@ -1107,6 +1225,13 @@ function OrgNodeChildren({ node, depth, ...shared }: { node: TreeNode; depth: nu
   );
 }
 
+// Renders as a real <Tr> (via the shared Table primitives), one per
+// department swimlane's <tbody> -- Employee | Position | Org Unit | Manager |
+// Direct Reports | Status, per the redesign brief's "useful for operational
+// scanning" ask. Recursive: returns itself plus its own children's rows as a
+// Fragment, so <tbody> ends up with a flat list of <tr> siblings (a Fragment
+// contributes no DOM node of its own, so this is valid table markup) while
+// hierarchy stays visible via the Employee cell's own indentation.
 function TreeListRow({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
   const {
     collapsed,
@@ -1114,11 +1239,15 @@ function TreeListRow({ node, depth, ...shared }: { node: TreeNode; depth: number
     employeeForPosition,
     matchesSearch,
     isDirectMatch,
+    isSearchActive,
     passesShowFilter,
     passesDeptFilter,
     colorIndexForPosition,
+    departmentNameForPosition,
+    managerTitleForPosition,
     canViewProfiles,
     onSelectEmployee,
+    selectedEmployeeId,
     canAssignVacant,
     onOpenAssign,
   } = shared;
@@ -1128,51 +1257,57 @@ function TreeListRow({ node, depth, ...shared }: { node: TreeNode; depth: number
   const visibleChildren = node.children.filter(matchesSearch);
   const colorIndex = colorIndexForPosition(node.position);
   const dimmed = !passesShowFilter(node) || !passesDeptFilter(node);
+  const isSelected = !!employee && employee.id === selectedEmployeeId;
 
   return (
-    <div>
-      <div
+    <>
+      <Tr
         onClick={() => hasChildren && onToggle(node.position.id)}
-        style={{ paddingLeft: `${depth * 20 + 8}px` }}
-        className={`flex items-center gap-2.5 rounded-edge-sm py-1.5 pr-2 text-sm ${hasChildren ? "cursor-pointer hover:bg-surface2" : ""} ${
-          isDirectMatch(node) ? "bg-nav-active" : ""
-        } ${dimmed ? "opacity-35" : ""}`}
+        selected={isSelected}
+        className={`${hasChildren ? "cursor-pointer" : ""} ${isDirectMatch(node) ? "bg-nav-active" : ""} ${dimmed ? "opacity-35" : ""}`}
       >
-        <span className="w-4 text-text-dim">{hasChildren ? (isCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />) : ""}</span>
-        <span className={`h-2 w-2 shrink-0 rounded-full ${legendSwatchClass(colorIndex)}`} />
-        <span className="font-medium text-text">{node.position.title}</span>
-        {employee ? (
-          <>
-            <span className="text-text-dim">—</span>
-            <EmployeeNameControl employee={employee} canViewProfiles={canViewProfiles} onSelectEmployee={onSelectEmployee} className="text-text-muted" />
-          </>
-        ) : (
-          // Deliberately quieter than a colored pill here -- the swimlane
-          // header above already carries the department's staffed/vacant
-          // signal via its fill-rate badge (see fillRateBadgeClass); a
-          // matching amber pill on every single vacant row underneath it
-          // competed with that rollup for attention instead of supporting
-          // it. Plain italic text still says "this seat is open" without
-          // the visual loudness Chart view's badge form needs (where
-          // there's no swimlane-level context to lean on instead).
-          <span className="text-xs italic leading-tight text-text-dim">Open position</span>
-        )}
-        {!employee && canAssignVacant && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenAssign(node);
-            }}
-            className="flex items-center gap-1 rounded-full border border-dashed border-edge-teal/50 px-2 py-0.5 text-[10px] font-semibold text-edge-teal hover:bg-edge-teal/10"
-          >
-            <IconUserPlus size={10} /> Assign
-          </button>
-        )}
-        {hasChildren && <span className="ml-auto text-xs text-text-dim">{node.children.length} direct report(s)</span>}
-      </div>
-      {!isCollapsed &&
+        <Td>
+          <div className="flex items-center gap-2.5" style={{ paddingLeft: `${depth * 20}px` }}>
+            <span className="w-4 shrink-0 text-text-dim">
+              {hasChildren ? isCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} /> : null}
+            </span>
+            <span className={`h-2 w-2 shrink-0 rounded-full ${legendSwatchClass(colorIndex)}`} />
+            {employee ? (
+              <EmployeeNameControl employee={employee} canViewProfiles={canViewProfiles} onSelectEmployee={onSelectEmployee} className="truncate font-medium text-text" />
+            ) : (
+              // Deliberately quieter than a colored pill here -- the Status
+              // column's own "Vacant" pill (further right) already carries
+              // that signal; this cell just needs to read as "no one here."
+              <span className="truncate text-xs italic text-text-dim">Open position</span>
+            )}
+            {!employee && canAssignVacant && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenAssign(node);
+                }}
+                className="flex shrink-0 items-center gap-1 rounded-full border border-dashed border-edge-teal/50 px-2 py-0.5 text-[10px] font-semibold text-edge-teal hover:bg-edge-teal/10"
+              >
+                <IconUserPlus size={10} /> Assign
+              </button>
+            )}
+          </div>
+        </Td>
+        <Td className="text-text-muted">{node.position.title}</Td>
+        <Td className="text-text-muted">{departmentNameForPosition(node.position)}</Td>
+        <Td className="text-text-muted">{managerTitleForPosition(node.position)}</Td>
+        <Td className="text-right text-text-muted">{hasChildren ? node.children.length : "—"}</Td>
+        <Td>
+          {employee ? (
+            <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[employee.status]}`}>{employee.status.replace(/_/g, " ")}</span>
+          ) : (
+            <span className="rounded-edge-sm bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning">Vacant</span>
+          )}
+        </Td>
+      </Tr>
+      {(!isCollapsed || isSearchActive) &&
         visibleChildren.map((child) => <TreeListRow key={child.position.id} node={child} depth={depth + 1} {...shared} />)}
-    </div>
+    </>
   );
 }

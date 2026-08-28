@@ -42,7 +42,7 @@ export function DepartmentGrid({
           key={dept.id}
           type="button"
           onClick={() => onSelect(dept.id)}
-          className="group relative overflow-hidden rounded-edge-md border border-border bg-surface p-3.5 text-left shadow-edge-sm transition hover:-translate-y-0.5 hover:shadow-edge-md"
+          className="group relative overflow-hidden rounded-edge-md bg-surface p-3.5 text-left shadow-edge-sm transition hover:-translate-y-0.5 hover:shadow-edge-md"
         >
           <div className={`absolute inset-x-0 top-0 h-[3px] ${legendSwatchClass(dept.colorIndex)}`} />
 

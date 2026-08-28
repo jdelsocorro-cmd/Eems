@@ -7,6 +7,13 @@
    box down to its children's bar. Scoped to this page only -- not part of
    the shared token set in theme/tokens.css. */
 
+/* A cooler, more neutral line than --c-border-hover (a teal tint) -- the
+   connector lines should read as structural scaffolding, not a second
+   accent competing with each card's department-color border-l. */
+.org-tree {
+  --org-connector-color: color-mix(in srgb, var(--c-text-dim) 55%, transparent);
+}
+
 .org-tree,
 .org-tree ul {
   display: flex;
@@ -32,13 +39,13 @@
   right: 50%;
   width: 50%;
   height: 1.25rem;
-  border-top: 1.5px solid var(--c-border-hover);
+  border-top: 1.5px solid var(--org-connector-color);
 }
 
 .org-tree li::after {
   right: auto;
   left: 50%;
-  border-left: 1.5px solid var(--c-border-hover);
+  border-left: 1.5px solid var(--org-connector-color);
 }
 
 /* A lone child has no sibling to form a horizontal bar with, but it should
@@ -58,7 +65,7 @@
 }
 
 .org-tree li:last-child::before {
-  border-right: 1.5px solid var(--c-border-hover);
+  border-right: 1.5px solid var(--org-connector-color);
   border-radius: 0 6px 0 0;
 }
 
@@ -73,7 +80,7 @@
   left: 50%;
   width: 0;
   height: 1.25rem;
-  border-left: 1.5px solid var(--c-border-hover);
+  border-left: 1.5px solid var(--org-connector-color);
 }
 
 /* Expand feels alive instead of snapping in -- plays once on mount, so it
