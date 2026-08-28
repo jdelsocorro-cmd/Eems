@@ -15,8 +15,10 @@ import {
   IconFocus2,
   IconHierarchy3,
   IconId,
+  IconAlertTriangle,
   IconMinus,
   IconPlus,
+  IconSearch,
   IconUser,
   IconUserPlus,
   IconUserStar,
@@ -33,6 +35,7 @@ import { EmployeeSidePanel } from "@/components/orgchart/EmployeeSidePanel";
 import { AssignConsultantPanel } from "@/components/orgchart/AssignConsultantPanel";
 import { ReassignManagerPanel } from "@/components/orgchart/ReassignManagerPanel";
 import { DepartmentGrid, fillRateBadgeClass, type DepartmentStat } from "@/components/orgchart/DepartmentGrid";
+import { CommandPalette } from "@/components/orgchart/CommandPalette";
 import "./OrgChart.css";
 
 interface TreeNode {
@@ -167,6 +170,8 @@ export default function OrgChart() {
   const [listSortColumn, setListSortColumn] = useState<ListSortColumn>("employee");
   const [listSortDirection, setListSortDirection] = useState<"asc" | "desc">("asc");
   const [listCompact, setListCompact] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [insightDismissed, setInsightDismissed] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [isExporting, setIsExporting] = useState(false);
@@ -372,6 +377,25 @@ export default function OrgChart() {
     });
   }, [unitsForCompany, companyPositions, employeeForPosition, orgUnitColorIndex]);
 
+  // Surfaces the one department most worth a second look, without requiring
+  // a click into Departments view to notice it. "Most worth noticing" =
+  // lowest fill rate among departments with at least one open seat -- fully
+  // staffed departments (fillRate >= 1) are never notable by this measure,
+  // and a department with zero positions isn't a staffing gap, just empty.
+  // Ties (e.g. two departments both fully vacant) break on raw vacant count,
+  // then name, so the result is deterministic rather than array-order luck.
+  const notableDepartment = useMemo(() => {
+    const candidates = departmentStats.filter((d) => d.totalPositions > 0 && d.fillRate < 1);
+    if (candidates.length === 0) return null;
+    return candidates.slice().sort((a, b) => {
+      if (a.fillRate !== b.fillRate) return a.fillRate - b.fillRate;
+      const vacantA = a.totalPositions - a.headcount;
+      const vacantB = b.totalPositions - b.headcount;
+      if (vacantA !== vacantB) return vacantB - vacantA;
+      return a.unit.name.localeCompare(b.unit.name);
+    })[0];
+  }, [departmentStats]);
+
   // Company-wide stats -- computed over the FULL tree regardless of what's
   // currently expanded/collapsed/searched, since these describe the
   // company's structure, not the current view.
@@ -557,6 +581,33 @@ export default function OrgChart() {
     document.addEventListener("fullscreenchange", onFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
+
+  // Global Cmd/Ctrl+K -- works regardless of what's focused (including while
+  // typing in the page's own search box), matching the conventional
+  // command-palette shortcut every user of this pattern already expects.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsPaletteOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Jumping to someone via the command palette searches every position in
+  // the company, unfiltered -- if the page's own search box still has
+  // leftover text that doesn't match them, Focus Mode would render empty
+  // (chartRootEntries filters the focused node through matchesSearch, same
+  // as everything else). Clearing it here guarantees the person actually
+  // renders. Also forces Chart view, since Focus Mode is a Chart-only
+  // concept (List/Departments pass a no-op onFocusPosition).
+  function focusFromPalette(positionId: string) {
+    setSearch("");
+    setViewMode("chart");
+    setFocusedPositionId(positionId);
+  }
 
   // Click-drag pan on the canvas, Chart view only -- List needs normal text
   // selection and row clicks, Departments' cards are a normal document
@@ -772,6 +823,16 @@ export default function OrgChart() {
           />
         </div>
 
+        <button
+          type="button"
+          onClick={() => setIsPaletteOpen(true)}
+          className="flex items-center gap-2 rounded-edge-sm border border-border bg-surface px-2.5 py-1.5 text-xs font-medium text-text-muted transition hover:border-border-hover hover:text-text"
+        >
+          <IconSearch size={13} className="text-text-dim" />
+          Find anyone
+          <span className="rounded bg-surface3 px-1.5 py-0.5 text-[10px] font-semibold text-text-dim">⌘K</span>
+        </button>
+
         <Toolbar>
           <Button variant="toolbar" size="sm" active={viewMode === "chart"} onClick={() => setViewMode("chart")}>
             Chart
@@ -836,6 +897,24 @@ export default function OrgChart() {
               </Button>
             </Toolbar>
           )}
+        </div>
+      )}
+
+      {viewMode !== "list" && notableDepartment && !insightDismissed && (
+        <div className="flex items-center gap-2.5 rounded-edge-md border border-warning/25 bg-warning-soft px-3.5 py-2.5 text-[13px] text-text">
+          <IconAlertTriangle size={15} className="shrink-0 text-warning" />
+          <span className="flex-1">
+            <b className="font-semibold text-warning">{notableDepartment.unit.name}</b> has the most open positions —{" "}
+            {notableDepartment.totalPositions - notableDepartment.headcount} of {notableDepartment.totalPositions} seats vacant (
+            {Math.round(notableDepartment.fillRate * 100)}% staffed).
+          </span>
+          <button
+            type="button"
+            onClick={() => setInsightDismissed(true)}
+            className="shrink-0 text-xs font-medium text-text-dim transition hover:text-text"
+          >
+            Dismiss ✕
+          </button>
         </div>
       )}
 
@@ -1013,6 +1092,16 @@ export default function OrgChart() {
           onClose={() => setReassigningNode(null)}
         />
       )}
+
+      <CommandPalette
+        isOpen={isPaletteOpen}
+        onClose={() => setIsPaletteOpen(false)}
+        positions={companyPositions}
+        employeeForPosition={employeeForPosition}
+        departmentNameForPosition={departmentNameForPosition}
+        colorIndexForPosition={colorIndexForPosition}
+        onFocusPosition={focusFromPalette}
+      />
     </div>
   );
 }
