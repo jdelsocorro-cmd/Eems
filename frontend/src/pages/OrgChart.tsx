@@ -162,7 +162,14 @@ const STATUS_STYLES: Record<Employee["status"], string> = {
 export default function OrgChart() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [collapsedDepartments, setCollapsedDepartments] = useState<Set<string>>(new Set());
+  // Tracks EXPANDED departments (inverse of the obvious "collapsed" set) so
+  // that the default empty Set means "nothing expanded yet" -- i.e. every
+  // swimlane starts collapsed. List view opening with all 11+ departments
+  // fully expanded dumped 60+ rows on screen before the user asked for any
+  // of them; starting collapsed turns the swimlane list into a scannable
+  // table of contents (department name + fill rate) that a user opens into
+  // deliberately, not a wall of rows to scroll past.
+  const [expandedDepartments, setExpandedDepartments] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [showFilter, setShowFilter] = useState<ShowFilter>("all");
   const [activeDeptIds, setActiveDeptIds] = useState<Set<string>>(new Set());
@@ -240,8 +247,8 @@ export default function OrgChart() {
     });
   }
 
-  function toggleDepartmentCollapsed(id: string) {
-    setCollapsedDepartments((prev) => {
+  function toggleDepartmentExpanded(id: string) {
+    setExpandedDepartments((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -930,14 +937,19 @@ export default function OrgChart() {
           {viewMode === "list" && visibleDepartmentGroups.length > 0 && (
             <div className="flex flex-col gap-3">
               {visibleDepartmentGroups.map(({ dept, rows }) => {
-                const isDeptCollapsed = collapsedDepartments.has(dept.unit.id);
+                // A swimlane a user hasn't opened stays collapsed by
+                // default -- except while search is active, since `rows`
+                // is already filtered down to just the matches at that
+                // point, and a match hidden behind a collapsed swimlane
+                // would look like the search silently failed.
+                const isDeptCollapsed = !expandedDepartments.has(dept.unit.id) && !search.trim();
                 const borderClass = DEPARTMENT_BORDER_CLASSES[dept.colorIndex % DEPARTMENT_BORDER_CLASSES.length];
                 const isDeptDimmed = activeDeptIds.size > 0 && !activeDeptIds.has(dept.unit.id);
                 return (
                   <div key={dept.unit.id} className={`overflow-hidden rounded-edge-md border border-border ${isDeptDimmed ? "opacity-35" : ""}`}>
                     <button
                       type="button"
-                      onClick={() => toggleDepartmentCollapsed(dept.unit.id)}
+                      onClick={() => toggleDepartmentExpanded(dept.unit.id)}
                       className={`flex w-full items-center gap-2 border-l-4 bg-surface2 px-3 py-2 text-left ${borderClass}`}
                     >
                       <span className="text-text-muted">{isDeptCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />}</span>
@@ -957,7 +969,7 @@ export default function OrgChart() {
                             <SortHeader label="Employee" column="employee" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} />
                             <SortHeader label="Position" column="position" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} />
                             <Th>Manager</Th>
-                            <SortHeader label="Reports" column="reports" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} />
+                            <SortHeader label="Reports" column="reports" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} align="right" />
                             <SortHeader label="Status" column="status" sortColumn={listSortColumn} sortDirection={listSortDirection} onSort={toggleListSort} />
                           </TableHead>
                           <tbody>
