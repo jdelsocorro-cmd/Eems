@@ -34,7 +34,7 @@ import { OrgChartLegend, legendSwatchClass } from "@/components/orgchart/OrgChar
 import { EmployeeSidePanel } from "@/components/orgchart/EmployeeSidePanel";
 import { AssignConsultantPanel } from "@/components/orgchart/AssignConsultantPanel";
 import { ReassignManagerPanel } from "@/components/orgchart/ReassignManagerPanel";
-import { DepartmentGrid, fillRateBadgeClass, type DepartmentStat } from "@/components/orgchart/DepartmentGrid";
+import { DepartmentGrid, FillRateRing, type DepartmentStat } from "@/components/orgchart/DepartmentGrid";
 import { CommandPalette } from "@/components/orgchart/CommandPalette";
 import "./OrgChart.css";
 
@@ -946,21 +946,25 @@ export default function OrgChart() {
                 const borderClass = DEPARTMENT_BORDER_CLASSES[dept.colorIndex % DEPARTMENT_BORDER_CLASSES.length];
                 const isDeptDimmed = activeDeptIds.size > 0 && !activeDeptIds.has(dept.unit.id);
                 return (
-                  <div key={dept.unit.id} className={`overflow-hidden rounded-edge-md border border-border ${isDeptDimmed ? "opacity-35" : ""}`}>
+                  <div
+                    key={dept.unit.id}
+                    className={`overflow-hidden rounded-edge-md border border-border shadow-edge-sm ${isDeptDimmed ? "opacity-35" : ""}`}
+                  >
                     <button
                       type="button"
                       onClick={() => toggleDepartmentExpanded(dept.unit.id)}
-                      className={`flex w-full items-center gap-2 border-l-4 bg-surface2 px-3 py-2 text-left ${borderClass}`}
+                      className={`flex w-full items-center gap-2.5 border-l-4 bg-surface2 px-3 py-2 text-left ${borderClass}`}
                     >
                       <span className="text-text-muted">{isDeptCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />}</span>
                       <span className={`h-2 w-2 shrink-0 rounded-full ${legendSwatchClass(dept.colorIndex)}`} />
                       <span className="text-[13px] font-bold text-text">{dept.unit.name}</span>
-                      <span className="ml-auto shrink-0 rounded-full bg-surface3 px-2 py-0.5 text-[10px] font-semibold text-text-muted">
+                      {/* Same ring Departments view uses for the identical fact --
+                          one visual language for "how healthy is this department,"
+                          not a second, flatter one unique to this table. */}
+                      <span className="ml-auto shrink-0 text-[11px] font-medium text-text-muted">
                         {dept.headcount} of {dept.totalPositions} filled
                       </span>
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${fillRateBadgeClass(dept.fillRate)}`}>
-                        {Math.round(dept.fillRate * 100)}% staffed
-                      </span>
+                      <FillRateRing fillRate={dept.fillRate} size={22} />
                     </button>
                     {!isDeptCollapsed && (
                       <div className={`overflow-x-auto bg-surface ${listCompact ? "[&_td]:py-1 [&_th]:py-1.5" : ""}`}>
@@ -1695,7 +1699,10 @@ function ListRow({
           )}
         </div>
       </Td>
-      <Td className="text-text-muted">{node.position.title}</Td>
+      {/* Position gets slightly more weight than Manager -- "what they do"
+          is the primary fact this column exists to answer; "who they
+          report to" is relational context, not equally load-bearing. */}
+      <Td className="text-text">{node.position.title}</Td>
       <Td className="text-text-muted">{managerTitleForPosition(node.position)}</Td>
       <Td className="text-right text-text-muted">{node.children.length > 0 ? node.children.length : "—"}</Td>
       <Td>

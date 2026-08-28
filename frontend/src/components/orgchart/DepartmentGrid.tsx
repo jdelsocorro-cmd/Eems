@@ -36,18 +36,21 @@ function fillRateRingColor(fillRate: number): string {
   return "var(--c-text-muted)";
 }
 
-// One ring replaces the card's old linear bar + separate percentage pill --
-// the percentage now lives inside the ring itself, so there's only one
-// fill-rate representation per card instead of two saying the same thing
-// two different ways.
-function FillRateRing({ fillRate }: { fillRate: number }) {
+// One ring replaces the old linear bar + separate percentage pill -- the
+// percentage lives inside the ring itself, so there's only one fill-rate
+// representation instead of two saying the same thing two different ways.
+// Exported (with a size knob) so List view's swimlane header can reuse the
+// exact same "how healthy is this department" encoding instead of a second,
+// competing visual language (a flat percentage pill) for the same fact.
+export function FillRateRing({ fillRate, size = 32 }: { fillRate: number; size?: number }) {
   const pct = Math.round(Math.max(0, Math.min(1, fillRate)) * 100);
   const radius = 13;
   const circumference = 2 * Math.PI * radius;
   const dash = (pct / 100) * circumference;
+  const fontSize = size >= 32 ? 9 : 7.5;
 
   return (
-    <svg width="32" height="32" viewBox="0 0 32 32" className="shrink-0 -rotate-90">
+    <svg width={size} height={size} viewBox="0 0 32 32" className="shrink-0 -rotate-90">
       <circle cx="16" cy="16" r={radius} fill="none" strokeWidth="3" className="stroke-surface3" />
       <circle
         cx="16"
@@ -65,7 +68,7 @@ function FillRateRing({ fillRate }: { fillRate: number }) {
         textAnchor="middle"
         dominantBaseline="central"
         className="fill-text font-semibold tabular-nums"
-        style={{ fontSize: "9px", transform: "rotate(90deg)", transformOrigin: "16px 16px" }}
+        style={{ fontSize: `${fontSize}px`, transform: "rotate(90deg)", transformOrigin: "16px 16px" }}
       >
         {pct}%
       </text>
