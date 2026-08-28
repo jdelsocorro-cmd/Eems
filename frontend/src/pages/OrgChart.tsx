@@ -500,6 +500,72 @@ export default function OrgChart() {
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
+  // Click-drag pan on the canvas, Chart view only -- List needs normal text
+  // selection and row clicks, Departments' cards are a normal document
+  // grid, neither wants a pointer-grab hijacking those. Reads/writes the
+  // same scrollLeft/scrollTop native wheel/trackpad scroll already uses, so
+  // both keep working together rather than one replacing the other. Local
+  // vars, not React state -- this doesn't need to trigger renders, only
+  // DOM/cursor-class side effects. A small movement threshold before
+  // engaging keeps a plain click on a card (toggle collapse, open focus)
+  // from being swallowed as an accidental drag.
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || viewMode !== "chart") return;
+
+    let isDown = false;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let scrollLeftStart = 0;
+    let scrollTopStart = 0;
+
+    function onMouseDown(e: MouseEvent) {
+      isDown = true;
+      isDragging = false;
+      startX = e.pageX;
+      startY = e.pageY;
+      scrollLeftStart = el!.scrollLeft;
+      scrollTopStart = el!.scrollTop;
+    }
+
+    function onMouseMove(e: MouseEvent) {
+      if (!isDown) return;
+      const dx = e.pageX - startX;
+      const dy = e.pageY - startY;
+      if (!isDragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+        isDragging = true;
+        el!.classList.add("cursor-grabbing");
+        el!.classList.remove("cursor-grab");
+      }
+      if (isDragging) {
+        e.preventDefault();
+        el!.scrollLeft = scrollLeftStart - dx;
+        el!.scrollTop = scrollTopStart - dy;
+      }
+    }
+
+    function onMouseUp() {
+      isDown = false;
+      if (isDragging) {
+        el!.classList.remove("cursor-grabbing");
+        el!.classList.add("cursor-grab");
+      }
+      isDragging = false;
+    }
+
+    el.classList.add("cursor-grab");
+    el.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      el.classList.remove("cursor-grab", "cursor-grabbing");
+      el.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [viewMode]);
+
   function expandAll() {
     setCollapsed(new Set());
   }
@@ -977,6 +1043,22 @@ function tierAvatarSize(tier: OrgTier): "sm" | "md" {
   return tier === "executive" || tier === "department_head" ? "md" : "sm";
 }
 
+// Removes the last bit of guesswork in reading rank off border-weight/shadow
+// alone -- shown on every card regardless of tier, since "which tier is
+// this" should never require learned literacy of the styling system.
+function tierTagLabel(tier: OrgTier): string {
+  switch (tier) {
+    case "executive":
+      return "Exec";
+    case "department_head":
+      return "Director";
+    case "manager":
+      return "Manager";
+    case "individual_contributor":
+      return "IC";
+  }
+}
+
 interface NodeSharedProps {
   collapsed: Set<string>;
   onToggle: (id: string) => void;
@@ -1099,6 +1181,14 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
               : ""
         } ${dimmed ? "opacity-35" : ""}`}
       >
+        <span
+          className={`absolute right-2.5 top-2.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+            isRoot ? "bg-edge-teal text-edge-navy" : "bg-surface2 text-text-dim"
+          }`}
+        >
+          {tierTagLabel(tier)}
+        </span>
+
         <div className="flex items-center gap-2">
           {employee ? (
             // The whole identity block (avatar + name + title) is the
@@ -1135,7 +1225,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
                 variant={isRoot ? "soft" : "solid"}
                 className={isRoot ? "bg-white/15 text-white" : undefined}
               />
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 pr-16">
                 <span className={`block truncate leading-snug ${tierNameTextClass(tier, isRoot)} group-hover/identity:underline`}>
                   {employee.first_name} {employee.last_name}
                 </span>
@@ -1170,7 +1260,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
               >
                 <IconUser size={13} />
               </span>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 pr-16">
                 <span className={`block truncate text-[11px] italic leading-tight ${isRoot ? "text-white/50" : "text-text-dim"}`}>Open position</span>
                 <span className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}>{node.position.title}</span>
               </div>
