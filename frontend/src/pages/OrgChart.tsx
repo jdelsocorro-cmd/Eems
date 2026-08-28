@@ -269,15 +269,18 @@ export default function OrgChart() {
     return { nodeById: nodeMap, depthById: depthMap };
   }, [tree]);
 
-  const positionIdForEmployeeId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const [positionId, employee] of employeeForPosition) {
-      map.set(employee.id, positionId);
-    }
-    return map;
-  }, [employeeForPosition]);
-
-  const focusedPositionId = selectedEmployeeId ? positionIdForEmployeeId.get(selectedEmployeeId) ?? null : null;
+  // Independent from selectedEmployeeId on purpose. Focus used to be a pure
+  // derivation of who's selected -- clean on paper, but it meant "who am I
+  // inspecting" (the profile panel, transient/dismissible) and "what part
+  // of the org am I looking at" (Focus Mode, a workspace worth staying in)
+  // were literally the same on/off switch: closing the panel silently
+  // kicked the user back to the full unfiltered tree. Confirmed live as a
+  // real usability problem, not a hypothetical one. Selecting an employee
+  // still sets both together (see the identity-block click in OrgNode
+  // below), but each now has its own, independent way to clear: the
+  // panel's own X only closes the panel; "Back to Org Chart" only clears
+  // focus.
+  const [focusedPositionId, setFocusedPositionId] = useState<string | null>(null);
   const focusedNode = focusedPositionId ? nodeById.get(focusedPositionId) ?? null : null;
   const focusedDepth = focusedPositionId ? depthById.get(focusedPositionId) ?? 0 : 0;
 
@@ -585,6 +588,7 @@ export default function OrgChart() {
       canViewProfiles={canViewProfiles}
       onSelectEmployee={setSelectedEmployeeId}
       selectedEmployeeId={selectedEmployeeId}
+      onFocusPosition={setFocusedPositionId}
       canAssignVacant={canAssignVacant}
       onOpenAssign={setAssigningNode}
       canReassign={canAssignExisting}
@@ -761,6 +765,7 @@ export default function OrgChart() {
                                 canViewProfiles={canViewProfiles}
                                 onSelectEmployee={setSelectedEmployeeId}
                                 selectedEmployeeId={selectedEmployeeId}
+                                onFocusPosition={() => {}}
                                 canAssignVacant={canAssignVacant}
                                 onOpenAssign={setAssigningNode}
                                 canReassign={false}
@@ -809,7 +814,7 @@ export default function OrgChart() {
             <div className="mb-4 flex flex-col items-start gap-1.5">
               <button
                 type="button"
-                onClick={() => setSelectedEmployeeId(null)}
+                onClick={() => setFocusedPositionId(null)}
                 className="flex items-center gap-1.5 text-sm font-medium text-edge-teal hover:underline"
               >
                 <IconArrowLeft size={14} /> Back to Org Chart
@@ -987,6 +992,10 @@ interface NodeSharedProps {
   canViewProfiles: boolean;
   onSelectEmployee: (employeeId: string) => void;
   selectedEmployeeId: string | null;
+  // Chart-view-only (List view passes a no-op) -- see the focusedPositionId
+  // comment above for why this is a separate call from onSelectEmployee
+  // rather than folded into it.
+  onFocusPosition: (positionId: string) => void;
   canAssignVacant: boolean;
   onOpenAssign: (node: TreeNode) => void;
   canReassign: boolean;
@@ -1057,6 +1066,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
     canViewProfiles,
     onSelectEmployee,
     selectedEmployeeId,
+    onFocusPosition,
     canAssignVacant,
     onOpenAssign,
     canReassign,
@@ -1106,6 +1116,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
                 if (!canViewProfiles) return;
                 e.stopPropagation();
                 onSelectEmployee(employee.id);
+                onFocusPosition(node.position.id);
               }}
               onKeyDown={(e) => {
                 if (!canViewProfiles) return;
@@ -1113,6 +1124,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
                   e.stopPropagation();
                   e.preventDefault();
                   onSelectEmployee(employee.id);
+                  onFocusPosition(node.position.id);
                 }
               }}
               className={`group/identity flex min-w-0 flex-1 items-center gap-2 ${canViewProfiles ? "cursor-pointer" : ""}`}
@@ -1198,12 +1210,14 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
             onClick={(e) => {
               e.stopPropagation();
               onSelectEmployee(employee.id);
+              onFocusPosition(node.position.id);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.stopPropagation();
                 e.preventDefault();
                 onSelectEmployee(employee.id);
+                onFocusPosition(node.position.id);
               }
             }}
             className={`-mt-1 block text-[10px] font-medium ${isRoot ? "text-white/80 hover:text-white" : "text-edge-teal hover:underline"}`}
