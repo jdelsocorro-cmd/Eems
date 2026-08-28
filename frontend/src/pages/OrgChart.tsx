@@ -1143,7 +1143,28 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
               </div>
             </span>
           ) : (
-            <>
+            // A vacant seat still has a real subtree worth focusing on (a
+            // Director position with 4 reports doesn't stop being
+            // structurally interesting just because the seat is empty), so
+            // this gets the same click-to-focus treatment as a filled
+            // position -- just no onSelectEmployee, since there's no one
+            // to select or show a profile for.
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                onFocusPosition(node.position.id);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onFocusPosition(node.position.id);
+                }
+              }}
+              className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
+            >
               <span
                 className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed ${isRoot ? "border-white/30 text-white/50" : "border-text-dim text-text-dim"}`}
               >
@@ -1153,7 +1174,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
                 <span className={`block truncate text-[11px] italic leading-tight ${isRoot ? "text-white/50" : "text-text-dim"}`}>Open position</span>
                 <span className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}>{node.position.title}</span>
               </div>
-            </>
+            </span>
           )}
         </div>
 
