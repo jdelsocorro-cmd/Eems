@@ -1090,34 +1090,63 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
       >
         <div className="flex items-center gap-2">
           {employee ? (
-            <EmployeeAvatar
-              firstName={employee.first_name}
-              lastName={employee.last_name}
-              colorIndex={colorIndex}
-              size={tierAvatarSize(tier)}
-              variant={isRoot ? "soft" : "solid"}
-              className={isRoot ? "bg-white/15 text-white" : undefined}
-            />
-          ) : (
+            // The whole identity block (avatar + name + title) is the
+            // click-to-select zone, not just the name text -- a user
+            // naturally clicks wherever the person's info is, and only the
+            // name line being live left clicks on the title line falling
+            // through to the card's own onClick (toggle collapse) instead
+            // of selecting anyone. Same nested-interactive-element pattern
+            // as the reassign-manager icon and the "View Employee 360" hint
+            // below: a <span role="button"> since this sits inside the
+            // card's own <button>.
             <span
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed ${isRoot ? "border-white/30 text-white/50" : "border-text-dim text-text-dim"}`}
+              role={canViewProfiles ? "button" : undefined}
+              tabIndex={canViewProfiles ? 0 : undefined}
+              onClick={(e) => {
+                if (!canViewProfiles) return;
+                e.stopPropagation();
+                onSelectEmployee(employee.id);
+              }}
+              onKeyDown={(e) => {
+                if (!canViewProfiles) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onSelectEmployee(employee.id);
+                }
+              }}
+              className={`group/identity flex min-w-0 flex-1 items-center gap-2 ${canViewProfiles ? "cursor-pointer" : ""}`}
             >
-              <IconUser size={13} />
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            {employee ? (
-              <EmployeeNameControl
-                employee={employee}
-                canViewProfiles={canViewProfiles}
-                onSelectEmployee={onSelectEmployee}
-                className={`block truncate leading-snug ${tierNameTextClass(tier, isRoot)}`}
+              <EmployeeAvatar
+                firstName={employee.first_name}
+                lastName={employee.last_name}
+                colorIndex={colorIndex}
+                size={tierAvatarSize(tier)}
+                variant={isRoot ? "soft" : "solid"}
+                className={isRoot ? "bg-white/15 text-white" : undefined}
               />
-            ) : (
-              <span className={`block truncate text-[11px] italic leading-tight ${isRoot ? "text-white/50" : "text-text-dim"}`}>Open position</span>
-            )}
-            <span className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}>{node.position.title}</span>
-          </div>
+              <div className="min-w-0 flex-1">
+                <span
+                  className={`block truncate leading-snug ${tierNameTextClass(tier, isRoot)} ${canViewProfiles ? "group-hover/identity:underline" : ""}`}
+                >
+                  {employee.first_name} {employee.last_name}
+                </span>
+                <span className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}>{node.position.title}</span>
+              </div>
+            </span>
+          ) : (
+            <>
+              <span
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed ${isRoot ? "border-white/30 text-white/50" : "border-text-dim text-text-dim"}`}
+              >
+                <IconUser size={13} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <span className={`block truncate text-[11px] italic leading-tight ${isRoot ? "text-white/50" : "text-text-dim"}`}>Open position</span>
+                <span className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}>{node.position.title}</span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className={`flex items-center justify-between border-t pt-1.5 ${isRoot ? "border-white/15" : "border-border"}`}>
