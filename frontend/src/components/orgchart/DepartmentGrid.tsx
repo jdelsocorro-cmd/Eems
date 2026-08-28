@@ -1,4 +1,4 @@
-import { IconArrowRight, IconUser } from "@tabler/icons-react";
+import { IconUser } from "@tabler/icons-react";
 
 import { legendSwatchClass } from "@/components/orgchart/OrgChartLegend";
 
@@ -22,6 +22,55 @@ export function fillRateBadgeClass(fillRate: number): string {
   if (fillRate >= 1) return "bg-success-soft text-success";
   if (fillRate <= 0) return "bg-warning-soft text-warning";
   return "bg-surface3 text-text-muted";
+}
+
+// Same three-tier semantics as fillRateBadgeClass, expressed as a stroke
+// color instead of a Tailwind class -- inline style is the only way to give
+// an SVG stroke "whichever of the three states this department is in,"
+// same reasoning OrgChartLegend's chips use inline style for a department's
+// own hex (Tailwind can't express a per-item dynamic color as a static
+// class).
+function fillRateRingColor(fillRate: number): string {
+  if (fillRate >= 1) return "var(--c-green)";
+  if (fillRate <= 0) return "var(--c-yellow)";
+  return "var(--c-text-muted)";
+}
+
+// One ring replaces the card's old linear bar + separate percentage pill --
+// the percentage now lives inside the ring itself, so there's only one
+// fill-rate representation per card instead of two saying the same thing
+// two different ways.
+function FillRateRing({ fillRate }: { fillRate: number }) {
+  const pct = Math.round(Math.max(0, Math.min(1, fillRate)) * 100);
+  const radius = 13;
+  const circumference = 2 * Math.PI * radius;
+  const dash = (pct / 100) * circumference;
+
+  return (
+    <svg width="32" height="32" viewBox="0 0 32 32" className="shrink-0 -rotate-90">
+      <circle cx="16" cy="16" r={radius} fill="none" strokeWidth="3" className="stroke-surface3" />
+      <circle
+        cx="16"
+        cy="16"
+        r={radius}
+        fill="none"
+        strokeWidth="3"
+        strokeLinecap="round"
+        stroke={fillRateRingColor(fillRate)}
+        strokeDasharray={`${dash} ${circumference}`}
+      />
+      <text
+        x="16"
+        y="16"
+        textAnchor="middle"
+        dominantBaseline="central"
+        className="fill-text font-semibold tabular-nums"
+        style={{ fontSize: "9px", transform: "rotate(90deg)", transformOrigin: "16px 16px" }}
+      >
+        {pct}%
+      </text>
+    </svg>
+  );
 }
 
 // The "Departments" view -- a fixed company-wide snapshot (not filtered by
@@ -48,7 +97,7 @@ export function DepartmentGrid({
 
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-xs font-semibold uppercase tracking-wide text-text-muted">{dept.name}</span>
-            <IconArrowRight size={13} className="shrink-0 text-text-dim transition group-hover:translate-x-0.5 group-hover:text-edge-teal" />
+            <FillRateRing fillRate={dept.fillRate} />
           </div>
 
           <div className="mt-2 flex items-baseline gap-1.5">
@@ -56,29 +105,17 @@ export function DepartmentGrid({
             <span className="text-[11px] text-text-dim">of {dept.totalPositions} filled</span>
           </div>
 
-          <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-surface3">
-            <div
-              className={`h-full rounded-full ${legendSwatchClass(dept.colorIndex)}`}
-              style={{ width: `${Math.round(dept.fillRate * 100)}%` }}
-            />
-          </div>
-
-          <div className="mt-2.5 flex items-center justify-between gap-2">
-            <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-text-dim">
-              {dept.headEmployeeName ? (
-                <span className="truncate">{dept.headEmployeeName}</span>
-              ) : dept.headTitle ? (
-                <span className="flex items-center gap-1 truncate italic">
-                  <IconUser size={11} /> Vacant lead
-                </span>
-              ) : (
-                <span className="truncate">No positions yet</span>
-              )}
-              {dept.extraLeads > 0 && <span className="shrink-0">+{dept.extraLeads} more</span>}
-            </span>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${fillRateBadgeClass(dept.fillRate)}`}>
-              {Math.round(dept.fillRate * 100)}%
-            </span>
+          <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-text-dim">
+            {dept.headEmployeeName ? (
+              <span className="truncate">{dept.headEmployeeName}</span>
+            ) : dept.headTitle ? (
+              <span className="flex items-center gap-1 truncate italic">
+                <IconUser size={11} /> Vacant lead
+              </span>
+            ) : (
+              <span className="truncate">No positions yet</span>
+            )}
+            {dept.extraLeads > 0 && <span className="shrink-0">+{dept.extraLeads} more</span>}
           </div>
         </button>
       ))}
