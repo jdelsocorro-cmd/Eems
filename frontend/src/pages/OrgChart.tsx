@@ -14,6 +14,7 @@ import {
   IconDownload,
   IconFocus2,
   IconHierarchy3,
+  IconId,
   IconMinus,
   IconPlus,
   IconUser,
@@ -1101,33 +1102,30 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
         <div className="flex items-center gap-2">
           {employee ? (
             // The whole identity block (avatar + name + title) is the
-            // click-to-select zone, not just the name text -- a user
-            // naturally clicks wherever the person's info is, and only the
-            // name line being live left clicks on the title line falling
-            // through to the card's own onClick (toggle collapse) instead
-            // of selecting anyone. Same nested-interactive-element pattern
-            // as the reassign-manager icon and the "View Employee 360" hint
-            // below: a <span role="button"> since this sits inside the
-            // card's own <button>.
+            // click-to-focus zone -- Focus Mode only, no profile panel.
+            // Deliberately NOT gated on canViewProfiles: narrowing which
+            // cards are shown doesn't expose anything the user couldn't
+            // already see in the full tree, so it's not the same
+            // permission boundary as opening someone's actual profile
+            // (the dedicated "View Profile" icon below, which IS gated).
+            // Same nested-interactive-element pattern as the reassign-
+            // manager icon: a <span role="button"> since this sits inside
+            // the card's own <button>.
             <span
-              role={canViewProfiles ? "button" : undefined}
-              tabIndex={canViewProfiles ? 0 : undefined}
+              role="button"
+              tabIndex={0}
               onClick={(e) => {
-                if (!canViewProfiles) return;
                 e.stopPropagation();
-                onSelectEmployee(employee.id);
                 onFocusPosition(node.position.id);
               }}
               onKeyDown={(e) => {
-                if (!canViewProfiles) return;
                 if (e.key === "Enter" || e.key === " ") {
                   e.stopPropagation();
                   e.preventDefault();
-                  onSelectEmployee(employee.id);
                   onFocusPosition(node.position.id);
                 }
               }}
-              className={`group/identity flex min-w-0 flex-1 items-center gap-2 ${canViewProfiles ? "cursor-pointer" : ""}`}
+              className="group/identity flex min-w-0 flex-1 cursor-pointer items-center gap-2"
             >
               <EmployeeAvatar
                 firstName={employee.first_name}
@@ -1138,9 +1136,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
                 className={isRoot ? "bg-white/15 text-white" : undefined}
               />
               <div className="min-w-0 flex-1">
-                <span
-                  className={`block truncate leading-snug ${tierNameTextClass(tier, isRoot)} ${canViewProfiles ? "group-hover/identity:underline" : ""}`}
-                >
+                <span className={`block truncate leading-snug ${tierNameTextClass(tier, isRoot)} group-hover/identity:underline`}>
                   {employee.first_name} {employee.last_name}
                 </span>
                 <span className={`block truncate text-[11px] leading-tight ${isRoot ? "text-white/70" : "text-text-muted"}`}>{node.position.title}</span>
@@ -1179,6 +1175,27 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
             ) : !employee ? (
               <span className="shrink-0 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning">Vacant</span>
             ) : null}
+            {employee && canViewProfiles && (
+              <span
+                role="button"
+                tabIndex={0}
+                title="View profile"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectEmployee(employee.id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onSelectEmployee(employee.id);
+                  }
+                }}
+                className={`flex shrink-0 items-center justify-center rounded-full p-1 ${isRoot ? "text-white/60 hover:bg-white/10" : "text-text-dim hover:bg-surface3 hover:text-text"}`}
+              >
+                <IconId size={12} />
+              </span>
+            )}
             {!isRoot && canReassign && (
               <span
                 role="button"
@@ -1202,29 +1219,6 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
             )}
           </span>
         </div>
-
-        {isSelected && employee && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelectEmployee(employee.id);
-              onFocusPosition(node.position.id);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.stopPropagation();
-                e.preventDefault();
-                onSelectEmployee(employee.id);
-                onFocusPosition(node.position.id);
-              }
-            }}
-            className={`-mt-1 block text-[10px] font-medium ${isRoot ? "text-white/80 hover:text-white" : "text-edge-teal hover:underline"}`}
-          >
-            View Employee 360 →
-          </span>
-        )}
 
         {!employee && canAssignVacant && (
           <span
