@@ -192,7 +192,7 @@ export default function Goals() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card accent className="lg:col-span-2">
           <Table>
             <TableHead>
               <Th>Title</Th>
@@ -236,7 +236,7 @@ export default function Goals() {
           </Table>
         </Card>
 
-        <Card className="p-4">
+        <Card accent className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Details</h2>
           {!selectedGoal ? (
             <EmptyState message="Select a goal to see details." />

@@ -62,7 +62,7 @@
    [data-theme="navy"]'s comment for the full contrast table. */
 [data-theme="light"] {
   --c-bg: #f1f4fa;
-  --c-surface: #ffffff;
+  --c-surface: #fffcf5;
   --c-surface2: #f7f9fc;
   --c-surface3: #edf1f8;
   --c-border: rgba(15, 22, 63, 0.1);
@@ -103,9 +103,16 @@
      as hover/chrome backgrounds -- kept near-white rather than tinted so
      the pale-yellow redesign doesn't wash out every text field/select in
      the product. The page backdrop (--c-bg) alone carries the yellow. */
+/* --c-surface is a warm ivory (#fffcf5), not pure white -- picked live
+   against the pale-yellow --c-bg specifically because pure white read as
+   a flat, disconnected cutout against it (design-review feedback: "gray
+   or white background seems off... make this feel livelier"). Card.tsx's
+   optional `accent` prop (a navy->teal top edge) is the other half of
+   that fix, applied per-page to primary panels only -- see its own
+   comment for why it isn't a blanket default. */
 [data-theme="navy"] {
   --c-bg: #fdf6e3;
-  --c-surface: #ffffff;
+  --c-surface: #fffcf5;
   --c-surface2: #f9f7f2;
   --c-surface3: #f3ecd9;
   --c-border: rgba(15, 22, 63, 0.09);

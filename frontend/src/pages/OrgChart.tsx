@@ -1010,7 +1010,7 @@ export default function OrgChart() {
       )}
 
       <div className="relative">
-        <Card ref={viewportRef} className="p-6" style={{ maxHeight: "75vh", overflow: "auto" }}>
+        <Card ref={viewportRef} accent className="p-6" style={{ maxHeight: "75vh", overflow: "auto" }}>
           {isLoading && <LoadingState label="Loading org chart..." />}
           {!isLoading && tree.length === 0 && <EmptyState message="No positions in this company yet." />}
 

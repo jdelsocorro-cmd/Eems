@@ -65,7 +65,7 @@ export function EmployeeProfileBody({ employeeId, compact = false }: { employeeI
 
   if (notVisible || !profileQuery.data) {
     return (
-      <Card>
+      <Card accent>
         <EmptyState message="Not found, or not visible to you. Employee 360 only shows employees within your organizational hierarchy." />
       </Card>
     );
@@ -115,7 +115,7 @@ export function EmployeeProfileBody({ employeeId, compact = false }: { employeeI
 
 function OverviewTab({ profile }: { profile: NonNullable<ReturnType<typeof useEmployeeProfileSummary>["data"]> }) {
   return (
-    <Card className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+    <Card accent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
       <Field label="Employee number" value={profile.employee_number ?? "—"} />
       <Field label="Work email" value={profile.work_email} />
       <Field label="Status" value={profile.status.replace("_", " ")} />
@@ -156,7 +156,7 @@ function PerformanceTab({
   const latestScore = scoresQuery.data?.[0];
 
   const scoreCard = (
-    <Card className="p-4">
+    <Card accent className="p-4">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Score</h2>
       {latestScore ? (
         <div className="mb-4">
@@ -193,7 +193,7 @@ function PerformanceTab({
   // A 3-column <table> just crushes or forces sideways scroll at ~420px
   // panel width -- same KPI data, rendered as a stacked list instead.
   const kpisContent = compact ? (
-    <Card className="p-4">
+    <Card accent className="p-4">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Active KPIs</h2>
       {kpisQuery.isLoading ? (
         <LoadingState label="Loading KPIs..." />
@@ -215,7 +215,7 @@ function PerformanceTab({
       )}
     </Card>
   ) : (
-    <Card className="lg:col-span-2">
+    <Card accent className="lg:col-span-2">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-text-muted">
@@ -376,7 +376,7 @@ function RecognitionTab({ recognitionsQuery }: { recognitionsQuery: ReturnType<t
   if (recognitions.length === 0) return <EmptyState message="No recognitions yet." />;
 
   return (
-    <Card className="p-4">
+    <Card accent className="p-4">
       <ul className="flex flex-col gap-2">
         {recognitions.map((r) => (
           <li key={r.id} className="rounded-edge-sm bg-surface2 p-2.5 text-sm">
@@ -450,7 +450,7 @@ function ActivityTab({
   if (feed.length === 0) return <EmptyState message="No activity yet." />;
 
   return (
-    <Card className="p-4">
+    <Card accent className="p-4">
       <ul className="flex flex-col gap-2">
         {feed.map((event, i) => (
           <li key={i} className="flex items-center justify-between gap-3 border-b border-border pb-2 text-sm last:border-0 last:pb-0">

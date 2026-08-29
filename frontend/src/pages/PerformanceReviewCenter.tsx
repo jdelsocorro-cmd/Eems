@@ -139,7 +139,7 @@ export default function PerformanceReviewCenter() {
 
 function StatStrip({ stats }: { stats: { label: string; value: string }[] }) {
   return (
-    <Card className="p-4">
+    <Card accent className="p-4">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label}>
@@ -309,7 +309,7 @@ function PerformanceTab({
         ]}
       />
 
-      <Card>
+      <Card accent>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
           <SearchBox value={search} onChange={setSearch} placeholder="Search name..." />
           <StatusPills
@@ -449,7 +449,7 @@ function TasksTab({
         ]}
       />
 
-      <Card>
+      <Card accent>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
           <SearchBox value={search} onChange={setSearch} placeholder="Search title or assignee..." />
           <StatusPills
@@ -576,7 +576,7 @@ function ProjectsTab({
         ]}
       />
 
-      <Card>
+      <Card accent>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
           <SearchBox value={search} onChange={setSearch} placeholder="Search name or owner..." />
           <StatusPills
@@ -721,7 +721,7 @@ function IndividualGoalsSection({ goals, employeeName }: { goals: Goal[]; employ
   return (
     <div>
       <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-muted">Individual Goals</h2>
-      <Card>
+      <Card accent>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
           <SearchBox value={search} onChange={setSearch} placeholder="Search title or person..." />
           <StatusPills
@@ -797,7 +797,7 @@ function GroupGoalsSection({ goals, employeeName }: { goals: Goal[]; employeeNam
   return (
     <div>
       <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-muted">Company & Org Unit Goals</h2>
-      <Card>
+      <Card accent>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
           <SearchBox value={search} onChange={setSearch} placeholder="Search title or owner..." />
           <StatusPills
@@ -880,7 +880,7 @@ function KpisSection({ kpis, employeeName }: { kpis: Kpi[]; employeeName: (id: s
   return (
     <div>
       <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-muted">KPIs</h2>
-      <Card>
+      <Card accent>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
           <SearchBox value={search} onChange={setSearch} placeholder="Search name or person..." />
           <StatusPills

@@ -102,7 +102,7 @@ export default function HelpAdmin() {
         </div>
       </div>
 
-      <Card className="p-3">
+      <Card accent className="p-3">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">Categories</p>
         <div className="flex flex-wrap gap-1.5">
           {(categoriesQuery.data ?? []).map((cat) => (
@@ -128,7 +128,7 @@ export default function HelpAdmin() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
+        <Card accent className="lg:col-span-1">
           <Table>
             <TableHead>
               <Th>Title</Th>
@@ -164,7 +164,7 @@ export default function HelpAdmin() {
           </Table>
         </Card>
 
-        <Card className="p-4 lg:col-span-2">
+        <Card accent className="p-4 lg:col-span-2">
           {!selectedArticle ? (
             <EmptyState message="Select an article to edit it." />
           ) : (

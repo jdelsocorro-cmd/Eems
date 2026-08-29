@@ -121,7 +121,7 @@ export default function AccountSettings() {
         <p className="mt-1 text-sm text-text-muted">Manage your own account.</p>
       </div>
 
-      <Card className="max-w-md p-4">
+      <Card accent className="max-w-md p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Profile</h2>
         {meQuery.isLoading && <Spinner />}
         {meQuery.data && (
@@ -135,7 +135,7 @@ export default function AccountSettings() {
         {meQuery.isError && <p className="text-sm text-danger">{errorMessage(meQuery.error)}</p>}
       </Card>
 
-      <Card className="max-w-md p-4">
+      <Card accent className="max-w-md p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Change password</h2>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
@@ -179,7 +179,7 @@ export default function AccountSettings() {
         </form>
       </Card>
 
-      <Card className="max-w-md p-4">
+      <Card accent className="max-w-md p-4">
         <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-text-muted">Delegate My Reviews</h2>
         <p className="mb-3 text-xs text-text-dim">
           Temporarily hand off your default-reviewer authority (e.g. while you're out) -- no RBAC grant needed for the

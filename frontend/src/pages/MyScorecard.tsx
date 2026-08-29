@@ -88,7 +88,7 @@ export default function MyScorecard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card accent className="lg:col-span-2">
           <Table>
             <TableHead>
               <Th>KPI</Th>
@@ -129,7 +129,7 @@ export default function MyScorecard() {
           {logProgress.isError && <ErrorBanner message={errorMessage(logProgress.error)} />}
         </Card>
 
-        <Card className="p-4">
+        <Card accent className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Score</h2>
 
           {latestScore ? (
@@ -180,7 +180,7 @@ export default function MyScorecard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="p-4">
+        <Card accent className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Goals I own</h2>
           {ownedGoalsQuery.isLoading ? (
             <LoadingState label="Loading..." />
@@ -200,7 +200,7 @@ export default function MyScorecard() {
           )}
         </Card>
 
-        <Card className="p-4">
+        <Card accent className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Projects I own</h2>
           {ownedProjectsQuery.isLoading ? (
             <LoadingState label="Loading..." />
@@ -221,7 +221,7 @@ export default function MyScorecard() {
         </Card>
       </div>
 
-      <Card className="p-4">
+      <Card accent className="p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Recognition received</h2>
         {recognitionsQuery.isLoading ? (
           <LoadingState label="Loading..." />

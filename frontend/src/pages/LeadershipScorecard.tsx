@@ -143,7 +143,7 @@ export default function LeadershipScorecard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card accent className="lg:col-span-2">
           <Table>
             <TableHead>
               <Th>Position</Th>
@@ -164,7 +164,7 @@ export default function LeadershipScorecard() {
           </Table>
         </Card>
 
-        <Card className="p-4">
+        <Card accent className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Compute rollup</h2>
           <p className="mb-3 text-xs text-text-dim">
             Recomputes every position's score for this company bottom-up, so managers' scores reflect their whole subtree.

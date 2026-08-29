@@ -233,7 +233,7 @@ export default function UserManagement() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card accent className="lg:col-span-2">
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
             <input
               value={search}
@@ -328,7 +328,7 @@ export default function UserManagement() {
           </Table>
         </Card>
 
-        <Card className="p-4">
+        <Card accent className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Consultant Profile</h2>
           {!selectedEmployee ? (
             <EmptyState message="Select an employee to see their profile." />

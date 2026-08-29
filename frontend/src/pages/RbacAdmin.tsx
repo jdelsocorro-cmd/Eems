@@ -87,7 +87,7 @@ export default function RbacAdmin() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="p-4">
+        <Card accent className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Roles</h2>
           {rolesQuery.isLoading && <LoadingState label="Loading roles..." />}
           <ul className="mb-3 flex flex-col gap-1">
@@ -146,7 +146,7 @@ export default function RbacAdmin() {
           )}
         </Card>
 
-        <Card className="p-4">
+        <Card accent className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Employee grants</h2>
           <select
             value={selectedEmployeeId ?? ""}

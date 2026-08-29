@@ -224,7 +224,7 @@ export default function OrgAdmin() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.3fr_1fr]">
-        <Card className="p-2">
+        <Card accent className="p-2">
           {unitsQuery.isLoading && <LoadingState label="Loading org units..." />}
           {!unitsQuery.isLoading && tree.length === 0 && (
             <EmptyState message="No org units yet -- add the first one below." />
@@ -274,7 +274,7 @@ export default function OrgAdmin() {
           </div>
         </Card>
 
-        <Card className="p-3">
+        <Card accent className="p-3">
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Positions</h2>
           {!selectedUnit ? (
             <EmptyState message="Select a unit to see and manage its positions." />

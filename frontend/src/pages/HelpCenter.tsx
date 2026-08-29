@@ -102,7 +102,7 @@ export default function HelpCenter() {
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-        <Card className="p-3 lg:col-span-1">
+        <Card accent className="p-3 lg:col-span-1">
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">Categories</p>
           <ul className="flex flex-col gap-0.5">
             <li>
@@ -136,7 +136,7 @@ export default function HelpCenter() {
           </ul>
         </Card>
 
-        <Card className="p-3 lg:col-span-1">
+        <Card accent className="p-3 lg:col-span-1">
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">Articles</p>
           {articlesQuery.isLoading && <LoadingState label="Loading..." />}
           {articlesQuery.isError && <ErrorBanner message={errorMessage(articlesQuery.error)} />}
@@ -159,7 +159,7 @@ export default function HelpCenter() {
           </ul>
         </Card>
 
-        <Card className="p-4 lg:col-span-2">
+        <Card accent className="p-4 lg:col-span-2">
           {!selectedArticle ? (
             <EmptyState message="Select an article to read it." />
           ) : (

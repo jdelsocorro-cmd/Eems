@@ -144,7 +144,7 @@ export default function BulkImportAdmin() {
       {uploadBatch.isError && <ErrorBanner message={errorMessage(uploadBatch.error)} />}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
+        <Card accent className="lg:col-span-1">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Import History</h2>
           </div>
@@ -186,7 +186,7 @@ export default function BulkImportAdmin() {
           </Table>
         </Card>
 
-        <Card className="p-4 lg:col-span-2">
+        <Card accent className="p-4 lg:col-span-2">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Preview / Summary</h2>
           {selectedBatchId && selectedBatchQuery.isLoading ? (
             <LoadingState label="Loading..." />
