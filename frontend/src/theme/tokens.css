@@ -211,3 +211,13 @@ body {
     background var(--transition),
     color var(--transition);
 }
+
+/* Keyboard-only focus ring, brand-colored -- was falling back to the
+   browser's own default outline (confirmed live: an unrelated orange),
+   the one interactive state in the app that wasn't using the design
+   system. :focus-visible (not :focus) so mouse/touch clicks don't show it,
+   only actual keyboard navigation. */
+:focus-visible {
+  outline: 2px solid var(--edge-teal);
+  outline-offset: 2px;
+}

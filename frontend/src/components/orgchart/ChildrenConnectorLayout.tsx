@@ -129,7 +129,13 @@ export function ChildrenConnectorLayout({
           height={layout.height}
           aria-hidden="true"
         >
-          <g className="text-text-dim" style={{ stroke: "color-mix(in srgb, currentColor 55%, transparent)" }} strokeWidth="1.5" fill="none">
+          {/* Nile Blue (--edge-navy-2), not --c-text-dim -- text-dim is a
+              cool blue-gray that read as mismatched once the page
+              background and cards went warm (brand teal/yellow); Nile Blue
+              keeps the "structural scaffolding, not an accent" intent
+              while actually belonging to the same palette as everything
+              around it. */}
+          <g style={{ stroke: "color-mix(in srgb, var(--edge-navy-2) 50%, transparent)" }} strokeWidth="1.5" fill="none">
             <line x1={layout.width / 2} y1={0} x2={layout.width / 2} y2={layout.trunkBottom} />
             {layout.rows.map((row, i) => (
               <g key={i}>

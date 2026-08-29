@@ -183,6 +183,7 @@ export default function OrgChart() {
   const [zoom, setZoom] = useState(1);
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [availableWidth, setAvailableWidth] = useState(0);
+  const [hasMoreBelow, setHasMoreBelow] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
@@ -627,6 +628,27 @@ export default function OrgChart() {
       setNaturalSize({ width: contentRef.current.scrollWidth, height: contentRef.current.scrollHeight });
     }
   }, [tree, collapsed, search, viewMode, focusedPositionId, availableWidth]);
+
+  // Bottom scroll-shadow cue -- a focused view with several department
+  // clusters (Cecilia Calvo: 9 reports, 5 departments) can extend well
+  // past the canvas's own 75vh cap with nothing but the scrollbar's own
+  // sliver to suggest more exists below; a user who doesn't notice it can
+  // walk away believing what's visible is the whole picture. Runs after
+  // naturalSize's own effect (declaration order) so it reads the settled
+  // post-wrap layout, not a stale one; the scroll listener catches the
+  // rest (the user scrolling doesn't change any of naturalSize's own
+  // dependencies).
+  useLayoutEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    function check() {
+      if (!el) return;
+      setHasMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+    }
+    check();
+    el.addEventListener("scroll", check);
+    return () => el.removeEventListener("scroll", check);
+  }, [tree, collapsed, search, viewMode, focusedPositionId, availableWidth, listCompact, naturalSize, zoom]);
 
   useEffect(() => {
     function onFullscreenChange() {
@@ -1161,9 +1183,25 @@ export default function OrgChart() {
                   );
                 })}
               </div>
-              <span className="rounded-full bg-edge-teal/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-edge-teal">
-                Focused View
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-edge-teal/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-edge-teal">
+                  Focused View
+                </span>
+                {/* Departments/reports count, known before scrolling -- a
+                    focused view with many reports across several
+                    departments (Cecilia Calvo: 9 reports, 5 departments)
+                    otherwise gives no signal that clusters continue below
+                    the fold; a user who doesn't notice the scrollbar can
+                    walk away believing the visible cluster is the whole
+                    picture. */}
+                {focusedNode && focusedNode.children.length > 0 && (
+                  <span className="text-xs text-text-muted">
+                    {groupChildrenByDepartment(focusedNode.children, departmentNameForPosition).length} department
+                    {groupChildrenByDepartment(focusedNode.children, departmentNameForPosition).length === 1 ? "" : "s"} ·{" "}
+                    {focusedNode.children.length} report{focusedNode.children.length === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
@@ -1193,6 +1231,13 @@ export default function OrgChart() {
               </div>
             ))}
         </Card>
+        {/* Fold cue: a plain gradient, not interactive, so it never blocks a
+            click on the last visible row -- shown only while hasMoreBelow
+            says the canvas is genuinely scrolled short of its content,
+            never as a static decoration. */}
+        {hasMoreBelow && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-edge-lg bg-gradient-to-t from-surface to-transparent" />
+        )}
       </div>
 
       {selectedEmployeeId && <EmployeeSidePanel employeeId={selectedEmployeeId} onClose={() => setSelectedEmployeeId(null)} />}

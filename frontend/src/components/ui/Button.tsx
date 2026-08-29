@@ -17,8 +17,13 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   toolbar: "text-text-muted hover:bg-surface hover:text-text",
 };
 
+// py-2.5 on "sm" clears a ~36px tap target (WCAG 2.2's 24px AA floor, with
+// margin) -- was py-1 (~24px), measured live against the Org Chart toolbar
+// during a design review. Bumped here rather than per-instance since sm is
+// shared across every toolbar/table-action button in the app (48 call
+// sites), not just Org Chart's.
 const SIZE_CLASSES: Record<ButtonSize, string> = {
-  sm: "px-2 py-1 text-xs",
+  sm: "px-2.5 py-2.5 text-xs",
   md: "px-3 py-1.5 text-sm",
 };
 
