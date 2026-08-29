@@ -36,6 +36,7 @@ import { AssignConsultantPanel } from "@/components/orgchart/AssignConsultantPan
 import { ReassignManagerPanel } from "@/components/orgchart/ReassignManagerPanel";
 import { DepartmentGrid, FillRateRing, type DepartmentStat } from "@/components/orgchart/DepartmentGrid";
 import { CommandPalette } from "@/components/orgchart/CommandPalette";
+import { ChildrenConnectorLayout } from "@/components/orgchart/ChildrenConnectorLayout";
 import "./OrgChart.css";
 
 interface TreeNode {
@@ -181,6 +182,7 @@ export default function OrgChart() {
   const [insightDismissed, setInsightDismissed] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+  const [availableWidth, setAvailableWidth] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
@@ -335,25 +337,33 @@ export default function OrgChart() {
 
   // Focus Mode shows exactly one level: the focused person's own direct
   // reports, never their grandchildren -- confirmed against the redesigned
-  // mockup as the exact behavior wanted ("it all fits in one window"),
-  // replacing the old behavior of revealing the focused node's own children
-  // while leaving deeper descendants at whatever collapse state they
-  // already had (which could show 2-3 more levels for a branch that hadn't
-  // been auto-collapsed). Every card's identity click already calls
-  // onFocusPosition, so clicking any of the one level of children shown
-  // here re-fires this same effect for the new target -- drilling deeper is
-  // "click again," not a separate code path.
-  useEffect(() => {
-    if (!focusedPositionId) return;
-    const node = nodeById.get(focusedPositionId);
+  // mockup as the exact behavior wanted ("it all fits in one window").
+  // Setting focus and revealing the target's own children used to be a
+  // separate effect firing one render after focusedPositionId changed; for
+  // that single transient render, the PREVIOUS focus target's children
+  // were still expanded (collapsed hadn't been updated yet), which could
+  // briefly inflate a department cluster's height by a whole extra
+  // subtree -- long enough to corrupt ChildrenConnectorLayout's very first
+  // measurement of the new view (its dependency array had no way to know
+  // that a *later* collapse-state correction, not an item or width change,
+  // was coming). Doing both updates here, in the same event/effect that
+  // decides to change focus, batches them into one render with no
+  // in-between state, so every call site (a card's identity click, the
+  // breadcrumb, "Back to Organizational Chart", the default-focus-on-root
+  // effect, the command palette) routes through this instead of
+  // setFocusedPositionId directly.
+  function focusPosition(positionId: string | null) {
+    setFocusedPositionId(positionId);
+    if (!positionId) return;
+    const node = nodeById.get(positionId);
     if (!node) return;
     setCollapsed((prev) => {
       const next = new Set(prev);
-      next.delete(focusedPositionId);
+      next.delete(positionId);
       node.children.forEach((child) => next.add(child.position.id));
       return next;
     });
-  }, [focusedPositionId, nodeById]);
+  }
 
   // Candidates for the Assign Consultant panel's "Existing Employee" mode --
   // every active employee, not just unassigned ones, so an admin can move
@@ -583,16 +593,40 @@ export default function OrgChart() {
   useEffect(() => {
     if (tree.length > 0 && autoCollapsedForCompanyRef.current !== activeCompanyId) {
       autoCollapsedForCompanyRef.current = activeCompanyId;
-      setFocusedPositionId(tree[0]?.position.id ?? null);
+      focusPosition(tree[0]?.position.id ?? null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree, activeCompanyId]);
 
+  // Content used to lay out at width:max-content (however wide the fully
+  // unwrapped tree wants) -- wrapping needs the opposite: a fixed layout
+  // width driven directly by the viewport's own real size, so flex-wrap
+  // has an actual boundary to wrap against. Measured from viewportRef
+  // (the scrollable Card, p-6 = 24px padding each side) via ResizeObserver
+  // so it stays correct across window resizes and sidebar/fullscreen
+  // toggles, not just on mount.
+  useLayoutEffect(() => {
+    function measure() {
+      if (viewportRef.current) {
+        setAvailableWidth(Math.max(0, viewportRef.current.clientWidth - 48));
+      }
+    }
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (viewportRef.current) ro.observe(viewportRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // "Natural size" now means "however tall the wrapped layout needs to be
+  // at availableWidth" -- not, as before, however wide the content wants
+  // at its fully unwrapped size. Depends on availableWidth so it
+  // re-measures after a resize changes the width content is laid out at,
+  // not just after the tree/collapse/focus state itself changes.
   useLayoutEffect(() => {
     if (contentRef.current) {
       setNaturalSize({ width: contentRef.current.scrollWidth, height: contentRef.current.scrollHeight });
     }
-  }, [tree, collapsed, search, viewMode, focusedPositionId]);
+  }, [tree, collapsed, search, viewMode, focusedPositionId, availableWidth]);
 
   useEffect(() => {
     function onFullscreenChange() {
@@ -626,7 +660,7 @@ export default function OrgChart() {
   function focusFromPalette(positionId: string) {
     setSearch("");
     setViewMode("chart");
-    setFocusedPositionId(positionId);
+    focusPosition(positionId);
   }
 
   // Click-drag pan on the canvas, Chart view only -- List needs normal text
@@ -706,7 +740,7 @@ export default function OrgChart() {
   // this, so there's one definition of what "home" means, not two that
   // could drift.
   function goToRoot() {
-    setFocusedPositionId(tree[0]?.position.id ?? null);
+    focusPosition(tree[0]?.position.id ?? null);
   }
 
   function collapseAll() {
@@ -800,11 +834,12 @@ export default function OrgChart() {
       canViewProfiles={canViewProfiles}
       onSelectEmployee={setSelectedEmployeeId}
       selectedEmployeeId={selectedEmployeeId}
-      onFocusPosition={setFocusedPositionId}
+      onFocusPosition={focusPosition}
       canAssignVacant={canAssignVacant}
       onOpenAssign={setAssigningNode}
       canReassign={canAssignExisting}
       onOpenReassign={setReassigningNode}
+      chartLayoutWidth={availableWidth}
     />
   ));
 
@@ -1118,7 +1153,7 @@ export default function OrgChart() {
                       {isCurrent ? (
                         <span className="font-medium text-text">{position.title}</span>
                       ) : (
-                        <button type="button" onClick={() => setFocusedPositionId(position.id)} className="hover:text-text hover:underline">
+                        <button type="button" onClick={() => focusPosition(position.id)} className="hover:text-text hover:underline">
                           {position.title}
                         </button>
                       )}
@@ -1132,16 +1167,28 @@ export default function OrgChart() {
             </div>
           )}
 
+          {/* Content is pinned to availableWidth (the viewport's own real
+              width), not width:max-content -- a fixed layout width is what
+              lets flex-wrap actually wrap instead of laying out one
+              unbounded line. The zoom transform still scales visually on
+              top of that fixed-width layout without affecting it (transform
+              never changes layout), and the outer sizing div still exists
+              only so the scrollable Card's scrollbars reflect the visually
+              scaled size correctly. */}
           {viewMode === "chart" &&
             chartRootEntries.length > 0 &&
             (naturalSize.width > 0 ? (
               <div style={{ width: naturalSize.width * zoom, height: naturalSize.height * zoom }}>
-                <div ref={contentRef} style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: "max-content" }} className="flex gap-10">
+                <div
+                  ref={contentRef}
+                  style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: availableWidth || undefined }}
+                  className="flex justify-center"
+                >
                   {chartNodes}
                 </div>
               </div>
             ) : (
-              <div ref={contentRef} className="flex w-max justify-center gap-10">
+              <div ref={contentRef} className="flex justify-center" style={{ width: availableWidth || undefined }}>
                 {chartNodes}
               </div>
             ))}
@@ -1339,6 +1386,12 @@ interface NodeSharedProps {
   onOpenAssign: (node: TreeNode) => void;
   canReassign: boolean;
   onOpenReassign: (node: TreeNode) => void;
+  // The chart canvas's own available width (see the availableWidth state
+  // above) -- threaded down so ChildrenConnectorLayout can re-measure
+  // exactly when the canvas actually resizes, instead of relying on
+  // ResizeObserver to notice a reflow that may not change any single
+  // card's own size (only its row).
+  chartLayoutWidth: number;
 }
 
 function EmployeeNameControl({
@@ -1380,18 +1433,20 @@ function EmployeeNameControl({
 
 // Card and its own subtree render together, always -- a node's
 // <div class="flex flex-col items-center"> naturally sizes to fit its own
-// subtree, and sibling nodes in an <ul class="org-tree"> lay out side by
-// side with connector lines that are structurally guaranteed correct,
-// since the card and its children are the same DOM unit. (A prior version
-// split this into a card-only component plus a separately-positioned
-// "collector" row for department clusters, to keep a cluster's box
-// compact -- that put the box row and the subtree row in two independent,
-// separately-centered flex containers with no shared coordinate system, so
-// a connector line pointing from "below the box" to a specific branch was
-// geometrically arbitrary. Measured live: branches off by 400-1300px from
-// their actual parent card, some closer to the wrong neighboring manager
-// than their own. Reverted -- see OrgNodeChildren's clustered branch below
-// for how compactness is achieved instead, without breaking this.)
+// subtree, and sibling nodes lay out side by side (wrapping into extra
+// rows as needed) via ChildrenConnectorLayout, which measures each
+// sibling's real rendered position and draws connectors from that -- it
+// only works because the card and its children are the same DOM unit, so
+// "this sibling's box" is unambiguous. (A prior version split this into a
+// card-only component plus a separately-positioned "collector" row for
+// department clusters, to keep a cluster's box compact -- that put the box
+// row and the subtree row in two independent, separately-centered flex
+// containers with no shared coordinate system, so a connector line
+// pointing from "below the box" to a specific branch was geometrically
+// arbitrary. Measured live: branches off by 400-1300px from their actual
+// parent card, some closer to the wrong neighboring manager than their
+// own. Reverted -- see OrgNodeChildren's clustered branch below for how
+// compactness is achieved instead, without breaking this.)
 function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
   const {
     collapsed,
@@ -1621,7 +1676,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
 // clustering re-applies at every level a manager's own reports happen to
 // span multiple departments.
 function OrgNodeChildren({ node, depth, ...shared }: { node: TreeNode; depth: number } & NodeSharedProps) {
-  const { collapsed, matchesSearch, isSearchActive, colorIndexForPosition, departmentNameForPosition, passesDeptFilterForOrgUnit } = shared;
+  const { collapsed, matchesSearch, isSearchActive, colorIndexForPosition, departmentNameForPosition, passesDeptFilterForOrgUnit, chartLayoutWidth } = shared;
   const isCollapsed = collapsed.has(node.position.id);
   const hasChildren = node.children.length > 0;
   const visibleChildren = node.children.filter(matchesSearch);
@@ -1634,26 +1689,23 @@ function OrgNodeChildren({ node, depth, ...shared }: { node: TreeNode; depth: nu
   // moment search is cleared.
   if (!hasChildren || (isCollapsed && !isSearchActive) || visibleChildren.length === 0) return null;
 
-  return (
-    <ul className="org-tree org-tree-animate-in">
-      {(() => {
-        const departmentGroups = groupChildrenByDepartment(visibleChildren, departmentNameForPosition);
-        // Only cluster when there's actually more than one department to
-        // tell apart -- a single-department manager (the common case)
-        // renders exactly as before, one plain <li> per child.
-        if (departmentGroups.length <= 1) {
-          return visibleChildren.map((child) => (
-            <li key={child.position.id}>
-              <OrgNode node={child} depth={depth + 1} {...shared} />
-            </li>
-          ));
-        }
-        return departmentGroups.map((group) => {
+  const departmentGroups = groupChildrenByDepartment(visibleChildren, departmentNameForPosition);
+  // Only cluster when there's actually more than one department to tell
+  // apart -- a single-department manager (the common case) renders exactly
+  // as before, one plain item per child.
+  const items =
+    departmentGroups.length <= 1
+      ? visibleChildren.map((child) => ({
+          key: child.position.id,
+          content: <OrgNode node={child} depth={depth + 1} {...shared} />,
+        }))
+      : departmentGroups.map((group) => {
           const groupColorIndex = colorIndexForPosition(group.nodes[0].position);
           const groupDeptName = departmentNameForPosition(group.nodes[0].position);
           const groupDimmed = !passesDeptFilterForOrgUnit(group.orgUnitId);
-          return (
-            <li key={group.orgUnitId}>
+          return {
+            key: group.orgUnitId,
+            content: (
               <div className={`flex flex-col items-center gap-1 ${groupDimmed ? "opacity-35" : ""}`}>
                 <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
                   <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(groupColorIndex)}`} />
@@ -1673,11 +1725,14 @@ function OrgNodeChildren({ node, depth, ...shared }: { node: TreeNode; depth: nu
                   ))}
                 </div>
               </div>
-            </li>
-          );
+            ),
+          };
         });
-      })()}
-    </ul>
+
+  return (
+    <div className="org-tree-animate-in">
+      <ChildrenConnectorLayout items={items} layoutWidth={chartLayoutWidth} />
+    </div>
   );
 }
 
