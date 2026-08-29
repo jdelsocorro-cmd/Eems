@@ -33,6 +33,7 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-bg font-ui text-text">
       <div className="w-full max-w-sm rounded-edge-lg bg-surface p-8 shadow-edge-lg">
         <div className="mb-6 text-center">
+          <img src="/brand/edge-icon.png" alt="" width={28} height={30} className="mx-auto mb-2" />
           <span className="text-2xl font-semibold text-text">
             EEMS<span className="text-edge-teal">.</span>
           </span>

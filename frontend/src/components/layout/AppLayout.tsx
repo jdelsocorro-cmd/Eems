@@ -91,7 +91,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-bg font-ui text-text" data-theme="navy">
       <aside className="sidebar flex w-[var(--sidebar-w)] flex-col border-r border-border bg-surface">
-        <div className="flex h-[var(--topbar-h)] items-center px-4">
+        <div className="flex h-[var(--topbar-h)] items-center gap-2 px-4">
+          {/* The brand kit pairs this teal/yellow "Light" colorway with dark
+              surfaces (its "Dark" navy colorway is for light surfaces,
+              matching its wordmark lockups) -- this sidebar is always dark
+              regardless of theme, so Light is the correct mark here. */}
+          <img src="/brand/edge-icon.png" alt="" width={20} height={22} className="shrink-0" />
           <span className="logo-text text-lg font-semibold">
             EEMS<span className="logo-accent text-edge-teal">.</span>
           </span>

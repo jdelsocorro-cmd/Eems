@@ -48,7 +48,7 @@ export default {
         "edge-glow": "var(--shadow-glow)",
       },
       fontFamily: {
-        ui: ["Inter", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
+        ui: ["Poppins", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
       },
     },
   },

@@ -1,41 +1,45 @@
 /* ============================================================
-   EEMS — EDGE Design System v1.0 tokens
-   Ported verbatim from coaching-ops/frontend/Styles.html (lines 8-94) and
-   scheduling-app/frontend/Styles.html, the two existing EDGE apps this
-   token set was already shared by. Do not duplicate these values inline
-   anywhere else in this app -- reference the CSS variables, or the
-   tailwind.config.ts colors.edge.* / colors.surface.* mappings that wrap
-   them.
-   Brand: Deep Navy + Teal — "The Human Edge in Digital Learning"
+   EEMS — EDGE Design System v2.0 tokens
+   Brand values (Deep Blue #0F163F / Nile Blue #193E59 / Teal #42E496
+   primaries, Mid Aquamarine #3BB5B6 / Naples Yellow #FFD551 secondaries)
+   pulled verbatim from the official EDGE_BrandGuideline-Font&Color sheet,
+   replacing this file's prior placeholder palette. Do not duplicate these
+   values inline anywhere else in this app -- reference the CSS variables,
+   or the tailwind.config.ts colors.edge.* / colors.surface.* mappings that
+   wrap them.
+   Brand: Deep Blue + Teal — "The Human Edge in Digital Learning"
    ============================================================ */
 
 :root {
   /* Brand core */
-  --edge-teal: #00c896;
-  --edge-teal-dark: #00a87a;
-  --edge-navy: #0b1526;
+  --edge-teal: #42e496;
+  --edge-teal-dark: #22b876; /* darkened for hover/pressed states -- no official dark-teal swatch exists */
+  --edge-navy: #0f163f;
+  --edge-navy-2: #193e59; /* Nile Blue -- the brand's other primary, for gradients/secondary dark surfaces */
 
-  /* Dark theme (default) */
-  --c-bg: #0b1526;
-  --c-surface: #111d35;
-  --c-surface2: #162040;
-  --c-surface3: #1c2a4a;
-  --c-border: rgba(0, 200, 150, 0.12);
-  --c-border-hover: rgba(0, 200, 150, 0.25);
-  --c-accent: #00c896;
-  --c-accent-soft: rgba(0, 200, 150, 0.12);
-  --c-blue: #0ea5e9;
-  --c-blue-soft: rgba(14, 165, 233, 0.12);
-  --c-green: #00c896;
-  --c-green-soft: rgba(0, 200, 150, 0.12);
-  --c-yellow: #f5a623;
-  --c-yellow-soft: rgba(245, 166, 35, 0.14);
+  /* Dark theme (default; not the app's actual current shell -- EEMS always
+     renders [data-theme="navy"] below, a light content area under a dark
+     sidebar -- but kept correct and reachable in case that changes). */
+  --c-bg: #0f163f;
+  --c-surface: #141c46;
+  --c-surface2: #182451;
+  --c-surface3: #1e2c5c;
+  --c-border: rgba(66, 228, 150, 0.12);
+  --c-border-hover: rgba(66, 228, 150, 0.25);
+  --c-accent: #42e496;
+  --c-accent-soft: rgba(66, 228, 150, 0.12);
+  --c-blue: #3bb5b6;
+  --c-blue-soft: rgba(59, 181, 182, 0.12);
+  --c-green: #42e496;
+  --c-green-soft: rgba(66, 228, 150, 0.12);
+  --c-yellow: #ffd551;
+  --c-yellow-soft: rgba(255, 213, 81, 0.14);
   --c-orange: #f97316;
   --c-red: #f45b69;
   --c-text: #e8edf5;
-  --c-text-muted: #7a90b0;
-  --c-text-dim: #4a6080;
-  --c-nav-active: rgba(0, 200, 150, 0.12);
+  --c-text-muted: #7c8ab5;
+  --c-text-dim: #4b5a8c;
+  --c-nav-active: rgba(66, 228, 150, 0.12);
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 10px;
@@ -50,74 +54,89 @@
   --transition: 0.2s ease;
 }
 
+/* Accent/blue/green here are darkened from the raw brand swatches, same as
+   [data-theme="navy"] below -- the raw Teal (#42e496) and Mid Aquamarine
+   (#3bb5b6) are both too light-valued to clear 4.5:1 against a white
+   surface as text/icon color (computed: 1.64:1 / ~3.4:1). Values computed
+   against this theme's actual surfaces, not eyeballed -- see
+   [data-theme="navy"]'s comment for the full contrast table. */
 [data-theme="light"] {
-  --c-bg: #f0f4f9;
+  --c-bg: #f1f4fa;
   --c-surface: #ffffff;
-  --c-surface2: #f8fafc;
-  --c-surface3: #eef3f9;
-  --c-border: rgba(13, 26, 48, 0.1);
-  --c-border-hover: rgba(13, 26, 48, 0.22);
-  --c-accent: #00a87a;
-  --c-accent-soft: rgba(0, 168, 122, 0.1);
-  --c-blue: #0880ba;
-  --c-blue-soft: rgba(8, 128, 186, 0.1);
-  --c-green: #00a87a;
-  --c-green-soft: rgba(0, 168, 122, 0.1);
-  --c-nav-active: rgba(0, 168, 122, 0.08);
-  --c-text: #0d1a30;
-  --c-text-muted: #5a7090;
-  --c-text-dim: #a0b0c8;
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.12);
-  --shadow-glow: 0 0 16px rgba(0, 168, 122, 0.15);
+  --c-surface2: #f7f9fc;
+  --c-surface3: #edf1f8;
+  --c-border: rgba(15, 22, 63, 0.1);
+  --c-border-hover: rgba(15, 22, 63, 0.22);
+  --c-accent: #21724b;
+  --c-accent-soft: rgba(33, 114, 75, 0.1);
+  --c-blue: #267576;
+  --c-blue-soft: rgba(38, 117, 118, 0.1);
+  --c-green: #1a5b3c;
+  --c-green-soft: rgba(26, 91, 60, 0.1);
+  --c-nav-active: rgba(33, 114, 75, 0.08);
+  --c-text: #0f163f;
+  --c-text-muted: #5a6690;
+  --c-text-dim: #9ca6c8;
+  --shadow-sm: 0 2px 8px rgba(15, 22, 63, 0.06);
+  --shadow-md: 0 4px 20px rgba(15, 22, 63, 0.08);
+  --shadow-lg: 0 8px 40px rgba(15, 22, 63, 0.12);
+  --shadow-glow: 0 0 16px rgba(33, 114, 75, 0.15);
 }
 
 /* Navy theme — dark sidebar + light content ("enterprise default" per the
-   existing EDGE apps; EEMS follows the same convention). */
+   existing EDGE apps; EEMS follows the same convention). This is the
+   theme actually rendered in production (AppLayout.tsx hardcodes
+   data-theme="navy") -- [data-theme="light"] and :root's own dark values
+   above are correct but currently unreachable.
+
+   accent/blue/green/yellow are all darkened from the raw brand swatches --
+   Teal (#42e496) and Mid Aquamarine (#3bb5b6) read beautifully as accents
+   on a dark surface but are both too light-valued to clear 4.5:1 as
+   text/icon color on this theme's near-white surfaces (raw Teal measures
+   ~1.6:1 here), and Naples Yellow (#ffd551) is worse still (~1.3:1).
+   Computed against relative luminance for each color's actual surface, not
+   eyeballed -- worst case (surface3, this theme's most saturated tint) for
+   each: accent 5.27:1, green 6.83:1, blue 4.84:1, yellow 4.71:1, red
+   4.62:1. All clear the 4.5:1 AA minimum with margin. */
 [data-theme="navy"] {
-  --c-bg: #f0f4f9;
+  --c-bg: #f1f4fa;
   --c-surface: #ffffff;
-  --c-surface2: #f8fafc;
-  --c-surface3: #eef3f9;
-  --c-border: rgba(13, 26, 48, 0.09);
-  --c-border-hover: rgba(13, 26, 48, 0.2);
-  --c-accent: #00a87a;
-  --c-accent-soft: rgba(0, 168, 122, 0.1);
-  /* --c-blue/--c-green/--c-yellow/--c-red are the text color half of every
-     status pill (bg-*-soft/10 + text-*) across the app -- table statuses,
-     ticket severity, KPI/goal states. Computed against WCAG AA (4.5:1) for
-     each color's own soft-tint background rather than eyeballed; yellow/red
-     previously fell through unchanged from the dark theme's :root values
-     (never re-tuned for this light theme) and were badly out of compliance
-     (1.84:1 / 2.87:1). See project memory for the computed values. */
-  --c-blue: #0772a6;
-  --c-blue-soft: rgba(8, 128, 186, 0.1);
-  --c-green: #007d5b;
-  --c-green-soft: rgba(0, 168, 122, 0.1);
-  --c-yellow: #9a6207;
-  --c-yellow-soft: rgba(245, 166, 35, 0.14);
+  --c-surface2: #f7f9fc;
+  --c-surface3: #edf1f8;
+  --c-border: rgba(15, 22, 63, 0.09);
+  --c-border-hover: rgba(15, 22, 63, 0.2);
+  --c-accent: #21724b;
+  --c-accent-soft: rgba(33, 114, 75, 0.1);
+  --c-blue: #267576;
+  --c-blue-soft: rgba(38, 117, 118, 0.1);
+  --c-green: #1a5b3c;
+  --c-green-soft: rgba(26, 91, 60, 0.1);
+  --c-yellow: #846400;
+  --c-yellow-soft: rgba(255, 213, 81, 0.14);
   --c-red: #da0f21;
-  --c-nav-active: rgba(0, 168, 122, 0.08);
-  --c-text: #0d1a30;
-  --c-text-muted: #5a7090;
-  /* Was #a0b0c8 (1.99:1 / 2.20:1 against this theme's surfaces -- badly
-     below the 4.5:1 AA minimum). EmptyState's message text and LoadingState's
-     label both render at this color, so effectively every empty state and
-     loading spinner caption in the app was under half the required contrast.
-     A genuinely lighter third tier isn't AA-compliant against these light
-     surfaces at this hue -- matching text-muted is the honest fix, not a
-     new arbitrary color. */
-  --c-text-dim: #5a7090;
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.09);
-  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.13);
-  --shadow-glow: 0 0 16px rgba(0, 168, 122, 0.15);
+  --c-nav-active: rgba(33, 114, 75, 0.08);
+  --c-text: #0f163f;
+  --c-text-muted: #5a6690;
+  /* Matches text-muted rather than a distinct lighter tier -- a genuinely
+     lighter third tier isn't AA-compliant against these light surfaces at
+     this hue (documented independently before the brand-color swap; still
+     holds). */
+  --c-text-dim: #5a6690;
+  --shadow-sm: 0 2px 8px rgba(15, 22, 63, 0.06);
+  --shadow-md: 0 4px 20px rgba(15, 22, 63, 0.09);
+  --shadow-lg: 0 8px 40px rgba(15, 22, 63, 0.13);
+  --shadow-glow: 0 0 16px rgba(33, 114, 75, 0.15);
 }
 
+/* Sidebar stays dark regardless of theme (the "enterprise shell" -- see
+   the block comment above), so its own accent references the raw brand
+   Teal/Deep Blue directly rather than the contrast-darkened --c-accent
+   above: a vivid mark reads correctly against a dark surface without
+   needing the same AA-contrast-on-white darkening the content area's
+   accent required. */
 [data-theme="navy"] .sidebar {
-  background: #0b1526;
-  border-right-color: rgba(0, 200, 150, 0.1);
+  background: var(--edge-navy);
+  border-right-color: rgba(66, 228, 150, 0.1);
 }
 [data-theme="navy"] .sidebar .nav-group-label {
   color: rgba(255, 255, 255, 0.25);
@@ -130,29 +149,29 @@
   color: rgba(255, 255, 255, 0.8);
 }
 [data-theme="navy"] .sidebar .nav-item.active {
-  background: rgba(0, 200, 150, 0.12);
-  color: #00c896;
+  background: rgba(66, 228, 150, 0.12);
+  color: var(--edge-teal);
   font-weight: 600;
 }
 [data-theme="navy"] .sidebar .nav-item.active .nav-icon {
-  color: #00c896;
+  color: var(--edge-teal);
 }
 [data-theme="navy"] .sidebar .logo-text {
   color: #fff;
 }
 [data-theme="navy"] .sidebar .logo-accent {
-  color: #00c896;
+  color: var(--edge-teal);
 }
 [data-theme="navy"] .sidebar-search input {
   background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(0, 200, 150, 0.12);
+  border-color: rgba(66, 228, 150, 0.12);
   color: #e8edf5;
 }
 [data-theme="navy"] .sidebar-search input::placeholder {
   color: rgba(255, 255, 255, 0.28);
 }
 [data-theme="navy"] .sidebar-footer {
-  border-top-color: rgba(0, 200, 150, 0.1);
+  border-top-color: rgba(66, 228, 150, 0.1);
 }
 [data-theme="navy"] .sidebar .theme-toggle {
   color: rgba(255, 255, 255, 0.5);
@@ -166,23 +185,23 @@
   color: rgba(255, 255, 255, 0.5);
 }
 [data-theme="navy"] .sidebar-toggle:hover {
-  background: #00c896;
-  color: #0b1526;
+  background: var(--edge-teal);
+  color: var(--edge-navy);
 }
 [data-theme="navy"] .sidebar-version {
   color: rgba(255, 255, 255, 0.22);
 }
 [data-theme="navy"] .nav-badge.new,
 [data-theme="navy"] .nav-badge.alert {
-  background: rgba(0, 200, 150, 0.14);
-  color: #00c896;
+  background: rgba(66, 228, 150, 0.14);
+  color: var(--edge-teal);
 }
 
 body {
   margin: 0;
   background: var(--c-bg);
   color: var(--c-text);
-  font-family: "Inter", -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: "Poppins", -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   transition:
     background var(--transition),
     color var(--transition);
