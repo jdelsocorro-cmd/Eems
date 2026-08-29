@@ -27,7 +27,7 @@ import {
 
 import { apiClient } from "@/lib/apiClient";
 import type { Company, Employee, OrgUnit, Position, PositionAssignment } from "@/lib/types";
-import { Button, Card, EmptyState, LoadingState, SortHeader, Table, TableHead, Th, Toolbar, ToolbarDivider, Tr, Td } from "@/components/ui";
+import { Button, Card, EmptyState, LoadingState, SortHeader, StatStrip, Table, TableHead, Th, Toolbar, ToolbarDivider, Tr, Td } from "@/components/ui";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EmployeeAvatar } from "@/components/orgchart/EmployeeAvatar";
 import { OrgChartLegend, legendSwatchClass } from "@/components/orgchart/OrgChartLegend";
@@ -945,7 +945,25 @@ export default function OrgChart() {
         </Toolbar>
       </div>
 
-      <StatStrip stats={stats} />
+      <StatStrip
+        tiles={[
+          { label: "Total Employees", value: String(stats.totalEmployees), sub: "Across all departments", icon: IconUsers },
+          { label: "Departments", value: String(stats.departments), sub: "Active org units", icon: IconBuilding },
+          { label: "Managers", value: String(stats.managers), sub: "Incl. vacant seats", icon: IconUserStar },
+          {
+            label: "Span of Control",
+            value: stats.spanOfControl > 0 ? stats.spanOfControl.toFixed(1) + " avg" : "—",
+            sub: "Direct reports per manager",
+            icon: IconHierarchy3,
+          },
+          // No separate "Teams" tile -- EEMS has no team entity distinct
+          // from "a position with direct reports," so it would always show
+          // the exact same number as Managers (confirmed live: both read
+          // 23). Two tiles that can never disagree don't convey two pieces
+          // of information; showing both just reads as a stat-strip bug.
+          { label: "Last Position Change", value: stats.lastUpdated ?? "—", sub: "Most recent update", icon: IconClockEdit },
+        ]}
+      />
 
       {(viewMode === "chart" || viewMode === "list") && (
         <div className="flex flex-wrap items-center gap-3">
@@ -1283,54 +1301,6 @@ export default function OrgChart() {
         colorIndexForPosition={colorIndexForPosition}
         onFocusPosition={focusFromPalette}
       />
-    </div>
-  );
-}
-
-function StatStrip({
-  stats,
-}: {
-  stats: { totalEmployees: number; departments: number; managers: number; spanOfControl: number; lastUpdated: string | null };
-}) {
-  // No separate "Teams" tile -- EEMS has no team entity distinct from
-  // "a position with direct reports," so it would always show the exact
-  // same number as Managers (confirmed live: both read 23). Two tiles that
-  // can never disagree don't convey two pieces of information; showing
-  // both just reads as a stat-strip bug.
-  const tiles = [
-    { label: "Total Employees", value: String(stats.totalEmployees), sub: "Across all departments", icon: IconUsers },
-    { label: "Departments", value: String(stats.departments), sub: "Active org units", icon: IconBuilding },
-    { label: "Managers", value: String(stats.managers), sub: "Incl. vacant seats", icon: IconUserStar },
-    {
-      label: "Span of Control",
-      value: stats.spanOfControl > 0 ? stats.spanOfControl.toFixed(1) + " avg" : "—",
-      sub: "Direct reports per manager",
-      icon: IconHierarchy3,
-    },
-    { label: "Last Position Change", value: stats.lastUpdated ?? "—", sub: "Most recent update", icon: IconClockEdit },
-  ];
-
-  // A single slim band with dividers, not five separately-elevated cards --
-  // these are orientation numbers a user checks in passing, not decisions
-  // made from this screen, so they don't need card-level visual weight
-  // (each card previously ran a different accent hue too, competing with
-  // the chart itself for the first thing the eye lands on). One neutral
-  // treatment here keeps color meaningful where it actually signals
-  // something: the insight banner and the fill-rate ring below.
-  return (
-    <div className="flex flex-wrap items-stretch divide-x divide-border rounded-edge-md border border-border bg-surface">
-      {tiles.map((t) => (
-        <div key={t.label} className="flex min-w-[170px] flex-1 items-center gap-2 px-3.5 py-2">
-          <t.icon size={15} className="shrink-0 text-text-dim" />
-          <div className="min-w-0">
-            <p className="truncate text-[10px] font-medium uppercase tracking-wide text-text-muted">{t.label}</p>
-            <p className="truncate text-sm font-semibold leading-tight text-text" title={`${t.value} — ${t.sub}`}>
-              {t.value}
-            </p>
-            <p className="truncate text-[10.5px] leading-tight text-text-dim">{t.sub}</p>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }

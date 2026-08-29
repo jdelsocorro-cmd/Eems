@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, errorMessage } from "@/lib/apiClient";
 import { downloadCsv } from "@/lib/csv";
 import type { Company, FieldStrategy, ImportBatch, ImportBatchRow, ImportMode, ImportRowAction, OrgUnit, Position, PositionAssignment } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState, StatStrip, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 
 // Exact header Bulk Import's own employee module expects (bulk_import.py's
 // IMPORT_MODULE_REGISTRY importable_fields) -- a vacant-positions template
@@ -194,13 +194,15 @@ export default function BulkImportAdmin() {
             <EmptyState message="Upload a file, or select a past import, to see details." />
           ) : (
             <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                <SummaryStat label="To insert / inserted" value={selectedBatch.inserted_count} />
-                <SummaryStat label="To update / updated" value={selectedBatch.updated_count} />
-                <SummaryStat label="Skipped" value={selectedBatch.skipped_count} />
-                <SummaryStat label="Rejected" value={selectedBatch.rejected_count} />
-                <SummaryStat label="Total rows" value={selectedBatch.row_count} />
-              </div>
+              <StatStrip
+                tiles={[
+                  { label: "To insert / inserted", value: String(selectedBatch.inserted_count) },
+                  { label: "To update / updated", value: String(selectedBatch.updated_count) },
+                  { label: "Skipped", value: String(selectedBatch.skipped_count) },
+                  { label: "Rejected", value: String(selectedBatch.rejected_count) },
+                  { label: "Total rows", value: String(selectedBatch.row_count) },
+                ]}
+              />
 
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-xs text-text-dim">
@@ -277,15 +279,6 @@ export default function BulkImportAdmin() {
           )}
         </Card>
       </div>
-    </div>
-  );
-}
-
-function SummaryStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-text-muted">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-text">{value}</p>
     </div>
   );
 }

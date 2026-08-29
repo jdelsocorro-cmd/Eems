@@ -15,7 +15,7 @@ import type {
   TaskStatus,
   TaskStatusHistoryEntry,
 } from "@/lib/types";
-import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState, SuccessBanner, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorBanner, FieldLabel, LoadingState, StatStrip, SuccessBanner, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 import { CompletionWorkflow } from "@/components/completion/CompletionWorkflow";
 
 const NEW_CATEGORY_VALUE = "__new__";
@@ -203,16 +203,18 @@ export default function Tasks() {
         />
       )}
 
-      <Card accent className="p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">My Performance</h2>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-          <PerformanceStat label="Average Task Score" value={averageTaskScore === null ? "—" : `${averageTaskScore.toFixed(1)}%`} />
-          <PerformanceStat label="Tasks Completed" value={String(completedTaskIds.size)} />
-          <PerformanceStat label="Pending Review" value={String(pendingTaskIds.size)} />
-          <PerformanceStat label="Completion Rate" value={completionRate === null ? "—" : `${completionRate.toFixed(0)}%`} />
-          <PerformanceStat label="Linked KPI Score" value={linkedKpiScore === null ? "—" : `${linkedKpiScore}%`} />
-        </div>
-      </Card>
+      <div className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">My Performance</h2>
+        <StatStrip
+          tiles={[
+            { label: "Average Task Score", value: averageTaskScore === null ? "—" : `${averageTaskScore.toFixed(1)}%` },
+            { label: "Tasks Completed", value: String(completedTaskIds.size) },
+            { label: "Pending Review", value: String(pendingTaskIds.size) },
+            { label: "Completion Rate", value: completionRate === null ? "—" : `${completionRate.toFixed(0)}%` },
+            { label: "Linked KPI Score", value: linkedKpiScore === null ? "—" : `${linkedKpiScore}%` },
+          ]}
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card accent className="lg:col-span-2">
@@ -398,15 +400,6 @@ export default function Tasks() {
           )}
         </Card>
       </div>
-    </div>
-  );
-}
-
-function PerformanceStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-text-muted">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-text">{value}</p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { EmployeeLink } from "@/components/EmployeeLink";
-import { Button, Card, ErrorBanner, LoadingState, SortHeader, Table, TableEmptyRow, TableHead, Td, Tr } from "@/components/ui";
+import { Button, Card, ErrorBanner, LoadingState, SortHeader, StatStrip, Table, TableEmptyRow, TableHead, Td, Tr } from "@/components/ui";
 import {
   useAllEmployees,
   useScopedCompletionSubmissions,
@@ -136,21 +136,6 @@ export default function PerformanceReviewCenter() {
 // one from components/ui (was a near-identical duplicate defined locally
 // here and in UserManagement.tsx).
 // ----------------------------------------------------------------------------
-
-function StatStrip({ stats }: { stats: { label: string; value: string }[] }) {
-  return (
-    <Card accent className="p-4">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {stats.map((s) => (
-          <div key={s.label}>
-            <p className="text-xs font-medium uppercase tracking-wide text-text-muted">{s.label}</p>
-            <p className="mt-1 text-lg font-semibold text-text">{s.value}</p>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
 
 function StatusPills<T extends string>({
   options,
@@ -301,7 +286,7 @@ function PerformanceTab({
   return (
     <div className="flex flex-col gap-4">
       <StatStrip
-        stats={[
+        tiles={[
           { label: "Average Score", value: averageScore === null ? "—" : `${averageScore.toFixed(1)}%` },
           { label: "Scored", value: `${scoredRows.length} / ${rows.length}` },
           { label: "Active KPIs", value: String(totalActiveKpis) },
@@ -443,7 +428,7 @@ function TasksTab({
   return (
     <div className="flex flex-col gap-4">
       <StatStrip
-        stats={[
+        tiles={[
           ...TASK_STATUSES.map((s) => ({ label: s.replace(/_/g, " "), value: String(statusCounts[s]) })),
           { label: "Overdue", value: String(overdueCount) },
         ]}
@@ -570,7 +555,7 @@ function ProjectsTab({
   return (
     <div className="flex flex-col gap-4">
       <StatStrip
-        stats={[
+        tiles={[
           ...PROJECT_STATUSES.map((s) => ({ label: s.replace(/_/g, " "), value: String(statusCounts[s]) })),
           { label: "At risk", value: String(atRiskCount) },
         ]}
