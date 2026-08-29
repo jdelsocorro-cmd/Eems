@@ -887,7 +887,7 @@ export default function OrgChart() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Filter by name or title..."
-            className="w-full rounded-edge-sm border border-transparent bg-surface3 py-1.5 pl-8 pr-2 text-sm text-text outline-none focus:border-border-hover focus:bg-surface"
+            className="w-full rounded-edge-sm border border-transparent bg-surface py-1.5 pl-8 pr-2 text-sm text-text outline-none focus:border-border-hover"
           />
         </div>
 

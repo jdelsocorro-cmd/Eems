@@ -98,11 +98,16 @@
    eyeballed -- worst case (surface3, this theme's most saturated tint) for
    each: accent 5.27:1, green 6.83:1, blue 4.84:1, yellow 4.71:1, red
    4.62:1. All clear the 4.5:1 AA minimum with margin. */
+/* --c-surface2 carries the app-wide form-input background convention
+     (border + bg-surface2, repeated ~80 times across every page) as well
+     as hover/chrome backgrounds -- kept near-white rather than tinted so
+     the pale-yellow redesign doesn't wash out every text field/select in
+     the product. The page backdrop (--c-bg) alone carries the yellow. */
 [data-theme="navy"] {
-  --c-bg: #f1f4fa;
+  --c-bg: #fdf6e3;
   --c-surface: #ffffff;
-  --c-surface2: #f7f9fc;
-  --c-surface3: #edf1f8;
+  --c-surface2: #f9f7f2;
+  --c-surface3: #f3ecd9;
   --c-border: rgba(15, 22, 63, 0.09);
   --c-border-hover: rgba(15, 22, 63, 0.2);
   --c-accent: #21724b;
