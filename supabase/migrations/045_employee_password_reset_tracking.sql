@@ -1,0 +1,23 @@
+-- ============================================================================
+-- 045_employee_password_reset_tracking.sql
+--
+-- Supports the new admin-assist "Send password reset" action in Users Admin
+-- (POST /employees/{id}/reset-password). That endpoint's only real effect is
+-- an external Supabase Auth API call (POST /auth/v1/recover) -- it makes no
+-- other row change, so with nothing to hook, audit_log's INSERT-only-via-
+-- trigger design (002_rbac.sql: "audit_log has no INSERT policy for
+-- authenticated/eems_app -- writes only ever happen through this trigger")
+-- would leave the action completely untraced: no record of who triggered a
+-- password reset for whom, or when.
+--
+-- Rather than fight that boundary with a manual INSERT the RLS-scoped
+-- eems_app connection isn't allowed to make, this follows the same pattern
+-- every other admin action in this table already uses (invite sets
+-- auth_user_id, offboard sets status/termination_date): model the action as
+-- a real column on employees, so the existing generic audit trigger
+-- (trg_audit_employees) picks it up automatically. Also lets the UI show
+-- "Last requested: <date>" so an admin doesn't re-send and spam someone's
+-- inbox.
+-- ============================================================================
+
+alter table employees add column password_reset_requested_at timestamptz;

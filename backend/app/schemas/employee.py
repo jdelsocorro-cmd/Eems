@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr
@@ -60,6 +60,7 @@ class Employee(EmployeeBase):
     avatar_url: str | None
     termination_date: date | None
     status: str
+    password_reset_requested_at: datetime | None
 
 
 class EmployeeOffboard(BaseModel):

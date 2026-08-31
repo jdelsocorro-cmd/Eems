@@ -48,6 +48,7 @@ export interface Employee {
   termination_date: string | null;
   employment_type: EmploymentType | null;
   status: EmployeeStatus;
+  password_reset_requested_at: string | null;
 }
 
 export interface EmployeeProfileSummary {

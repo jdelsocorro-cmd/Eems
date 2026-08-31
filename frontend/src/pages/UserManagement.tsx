@@ -201,6 +201,11 @@ export default function UserManagement() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["employees"] }),
   });
 
+  const resetPassword = useMutation({
+    mutationFn: (employeeId: string) => apiClient.post<Employee>(`/employees/${employeeId}/reset-password`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["employees"] }),
+  });
+
   const [editingProfile, setEditingProfile] = useState(false);
 
   const updateEmployee = useMutation({
@@ -351,7 +356,27 @@ export default function UserManagement() {
               <div className="border-t border-border pt-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Login access</p>
                 {selectedEmployee.auth_user_id ? (
-                  <p className="mt-1 text-sm text-text">Has a login</p>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm text-text">Has a login</p>
+                      {selectedEmployee.password_reset_requested_at && (
+                        <p className="mt-0.5 text-xs text-text-dim">
+                          Password reset last sent {new Date(selectedEmployee.password_reset_requested_at).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    {selectedEmployee.status !== "offboarded" && canOffboard && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => resetPassword.mutate(selectedEmployee.id)}
+                        disabled={resetPassword.isPending}
+                        className="shrink-0"
+                      >
+                        {resetPassword.isPending ? "Sending..." : "Send Password Reset"}
+                      </Button>
+                    )}
+                  </div>
                 ) : (
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <p className="text-sm text-warning">Hasn't been invited yet -- no way to log in.</p>
@@ -370,6 +395,10 @@ export default function UserManagement() {
                 {inviteEmployee.isError && <ErrorBanner message={errorMessage(inviteEmployee.error)} />}
                 {inviteEmployee.isSuccess && inviteEmployee.variables === selectedEmployee.id && (
                   <p className="mt-1 text-xs text-success">Invite sent to {selectedEmployee.work_email}.</p>
+                )}
+                {resetPassword.isError && <ErrorBanner message={errorMessage(resetPassword.error)} />}
+                {resetPassword.isSuccess && resetPassword.variables === selectedEmployee.id && (
+                  <p className="mt-1 text-xs text-success">Password reset link sent to {selectedEmployee.work_email}.</p>
                 )}
               </div>
 

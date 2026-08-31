@@ -16,7 +16,7 @@ from app.schemas.employee import (
     EmployeeProfileSummaryManager,
     EmployeeUpdate,
 )
-from app.services.supabase_admin import SupabaseAdminError, ban_auth_user, invite_user_by_email
+from app.services.supabase_admin import SupabaseAdminError, ban_auth_user, invite_user_by_email, send_password_recovery
 
 router = APIRouter(prefix="/employees", tags=["employees"])
 
@@ -216,6 +216,44 @@ async def invite_employee(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     employee.auth_user_id = auth_user_id
+    await db.flush()
+    await db.refresh(employee)
+    return employee
+
+
+@router.post("/{employee_id}/reset-password", response_model=Employee)
+async def reset_employee_password(
+    employee_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _current: CurrentEmployee = Depends(require_permission("employee", "update")),
+) -> EmployeeModel:
+    """Admin-assist path for "I forgot my password" -- sends the same
+    Supabase recovery email a self-service Forgot Password link on /login
+    would, on behalf of an employee who reached out to an admin instead
+    (the common case for a less technical, ops-heavy org like this one).
+    Guarded on auth_user_id already being set: nothing to recover for an
+    employee who was never invited -- send-invite is the right action there.
+
+    password_reset_requested_at exists purely so this UPDATE gets picked up
+    by trg_audit_employees (045_employee_password_reset_tracking.sql) --
+    the Supabase Auth API call itself leaves no trace in this system's own
+    audit_log otherwise, and it doubles as "last requested" in the UI so an
+    admin doesn't re-send and spam the same inbox.
+    """
+    employee = await db.get(EmployeeModel, employee_id)
+    if employee is None or employee.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+    if employee.auth_user_id is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This employee has no login to reset -- send an invite instead")
+    if employee.status == "offboarded":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot reset the password of an offboarded employee")
+
+    try:
+        await send_password_recovery(employee.work_email)
+    except SupabaseAdminError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    employee.password_reset_requested_at = datetime.now(timezone.utc)
     await db.flush()
     await db.refresh(employee)
     return employee

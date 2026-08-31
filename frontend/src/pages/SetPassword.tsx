@@ -5,13 +5,37 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui";
 
-export default function AcceptInvite() {
+const COPY = {
+  invite: {
+    subtitle: "Set your password to finish setting up your account.",
+    verifying: "Verifying your invite link...",
+    invalid: "This invite link is invalid or has expired. Ask an admin to send you a new one.",
+    submitting: "Setting password...",
+    submit: "Set password and continue",
+  },
+  reset: {
+    subtitle: "Choose a new password for your account.",
+    verifying: "Verifying your reset link...",
+    invalid: "This reset link is invalid or has expired. Request a new one from the sign-in page.",
+    submitting: "Updating password...",
+    submit: "Update password and continue",
+  },
+};
+
+// Shared by the invite ("set your password for the first time") and forgot-
+// password ("set a new one") flows -- both land here off a Supabase link
+// that carries a session token in the URL, so from this page's perspective
+// they're the same action: you're now authenticated as this user, pick a
+// password. Only the copy differs, via `mode`.
+export default function SetPassword({ mode }: { mode: "invite" | "reset" }) {
   const { session, loading } = useAuth();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+
+  const copy = COPY[mode];
 
   if (done) {
     return <Navigate to="/" replace />;
@@ -49,15 +73,13 @@ export default function AcceptInvite() {
           <span className="text-2xl font-semibold text-text">
             EEMS<span className="text-edge-teal">.</span>
           </span>
-          <p className="mt-1 text-sm text-text-muted">Set your password to finish setting up your account.</p>
+          <p className="mt-1 text-sm text-text-muted">{copy.subtitle}</p>
         </div>
 
         {loading ? (
-          <p className="text-center text-sm text-text-muted">Verifying your invite link...</p>
+          <p className="text-center text-sm text-text-muted">{copy.verifying}</p>
         ) : !session ? (
-          <p className="text-center text-sm text-danger">
-            This invite link is invalid or has expired. Ask an admin to send you a new one.
-          </p>
+          <p className="text-center text-sm text-danger">{copy.invalid}</p>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
@@ -93,7 +115,7 @@ export default function AcceptInvite() {
             {error && <p className="text-sm text-danger">{error}</p>}
 
             <Button type="submit" disabled={submitting} className="mt-2 w-full">
-              {submitting ? "Setting password..." : "Set password and continue"}
+              {submitting ? copy.submitting : copy.submit}
             </Button>
           </form>
         )}

@@ -65,6 +65,35 @@ async def generate_screenshot_signed_url(object_path: str, expires_in: int = 300
     return f"{settings.supabase_url}/storage/v1{signed_path}"
 
 
+async def send_password_recovery(email: str) -> None:
+    """Calls Supabase Auth's public recovery endpoint -- sends the same
+    "reset your password" email a self-service Forgot Password link would,
+    with a redirect back to /reset-password (which reuses AcceptInvite's
+    set-a-new-password form: both an invite link and a recovery link land a
+    session-carrying token in the URL, so the same "you're now authenticated
+    as this user, set a password" flow already works for either).
+
+    /auth/v1/recover only needs an apikey, not admin privilege -- using the
+    service_role key here anyway, purely for consistency with every other
+    call in this module (all of which do need it), not because this
+    endpoint requires it.
+    """
+    settings = get_settings()
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{settings.supabase_url}/auth/v1/recover",
+            headers={
+                "apikey": settings.supabase_service_role_key,
+                "Authorization": f"Bearer {settings.supabase_service_role_key}",
+                "Content-Type": "application/json",
+            },
+            params={"redirect_to": f"{settings.frontend_url}/reset-password"},
+            json={"email": email},
+        )
+    if resp.status_code >= 400:
+        raise SupabaseAdminError(f"Failed to send password recovery to {email}: {resp.status_code} {resp.text}")
+
+
 async def ban_auth_user(auth_user_id: str) -> None:
     """Disables sign-in for an offboarded employee's auth account, without
     deleting it -- deleting would cascade-orphan anything still referencing
