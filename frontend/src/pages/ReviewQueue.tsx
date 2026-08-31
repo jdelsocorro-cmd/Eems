@@ -23,6 +23,22 @@ const REVIEWED_STATUS_STYLES: Record<"approved" | "rejected", string> = {
   rejected: "bg-danger/10 text-danger",
 };
 
+interface EntityDetails {
+  name: string;
+  description: string | null;
+  createdAt: string;
+  dueDate: string | null;
+}
+
+function daysBetween(fromIso: string, toIso: string): number {
+  return Math.round((new Date(toIso).getTime() - new Date(fromIso).getTime()) / 86_400_000);
+}
+
+function formatDayCount(days: number): string {
+  if (days <= 0) return "same day";
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
 // Where an assigner (tasks) or owner's manager (projects/milestones) finds
 // work that's actually waiting on THEM -- before this page existed, the
 // only way to review a submission was to already know the exact task/
@@ -52,10 +68,21 @@ export default function ReviewQueue() {
   const milestonesQuery = useQuery({ queryKey: ["milestones"], queryFn: () => apiClient.get<Milestone[]>("/milestones") });
   const employeesQuery = useQuery({ queryKey: ["employees"], queryFn: () => apiClient.get<Employee[]>("/employees") });
 
-  function entityName(sub: CompletionSubmission): string {
-    if (sub.entity_type === "task") return tasksQuery.data?.find((t) => t.id === sub.entity_id)?.title ?? sub.entity_id;
-    if (sub.entity_type === "project") return projectsQuery.data?.find((p) => p.id === sub.entity_id)?.name ?? sub.entity_id;
-    return milestonesQuery.data?.find((m) => m.id === sub.entity_id)?.name ?? sub.entity_id;
+  // The one place a reviewer can see what they actually asked for, alongside
+  // when it was assigned -- before this, the Review Queue card showed only
+  // the entity's title, so scoring someone's work meant either remembering
+  // the original ask from memory or leaving the page to go find it.
+  function entityDetails(sub: CompletionSubmission): EntityDetails | null {
+    if (sub.entity_type === "task") {
+      const t = tasksQuery.data?.find((x) => x.id === sub.entity_id);
+      return t ? { name: t.title, description: t.description, createdAt: t.created_at, dueDate: t.due_date } : null;
+    }
+    if (sub.entity_type === "project") {
+      const p = projectsQuery.data?.find((x) => x.id === sub.entity_id);
+      return p ? { name: p.name, description: p.description, createdAt: p.created_at, dueDate: p.target_end_date } : null;
+    }
+    const m = milestonesQuery.data?.find((x) => x.id === sub.entity_id);
+    return m ? { name: m.name, description: m.description, createdAt: m.created_at, dueDate: m.target_date } : null;
   }
 
   const isLoading = submissionsQuery.isLoading || tasksQuery.isLoading || projectsQuery.isLoading || milestonesQuery.isLoading;
@@ -78,22 +105,17 @@ export default function ReviewQueue() {
 
       <div className="flex flex-col gap-3">
         {(submissionsQuery.data ?? []).map((sub) => (
-          <Card key={sub.id} className="p-4">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">
-              {ENTITY_LABELS[sub.entity_type]}
-            </p>
-            <p className="mb-2 text-base font-medium text-text">{entityName(sub)}</p>
-            <CompletionWorkflow
-              entityType={sub.entity_type}
-              entityId={sub.entity_id}
-              employees={employeesQuery.data ?? []}
-              submitPath={`/${sub.entity_type}s/${sub.entity_id}/submit-completion`}
-              onChanged={() => {
-                queryClient.invalidateQueries({ queryKey: ["completion-submissions", "awaiting-my-review"] });
-                queryClient.invalidateQueries({ queryKey: ["completion-submissions", "reviewed-by-me"] });
-              }}
-            />
-          </Card>
+          <PendingEntry
+            key={sub.id}
+            submission={sub}
+            details={entityDetails(sub)}
+            entityLabel={ENTITY_LABELS[sub.entity_type]}
+            employees={employeesQuery.data ?? []}
+            onChanged={() => {
+              queryClient.invalidateQueries({ queryKey: ["completion-submissions", "awaiting-my-review"] });
+              queryClient.invalidateQueries({ queryKey: ["completion-submissions", "reviewed-by-me"] });
+            }}
+          />
         ))}
       </div>
 
@@ -109,8 +131,8 @@ export default function ReviewQueue() {
             <ReviewedEntry
               key={sub.id}
               submission={sub}
+              details={entityDetails(sub)}
               entityLabel={ENTITY_LABELS[sub.entity_type]}
-              entityName={entityName(sub)}
               employees={employeesQuery.data ?? []}
             />
           ))}
@@ -120,15 +142,69 @@ export default function ReviewQueue() {
   );
 }
 
+// The pending item is where the "what did I actually ask for" recall
+// problem happens -- the reviewer has to know the original ask AND when it
+// was assigned before a score means anything, so both are surfaced here
+// rather than requiring a trip to the task/project page to look them up.
+function PendingEntry({
+  submission,
+  details,
+  entityLabel,
+  employees,
+  onChanged,
+}: {
+  submission: CompletionSubmission;
+  details: EntityDetails | null;
+  entityLabel: string;
+  employees: Employee[];
+  onChanged: () => void;
+}) {
+  const submittedLate = details?.dueDate && new Date(submission.submitted_at) > new Date(details.dueDate);
+
+  return (
+    <Card className="p-4">
+      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">{entityLabel}</p>
+      <p className="mb-2 text-base font-medium text-text">{details?.name ?? submission.entity_id}</p>
+
+      {details && (
+        <div className="mb-3 rounded-edge-sm border border-border bg-surface2 p-2.5">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">What was asked</p>
+          <p className="text-sm text-text">
+            {details.description || <span className="italic text-text-dim">No description was added.</span>}
+          </p>
+          <p className="mt-2 text-xs text-text-dim">
+            Assigned {new Date(details.createdAt).toLocaleDateString()} &rarr; Submitted{" "}
+            {new Date(submission.submitted_at).toLocaleDateString()} &middot;{" "}
+            {formatDayCount(daysBetween(details.createdAt, submission.submitted_at))}
+            {submittedLate && (
+              <span className="ml-1.5 rounded-edge-sm bg-danger/10 px-1.5 py-0.5 font-medium text-danger">
+                {formatDayCount(daysBetween(details.dueDate!, submission.submitted_at))} late
+              </span>
+            )}
+          </p>
+        </div>
+      )}
+
+      <CompletionWorkflow
+        entityType={submission.entity_type}
+        entityId={submission.entity_id}
+        employees={employees}
+        submitPath={`/${submission.entity_type}s/${submission.entity_id}/submit-completion`}
+        onChanged={onChanged}
+      />
+    </Card>
+  );
+}
+
 function ReviewedEntry({
   submission,
+  details,
   entityLabel,
-  entityName,
   employees,
 }: {
   submission: CompletionSubmission;
+  details: EntityDetails | null;
   entityLabel: string;
-  entityName: string;
   employees: Employee[];
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -156,7 +232,7 @@ function ReviewedEntry({
             {submission.status}
           </span>
           <span className="text-text-dim">{entityLabel}:</span>
-          <span className="truncate font-medium">{entityName}</span>
+          <span className="truncate font-medium">{details?.name ?? submission.entity_id}</span>
         </span>
         <span className="shrink-0 text-xs text-text-dim">
           {status === "approved" ? `${submission.completion_score}%` : <IconChevronRight size={13} />}
@@ -168,6 +244,13 @@ function ReviewedEntry({
           <p className="text-text-dim">
             Submitted by {submitterLink(submission.submitted_by)} &middot; {new Date(submission.submitted_at).toLocaleDateString()}
           </p>
+          {details && (
+            <p className="text-text-dim">
+              Assigned {new Date(details.createdAt).toLocaleDateString()} &rarr; Submitted{" "}
+              {new Date(submission.submitted_at).toLocaleDateString()} &middot;{" "}
+              {formatDayCount(daysBetween(details.createdAt, submission.submitted_at))}
+            </p>
+          )}
           {status === "rejected" && submission.rejection_feedback && (
             <p className="text-danger">Feedback: {submission.rejection_feedback}</p>
           )}
