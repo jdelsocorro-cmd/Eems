@@ -208,6 +208,7 @@ export interface Goal {
 export interface KpiTemplate {
   id: string;
   company_id: string | null;
+  org_unit_id: string | null;
   name: string;
   description: string | null;
   unit: string;

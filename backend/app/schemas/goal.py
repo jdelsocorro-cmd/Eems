@@ -63,6 +63,12 @@ class Goal(GoalBase):
 
 class KpiTemplateBase(BaseModel):
     company_id: uuid.UUID | None = None
+    # null = company-wide; set = owned by that org unit. See
+    # 048_org_unit_scoped_kpi_templates.sql -- kept out of KpiTemplateUpdate
+    # below (same treatment as company_id) since reassigning ownership
+    # should be a deliberate separate action, not a side effect of a generic
+    # field edit.
+    org_unit_id: uuid.UUID | None = None
     name: str
     description: str | None = None
     unit: str

@@ -41,6 +41,12 @@ class KpiTemplate(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("companies.id"))
+    # null = company-wide (requires company-scoped kpi_template.manage,
+    # unchanged behavior); set = owned by that org unit (requires
+    # org-unit-scoped kpi_template.manage, 048_org_unit_scoped_kpi_templates.
+    # sql). Distinct from applicable_scope_type/id below, which are just an
+    # informational UI filter, not an authorization boundary.
+    org_unit_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("org_units.id"))
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     unit: Mapped[str] = mapped_column(String, nullable=False)
