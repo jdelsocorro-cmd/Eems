@@ -27,6 +27,7 @@ import { EmployeeLink } from "@/components/EmployeeLink";
 
 const ALL_TYPES = "all";
 const ALL_STATUSES = "all";
+const ALL_DEPARTMENTS = "all";
 
 // Same weighted-average formula as app.compute_employee_score
 // (005_goals_kpis.sql) -- direction-aware, weight-normalized, ratios capped
@@ -159,6 +160,7 @@ export default function Goals() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>(ALL_TYPES);
   const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUSES);
+  const [departmentFilter, setDepartmentFilter] = useState<string>(ALL_DEPARTMENTS);
 
   const meQuery = useQuery({
     queryKey: ["employees", "me"],
@@ -217,13 +219,45 @@ export default function Goals() {
     });
   }
 
+  function orgUnitIdForEmployee(employeeId: string): string | null {
+    const assignment = primaryAssignmentByEmployee.get(employeeId);
+    const position = assignment ? positionsById.get(assignment.position_id) : undefined;
+    return position?.org_unit_id ?? null;
+  }
+
+  const unitsById = useMemo(() => new Map((unitsQuery.data ?? []).map((u) => [u.id, u])), [unitsQuery.data]);
+
+  // A goal's department is derived, not stored -- an org-unit goal's is its
+  // own org_unit_id; an individual goal's is that employee's CURRENT primary
+  // position's org_unit (same one-hop convention Users/Org Chart/Leadership
+  // Scorecard already use). A company goal has no single department by
+  // definition -- it spans all of them.
+  function departmentIdForGoal(goal: Goal): string | null {
+    if (goal.goal_type === "org_unit") return goal.org_unit_id;
+    if (goal.goal_type === "individual" && goal.employee_id) return orgUnitIdForEmployee(goal.employee_id);
+    return null;
+  }
+
+  function departmentNameForGoal(goal: Goal): string {
+    if (goal.goal_type === "company") return "All departments";
+    const unitId = departmentIdForGoal(goal);
+    return unitId ? (unitsById.get(unitId)?.name ?? "—") : "—";
+  }
+
+  const departmentOptions = useMemo(
+    () => [...(unitsQuery.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [unitsQuery.data],
+  );
+
   const filteredGoals = (goalsQuery.data ?? []).filter((goal) => {
     if (typeFilter !== ALL_TYPES && goal.goal_type !== typeFilter) return false;
     if (statusFilter !== ALL_STATUSES && goal.status !== statusFilter) return false;
+    if (departmentFilter !== ALL_DEPARTMENTS && departmentIdForGoal(goal) !== departmentFilter) return false;
     if (search.trim() && !goal.title.toLowerCase().includes(search.trim().toLowerCase())) return false;
     return true;
   });
-  const isGoalsFiltering = search.trim().length > 0 || typeFilter !== ALL_TYPES || statusFilter !== ALL_STATUSES;
+  const isGoalsFiltering =
+    search.trim().length > 0 || typeFilter !== ALL_TYPES || statusFilter !== ALL_STATUSES || departmentFilter !== ALL_DEPARTMENTS;
 
   const createGoal = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiClient.post<Goal>("/goals", payload),
@@ -306,11 +340,24 @@ export default function Goals() {
                 </option>
               ))}
             </select>
+            <select
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+            >
+              <option value={ALL_DEPARTMENTS}>All departments</option>
+              {departmentOptions.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
           </div>
           <Table>
             <TableHead>
               <Th>Title</Th>
               <Th>Type</Th>
+              <Th>Department</Th>
               <Th>Owner</Th>
               <Th>
                 <span className="inline-flex items-center gap-1.5">
@@ -323,7 +370,7 @@ export default function Goals() {
             <tbody>
               {goalsQuery.isLoading && (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={6}>
                     <LoadingState label="Loading goals..." />
                   </td>
                 </tr>
@@ -334,6 +381,7 @@ export default function Goals() {
                   <Tr key={goal.id} onClick={() => setSelectedGoalId(goal.id)} selected={selectedGoalId === goal.id}>
                     <Td className="text-text">{goal.title}</Td>
                     <Td className="text-text-muted">{goal.goal_type.replace("_", "-")}</Td>
+                    <Td className="text-text-muted">{departmentNameForGoal(goal)}</Td>
                     <Td className="text-text-muted" onClick={(e) => e.stopPropagation()}>
                       {goal.owner_employee_id ? (
                         <EmployeeLink employeeId={goal.owner_employee_id} name={employeeName(employeesQuery.data, goal.owner_employee_id)} />
@@ -350,9 +398,9 @@ export default function Goals() {
                   </Tr>
                 );
               })}
-              {goalsQuery.data?.length === 0 && <TableEmptyRow colSpan={5} message="No goals yet." />}
+              {goalsQuery.data?.length === 0 && <TableEmptyRow colSpan={6} message="No goals yet." />}
               {(goalsQuery.data?.length ?? 0) > 0 && isGoalsFiltering && filteredGoals.length === 0 && (
-                <TableEmptyRow colSpan={5} message="No goals match your search or filters." />
+                <TableEmptyRow colSpan={6} message="No goals match your search or filters." />
               )}
             </tbody>
           </Table>
@@ -375,6 +423,7 @@ export default function Goals() {
                 <p className="mt-1 text-xs text-text-dim">
                   {new Date(selectedGoal.period_start).toLocaleDateString()} to {new Date(selectedGoal.period_end).toLocaleDateString()}
                 </p>
+                <p className="mt-1 text-xs text-text-dim">Department: {departmentNameForGoal(selectedGoal)}</p>
               </div>
 
               <div className="border-t border-border pt-3">
