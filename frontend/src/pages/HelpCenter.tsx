@@ -1,10 +1,28 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 
 import { apiClient, errorMessage } from "@/lib/apiClient";
 import type { HelpArticle, HelpCategory } from "@/lib/types";
 import { Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
+
+// Article bodies are Markdown, authored exclusively by Help Admins
+// (help_articles/'manage' permission) -- but they're rendered to every
+// employee, so raw HTML is still run through rehype-sanitize rather than
+// trusted outright. This extends the default (GitHub-style) schema with
+// exactly what a visual article needs -- inline `style` so an author can
+// build icon-badge/card layouts without a stylesheet, and `className` for
+// the same reason -- while everything sanitize already strips (script,
+// iframe, on* handlers, javascript: hrefs) stays stripped.
+const ARTICLE_HTML_SCHEMA = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    "*": [...(defaultSchema.attributes?.["*"] ?? []), "style", "className"],
+  },
+};
 
 // Detects a YouTube/Vimeo/Loom URL sitting alone on its own line and swaps
 // it for an embedded iframe -- the "embedded videos" requirement without
@@ -57,7 +75,9 @@ function ArticleBody({ markdown }: { markdown: string }) {
             allowFullScreen
           />
         ) : (
-          <ReactMarkdown key={i}>{block.content}</ReactMarkdown>
+          <ReactMarkdown key={i} rehypePlugins={[rehypeRaw, [rehypeSanitize, ARTICLE_HTML_SCHEMA]]}>
+            {block.content}
+          </ReactMarkdown>
         ),
       )}
     </div>
