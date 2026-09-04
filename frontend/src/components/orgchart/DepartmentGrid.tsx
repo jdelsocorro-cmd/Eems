@@ -1,6 +1,6 @@
 import { IconUser } from "@tabler/icons-react";
 
-import { legendSwatchClass } from "@/components/orgchart/OrgChartLegend";
+import { legendSwatchHex } from "@/components/orgchart/OrgChartLegend";
 
 export interface DepartmentStat {
   id: string;
@@ -104,7 +104,7 @@ export function DepartmentGrid({
           onClick={() => onSelect(dept.id)}
           className="group relative overflow-hidden rounded-edge-md bg-surface p-3.5 text-left shadow-edge-sm transition hover:-translate-y-0.5 hover:shadow-edge-md"
         >
-          <div className={`absolute inset-x-0 top-0 h-[3px] ${legendSwatchClass(dept.colorIndex)}`} />
+          <div className="absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: legendSwatchHex(dept.colorIndex) }} />
 
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-xs font-semibold uppercase tracking-wide text-text-muted">{dept.name}</span>

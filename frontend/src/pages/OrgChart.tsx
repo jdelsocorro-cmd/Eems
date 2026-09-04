@@ -30,7 +30,7 @@ import type { Company, Employee, OrgUnit, Position, PositionAssignment } from "@
 import { Button, Card, EmptyState, LoadingState, SortHeader, StatStrip, Table, TableHead, Th, Toolbar, ToolbarDivider, Tr, Td } from "@/components/ui";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EmployeeAvatar } from "@/components/orgchart/EmployeeAvatar";
-import { OrgChartLegend, legendSwatchClass } from "@/components/orgchart/OrgChartLegend";
+import { OrgChartLegend, legendSwatchHex } from "@/components/orgchart/OrgChartLegend";
 import { EmployeeSidePanel } from "@/components/orgchart/EmployeeSidePanel";
 import { AssignConsultantPanel } from "@/components/orgchart/AssignConsultantPanel";
 import { ReassignManagerPanel } from "@/components/orgchart/ReassignManagerPanel";
@@ -125,30 +125,16 @@ const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 1.5;
 const ZOOM_STEP = 0.1;
 
-// Same 5-color order EmployeeAvatar.tsx and OrgChartLegend.tsx use, so a
-// department's color matches everywhere it appears (node border, avatar,
-// legend swatch, minimap block) -- indexed by org_unit_id, not by branch
-// position in the tree. The old branch-index approach (still visible in
-// legendSwatchClass/avatarColorClass's own comments) had a real bug-
-// adjacent quirk: the same department could read as a different color
-// after a re-render if sibling ordering shifted. Keying on the actual
-// org_unit_id fixes that and is what makes the legend meaningful at all.
-// Must stay the same length and order as AVATAR_PALETTE (EmployeeAvatar.tsx)
-// and SWATCH_PALETTE (OrgChartLegend.tsx) -- see those files' comments.
-const DEPARTMENT_BORDER_CLASSES = [
-  "border-l-[#2fc6a0]",
-  "border-l-[#2fa0c6]",
-  "border-l-[#2f54c6]",
-  "border-l-[#542fc6]",
-  "border-l-[#a02fc6]",
-  "border-l-[#c62fa0]",
-  "border-l-[#c62f54]",
-  "border-l-[#c6542f]",
-  "border-l-[#c6a02f]",
-  "border-l-[#a0c62f]",
-  "border-l-[#54c62f]",
-  "border-l-[#2fc654]",
-];
+// A visual design review flagged the same department color being encoded
+// three times on one card (avatar fill, this left border, the legend dot
+// below) as the reason the chart read as "colorful" rather than premium --
+// distinctiveness and calm aren't opposites, but repeating one saturated
+// signal three times per card is decoration, not information. The legend
+// dot (legendSwatchHex, OrgChartLegend.tsx) is now the ONE place
+// department color appears; this per-department border array was removed
+// in favor of one neutral border shared by every card regardless of
+// department, matching the rest of the app's own Card.tsx convention
+// (shadow-based elevation, not a colored border, carries a card's edge).
 
 // Same pill treatment UserManagement.tsx's STATUS_STYLES uses for the exact
 // same Employee["status"] values -- duplicated here (3 lines) rather than
@@ -1041,7 +1027,6 @@ export default function OrgChart() {
                 // point, and a match hidden behind a collapsed swimlane
                 // would look like the search silently failed.
                 const isDeptCollapsed = !expandedDepartments.has(dept.unit.id) && !search.trim();
-                const borderClass = DEPARTMENT_BORDER_CLASSES[dept.colorIndex % DEPARTMENT_BORDER_CLASSES.length];
                 const isDeptDimmed = activeDeptIds.size > 0 && !activeDeptIds.has(dept.unit.id);
                 return (
                   <div
@@ -1051,10 +1036,10 @@ export default function OrgChart() {
                     <button
                       type="button"
                       onClick={() => toggleDepartmentExpanded(dept.unit.id)}
-                      className={`flex w-full items-center gap-2.5 border-l-4 bg-surface2 px-3 py-2 text-left ${borderClass}`}
+                      className="flex w-full items-center gap-2.5 bg-surface2 px-3 py-2 text-left"
                     >
                       <span className="text-text-muted">{isDeptCollapsed ? <IconChevronRight size={12} /> : <IconChevronDown size={12} />}</span>
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${legendSwatchClass(dept.colorIndex)}`} />
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: legendSwatchHex(dept.colorIndex) }} />
                       <span className="text-[13px] font-bold text-text">{dept.unit.name}</span>
                       {/* Same ring Departments view uses for the identical fact --
                           one visual language for "how healthy is this department,"
@@ -1323,19 +1308,20 @@ function tierForNode(depth: number, hasChildren: boolean): OrgTier {
   return hasChildren ? "manager" : "individual_contributor";
 }
 
-// Differentiated by border weight / elevation / background only -- no new
-// colors. The department hue (borderClass) stays the one accent color at
-// every tier; tier changes how much visual weight that same accent gets.
-function tierStyle(tier: OrgTier, borderClass: string): string {
+// Differentiated by border weight / elevation / background only -- the
+// border is now a neutral one shared across every department (see the
+// removed DEPARTMENT_BORDER_CLASSES comment above); tier still changes how
+// much visual weight that neutral edge gets, same as before.
+function tierStyle(tier: OrgTier): string {
   switch (tier) {
     case "executive":
       return TIER_ROOT_STYLE;
     case "department_head":
-      return `${borderClass} border-l-4 bg-surface shadow-edge-md`;
+      return "border-l-4 border-border-hover bg-surface shadow-edge-md";
     case "manager":
-      return `${borderClass} border-l-4 bg-surface2 shadow-edge-sm`;
+      return "border-l-4 border-border bg-surface2 shadow-edge-sm";
     case "individual_contributor":
-      return `${borderClass} border-l-2 bg-surface2`;
+      return "border-l-2 border-border bg-surface2";
   }
 }
 
@@ -1486,7 +1472,6 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
   const hasChildren = node.children.length > 0;
   const colorIndex = colorIndexForPosition(node.position);
   const departmentName = departmentNameForPosition(node.position);
-  const borderClass = DEPARTMENT_BORDER_CLASSES[colorIndex % DEPARTMENT_BORDER_CLASSES.length];
   const isRoot = depth === 0;
   const tier = tierForNode(depth, hasChildren);
   const isSelected = !!employee && employee.id === selectedEmployeeId;
@@ -1497,7 +1482,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
       <button
         type="button"
         onClick={() => hasChildren && onToggle(node.position.id)}
-        className={`group relative flex w-64 flex-col gap-2 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(tier, borderClass)} ${
+        className={`group relative flex w-64 flex-col gap-2 rounded-edge-md px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-edge-md ${tierStyle(tier)} ${
           hasChildren ? "cursor-pointer" : "cursor-default"
         } ${
           isDirectMatch(node)
@@ -1548,7 +1533,6 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
                 lastName={employee.last_name}
                 colorIndex={colorIndex}
                 size={tierAvatarSize(tier)}
-                variant={isRoot ? "soft" : "solid"}
                 className={isRoot ? "bg-white/15 text-white" : undefined}
               />
               <div className="min-w-0 flex-1 pr-16">
@@ -1596,7 +1580,7 @@ function OrgNode({ node, depth, ...shared }: { node: TreeNode; depth: number } &
 
         <div className={`flex items-center justify-between border-t pt-1.5 ${isRoot ? "border-white/15" : "border-border"}`}>
           <span className={`flex min-w-0 items-center gap-1.5 truncate text-[10px] font-medium ${isRoot ? "text-white/60" : "text-text-dim"}`}>
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(colorIndex)}`} />
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: legendSwatchHex(colorIndex) }} />
             <span className="truncate">{departmentName}</span>
           </span>
           <span className="flex shrink-0 items-center gap-1">
@@ -1723,7 +1707,7 @@ function OrgNodeChildren({ node, depth, ...shared }: { node: TreeNode; depth: nu
             content: (
               <div className={`flex flex-col items-center gap-1 ${groupDimmed ? "opacity-35" : ""}`}>
                 <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
-                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${legendSwatchClass(groupColorIndex)}`} />
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: legendSwatchHex(groupColorIndex) }} />
                   {groupDeptName}
                 </div>
                 {/* No box/border here deliberately -- each member is a full

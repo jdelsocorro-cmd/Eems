@@ -1,41 +1,43 @@
 import { useEffect, useRef, useState } from "react";
 import { IconChevronDown, IconFilter } from "@tabler/icons-react";
 
-// Solid-color swatch version of the same palette EmployeeAvatar uses
-// (soft/tinted there since it sits behind initials text; solid here since
-// it's a small standalone dot). Keeping both derived from one colorIndex
-// keeps a department's color consistent between the legend, the avatars,
-// and the node accent border everywhere on the page.
-// Solid version of the same 12 hue-wheel colors AVATAR_PALETTE uses (see
-// its comment for why -- hand-picked Tailwind shades weren't actually
-// checked for pairwise hue distinctiveness and three pairs turned out to be
-// the same color family). Must stay the same length/order as
-// AVATAR_PALETTE (EmployeeAvatar.tsx) and DEPARTMENT_BORDER_CLASSES
-// (OrgChart.tsx) -- all three are indexed by the same colorIndex.
-// Raw hex values are kept alongside the Tailwind classes (not just inside
-// them) because the interactive chips below need the bare hex for inline
-// border/background styling -- Tailwind can't express "this department's
-// own color, whichever one that is" as a static class.
+// Same 12 hues as the original full-saturation hue-wheel (still 30 degrees
+// apart, starting at the brand teal's own hue -- that distinctiveness work
+// was correct and is untouched), but desaturated (~34%) and pulled to a
+// consistent mid lightness (~42%) -- a visual design review flagged the
+// original as reading like a color wheel rather than a considered palette,
+// since this dot is now the ONLY place department color appears on a card
+// (the avatar and card border used to repeat the same hue at full
+// saturation too; both now stay neutral, see EmployeeAvatar.tsx and
+// OrgChart.tsx's tierStyle()). Recomputed via HSL, not hand-picked -- same
+// rigor as the original palette, different target (calm, not maximal
+// distinctiveness). Must stay the same length/order as AVATAR_PALETTE
+// (EmployeeAvatar.tsx) -- both indexed by the same colorIndex.
+//
+// Bare hex only, deliberately no matching `bg-[#...]` class export --
+// found live while verifying this same fix that one used to exist here
+// (SWATCH_PALETTE, built via `SWATCH_HEX.map(hex => \`bg-[#${hex}]\`)`) and
+// silently never worked: Tailwind's content scanner finds utility classes
+// by matching complete, literal text in the source, and a template-literal
+// interpolation is never that -- unlike AVATAR_PALETTE (EmployeeAvatar.tsx),
+// whose classes are hand-written literal strings and do work. Every
+// consumer below applies the hex via inline `style`, the same pattern this
+// file's own filter-chip active state already used for the identical
+// reason.
 const SWATCH_HEX = [
-  "#2fc6a0",
-  "#2fa0c6",
-  "#2f54c6",
-  "#542fc6",
-  "#a02fc6",
-  "#c62fa0",
-  "#c62f54",
-  "#c6542f",
-  "#c6a02f",
-  "#a0c62f",
-  "#54c62f",
-  "#2fc654",
+  "#47907d",
+  "#477d90",
+  "#475990",
+  "#594790",
+  "#7d4790",
+  "#90477d",
+  "#904759",
+  "#905947",
+  "#907d47",
+  "#7d9047",
+  "#599047",
+  "#479059",
 ];
-
-const SWATCH_PALETTE = SWATCH_HEX.map((hex) => `bg-[#${hex.slice(1)}]`);
-
-export function legendSwatchClass(colorIndex: number): string {
-  return SWATCH_PALETTE[colorIndex % SWATCH_PALETTE.length];
-}
 
 export function legendSwatchHex(colorIndex: number): string {
   return SWATCH_HEX[colorIndex % SWATCH_HEX.length];
@@ -113,7 +115,7 @@ export function OrgChartLegend({
                     isActive ? "text-text" : "border-border bg-surface text-text-muted hover:border-border-hover hover:text-text"
                   }`}
                 >
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${legendSwatchClass(d.colorIndex)}`} />
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: hex }} />
                   {d.name}
                 </button>
               );

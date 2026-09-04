@@ -35,27 +35,13 @@ const AVATAR_PALETTE = [
   "bg-[#d7f4de] text-[#238b3d]",
 ];
 
-// Solid version of the palette above, for contexts that want a filled
-// department-colored circle with white text instead of the soft tinted
-// swatch (Org Chart's node cards, to match the premium mockup's avatar
-// treatment). Same 12 hex values as AVATAR_PALETTE/SWATCH_PALETTE
-// (OrgChartLegend.tsx) -- must stay the same length/order, all three are
-// indexed by the same colorIndex.
-const SOLID_PALETTE = [
-  "bg-[#2fc6a0]",
-  "bg-[#2fa0c6]",
-  "bg-[#2f54c6]",
-  "bg-[#542fc6]",
-  "bg-[#a02fc6]",
-  "bg-[#c62fa0]",
-  "bg-[#c62f54]",
-  "bg-[#c6542f]",
-  "bg-[#c6a02f]",
-  "bg-[#a0c62f]",
-  "bg-[#54c62f]",
-  "bg-[#2fc654]",
-];
-
+// A solid-fill variant (filled department-colored circle, white text) used
+// to exist here for Org Chart's node cards, to match an earlier mockup's
+// avatar treatment -- removed along with its call site: a visual design
+// review found the same department hue repeated at full saturation on the
+// avatar, the card border, AND the legend dot was what made the chart read
+// as "colorful" rather than premium. The soft tinted treatment below is now
+// the only one EmployeeAvatar renders anywhere in the app.
 const SIZE_CLASSES = {
   sm: "h-7 w-7 text-[10px]",
   md: "h-9 w-9 text-xs",
@@ -64,10 +50,6 @@ const SIZE_CLASSES = {
 
 export function avatarColorClass(colorIndex: number): string {
   return AVATAR_PALETTE[colorIndex % AVATAR_PALETTE.length];
-}
-
-export function solidAvatarColorClass(colorIndex: number): string {
-  return SOLID_PALETTE[colorIndex % SOLID_PALETTE.length];
 }
 
 export function initials(firstName: string, lastName: string): string {
@@ -81,17 +63,15 @@ export function EmployeeAvatar({
   lastName,
   colorIndex,
   size = "md",
-  variant = "soft",
   className = "",
 }: {
   firstName: string;
   lastName: string;
   colorIndex: number;
   size?: keyof typeof SIZE_CLASSES;
-  variant?: "soft" | "solid";
   className?: string;
 }) {
-  const colorClass = variant === "solid" ? `${solidAvatarColorClass(colorIndex)} text-white` : avatarColorClass(colorIndex);
+  const colorClass = avatarColorClass(colorIndex);
   return (
     <span className={`flex shrink-0 items-center justify-center rounded-full font-semibold ${SIZE_CLASSES[size]} ${colorClass} ${className}`}>
       {initials(firstName, lastName)}
