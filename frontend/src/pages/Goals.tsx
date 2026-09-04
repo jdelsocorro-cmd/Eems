@@ -15,6 +15,7 @@ import type {
   KpiMilestone,
   KpiProject,
   KpiTask,
+  KpiTemplate,
   Milestone,
   OrgUnit,
   Position,
@@ -24,6 +25,7 @@ import type {
 } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 import { EmployeeLink } from "@/components/EmployeeLink";
+import { CascadeGoalPanel } from "@/components/goals/CascadeGoalPanel";
 
 const ALL_TYPES = "all";
 const ALL_STATUSES = "all";
@@ -157,6 +159,7 @@ export default function Goals() {
   const queryClient = useQueryClient();
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showCascadePanel, setShowCascadePanel] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>(ALL_TYPES);
   const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUSES);
@@ -177,6 +180,7 @@ export default function Goals() {
     queryKey: ["position-assignments", "current"],
     queryFn: () => apiClient.get<PositionAssignment[]>("/position-assignments?current_only=true"),
   });
+  const kpiTemplatesQuery = useQuery({ queryKey: ["kpi-templates"], queryFn: () => apiClient.get<KpiTemplate[]>("/kpi-templates") });
 
   const selectedGoal = goalsQuery.data?.find((g) => g.id === selectedGoalId) ?? null;
 
@@ -418,7 +422,14 @@ export default function Goals() {
           ) : (
             <div className="flex flex-col gap-3">
               <div>
-                <p className="text-base font-medium text-text">{selectedGoal.title}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-base font-medium text-text">{selectedGoal.title}</p>
+                  {selectedGoal.goal_type === "org_unit" && (
+                    <Button variant="secondary" size="sm" className="shrink-0" onClick={() => setShowCascadePanel(true)}>
+                      Cascade to team
+                    </Button>
+                  )}
+                </div>
                 {selectedGoal.description && <p className="mt-1 text-sm text-text-muted">{selectedGoal.description}</p>}
                 <p className="mt-1 text-xs text-text-dim">
                   {new Date(selectedGoal.period_start).toLocaleDateString()} to {new Date(selectedGoal.period_end).toLocaleDateString()}
@@ -489,6 +500,24 @@ export default function Goals() {
           )}
         </Card>
       </div>
+
+      {showCascadePanel && selectedGoal && selectedGoal.org_unit_id && (
+        <CascadeGoalPanel
+          goal={selectedGoal}
+          employees={employeesInOrgUnit(selectedGoal.org_unit_id)}
+          alreadyCoveredEmployeeIds={
+            new Set(
+              (goalsQuery.data ?? [])
+                .filter((g) => g.parent_goal_id === selectedGoal.id && g.employee_id)
+                .map((g) => g.employee_id as string),
+            )
+          }
+          templates={(kpiTemplatesQuery.data ?? []).filter(
+            (t) => t.is_active && (t.org_unit_id === null || t.org_unit_id === selectedGoal.org_unit_id),
+          )}
+          onClose={() => setShowCascadePanel(false)}
+        />
+      )}
     </div>
   );
 }

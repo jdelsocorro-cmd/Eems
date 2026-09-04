@@ -61,6 +61,28 @@ class Goal(GoalBase):
     updated_at: datetime
 
 
+class GoalCascadeRequest(BaseModel):
+    employee_ids: list[uuid.UUID]
+    # None = no KPI attached; each generated goal is just the goal record
+    # itself, matching the plain bulk-create case. When set, each generated
+    # goal gets one Kpi row seeded from the template's name/unit/direction/
+    # default_weight -- target_value is a placeholder (1, or 0 for
+    # lower_is_better -- see chk_kpis_target_nonzero) rather than copied from
+    # anywhere, since one target rarely fits every employee (e.g. "Booked
+    # Hours" for a senior vs. a new consultant); the manager sets the real
+    # number per employee afterward, same "adjust, don't rebuild" shape as
+    # the goal itself.
+    kpi_template_id: uuid.UUID | None = None
+
+
+class GoalCascadeResult(BaseModel):
+    created: list[Goal]
+    # Employees already covered by an existing individual goal linked to
+    # this parent -- skipped, not overwritten, so re-running a cascade after
+    # someone's already been customized is safe.
+    skipped_employee_ids: list[uuid.UUID]
+
+
 class KpiTemplateBase(BaseModel):
     company_id: uuid.UUID | None = None
     # null = company-wide; set = owned by that org unit. See

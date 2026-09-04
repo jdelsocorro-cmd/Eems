@@ -205,6 +205,11 @@ export interface Goal {
   updated_at: string;
 }
 
+export interface GoalCascadeResult {
+  created: Goal[];
+  skipped_employee_ids: string[];
+}
+
 export interface KpiTemplate {
   id: string;
   company_id: string | null;

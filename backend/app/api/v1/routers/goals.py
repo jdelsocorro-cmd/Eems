@@ -6,8 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentEmployee, get_current_employee, get_db
+from app.models.employee import Employee as EmployeeModel
 from app.models.goal import Goal as GoalModel
-from app.schemas.goal import Goal, GoalCreate, GoalUpdate
+from app.models.goal import Kpi as KpiModel
+from app.models.goal import KpiTemplate as KpiTemplateModel
+from app.schemas.goal import Goal, GoalCascadeRequest, GoalCascadeResult, GoalCreate, GoalUpdate
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
@@ -58,6 +61,102 @@ async def create_goal(
     await db.flush()
     await db.refresh(goal)
     return goal
+
+
+@router.post("/{goal_id}/cascade", response_model=GoalCascadeResult, status_code=status.HTTP_201_CREATED)
+async def cascade_goal(
+    goal_id: uuid.UUID,
+    payload: GoalCascadeRequest,
+    db: AsyncSession = Depends(get_db),
+    current: CurrentEmployee = Depends(get_current_employee),
+) -> GoalCascadeResult:
+    """Bulk-creates one individual goal per selected employee, linked via
+    parent_goal_id, off a department (org_unit) goal -- the point being
+    "adjust, don't retype" for a Department Head setting up their team's
+    goals. No separate require_permission guard: each generated Goal (and
+    Kpi, if a template is given) goes through the exact same RLS this
+    endpoint would hit if the manager created them one at a time via POST
+    /goals and POST /kpis -- goals_mutate's has_permission_on_employee check
+    for the individual-goal branch (046), kpis_insert's kpi.update_target
+    check (006) for the KPI. If the caller isn't authorized for a given
+    employee, that INSERT raises and the whole request rolls back (session.
+    begin() wraps the request in one transaction, see db/session.py) --
+    nothing partially commits.
+    """
+    parent = await db.get(GoalModel, goal_id)
+    if parent is None or parent.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found")
+    if parent.goal_type != "org_unit":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only an org-unit goal can be cascaded to a team")
+
+    template: KpiTemplateModel | None = None
+    if payload.kpi_template_id is not None:
+        template = await db.get(KpiTemplateModel, payload.kpi_template_id)
+        if template is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="KPI template not found")
+
+    existing = await db.execute(
+        select(GoalModel.employee_id).where(GoalModel.parent_goal_id == goal_id, GoalModel.deleted_at.is_(None))
+    )
+    already_covered = {row[0] for row in existing.all()}
+
+    created: list[GoalModel] = []
+    skipped: list[uuid.UUID] = []
+    for employee_id in payload.employee_ids:
+        if employee_id in already_covered:
+            skipped.append(employee_id)
+            continue
+
+        employee = await db.get(EmployeeModel, employee_id)
+        if employee is None:
+            skipped.append(employee_id)
+            continue
+
+        child = GoalModel(
+            company_id=parent.company_id,
+            title=f"{parent.title} — {employee.first_name} {employee.last_name}",
+            goal_type="individual",
+            employee_id=employee_id,
+            parent_goal_id=parent.id,
+            period_start=parent.period_start,
+            period_end=parent.period_end,
+            status="draft",
+            created_by=uuid.UUID(current.employee_id),
+        )
+        db.add(child)
+        await db.flush()
+
+        if template is not None:
+            # chk_kpis_target_nonzero (005_goals_kpis.sql) forbids target_value
+            # = 0 for higher_is_better/target_is_exact -- it's the score
+            # formula's divisor for those directions, so 0 there isn't just
+            # "unset", it's an invalid value the DB rejects outright. 0 is
+            # only legitimate for lower_is_better ("zero defects" is a real
+            # target). 1 is a placeholder either way -- the manager sets the
+            # real number per employee afterward, same as the goal itself.
+            placeholder_target = 0 if template.direction == "lower_is_better" else 1
+            kpi = KpiModel(
+                employee_id=employee_id,
+                goal_id=child.id,
+                kpi_template_id=template.id,
+                name=template.name,
+                unit=template.unit,
+                direction=template.direction,
+                target_value=placeholder_target,
+                weight=template.default_weight,
+                period_start=parent.period_start,
+                period_end=parent.period_end,
+                created_by=uuid.UUID(current.employee_id),
+            )
+            db.add(kpi)
+            await db.flush()
+
+        created.append(child)
+
+    for goal in created:
+        await db.refresh(goal)
+
+    return GoalCascadeResult(created=created, skipped_employee_ids=skipped)
 
 
 @router.patch("/{goal_id}", response_model=Goal)

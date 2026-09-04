@@ -25,6 +25,7 @@ const Projects = lazy(() => import("@/pages/Projects"));
 const Tasks = lazy(() => import("@/pages/Tasks"));
 const ReviewQueue = lazy(() => import("@/pages/ReviewQueue"));
 const Goals = lazy(() => import("@/pages/Goals"));
+const KpiTemplateAdmin = lazy(() => import("@/pages/KpiTemplateAdmin"));
 const MyScorecard = lazy(() => import("@/pages/MyScorecard"));
 const LeadershipScorecard = lazy(() => import("@/pages/LeadershipScorecard"));
 const PerformanceReviewCenter = lazy(() => import("@/pages/PerformanceReviewCenter"));
@@ -69,6 +70,14 @@ export default function App() {
                       <Route path="/leadership-scorecard" element={<LeadershipScorecard />} />
                       <Route path="/performance-review-center" element={<PerformanceReviewCenter />} />
                       <Route path="/goals" element={<Goals />} />
+                      <Route
+                        path="/admin/kpi-templates"
+                        element={
+                          <RequirePermission resource="kpi_template" action="manage">
+                            <KpiTemplateAdmin />
+                          </RequirePermission>
+                        }
+                      />
                       <Route
                         path="/admin/org"
                         element={

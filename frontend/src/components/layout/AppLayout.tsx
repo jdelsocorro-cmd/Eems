@@ -6,6 +6,7 @@ import {
   IconClipboardCheck,
   IconClipboardList,
   IconFolder,
+  IconGauge,
   IconHelpCircle,
   IconLayoutDashboard,
   IconLifebuoy,
@@ -58,6 +59,13 @@ const NAV_ITEMS: {
   { to: "/admin/users", label: "Users", section: "admin", icon: IconUsers, requiredPermission: ["employee", "create"] },
   { to: "/admin/bulk-import", label: "Bulk Import", section: "admin", icon: IconUpload, requiredPermission: ["employee", "bulk_import"] },
   { to: "/admin/help", label: "Help Admin", section: "admin", icon: IconLifebuoy, requiredPermission: ["help_articles", "manage"] },
+  {
+    to: "/admin/kpi-templates",
+    label: "KPI Templates",
+    section: "admin",
+    icon: IconGauge,
+    requiredPermission: ["kpi_template", "manage"],
+  },
   { to: "/admin/support", label: "Support Tickets", section: "admin", icon: IconTicket, requiredPermission: ["support_tickets", "review"] },
 ];
 
