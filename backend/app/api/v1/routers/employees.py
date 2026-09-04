@@ -15,6 +15,7 @@ from app.schemas.employee import (
     EmployeeProfileSummary,
     EmployeeProfileSummaryManager,
     EmployeeUpdate,
+    TouchLoginResponse,
 )
 from app.services.supabase_admin import SupabaseAdminError, ban_auth_user, invite_user_by_email, send_password_recovery
 
@@ -38,6 +39,27 @@ async def get_me(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
     return EmployeeMe(**row)
+
+
+@router.post("/me/touch-login", response_model=TouchLoginResponse)
+async def touch_login(
+    current: CurrentEmployee = Depends(get_current_employee),
+    db: AsyncSession = Depends(get_db),
+) -> TouchLoginResponse:
+    """Called once per real sign-in (frontend gates this on Supabase's
+    SIGNED_IN event, not on every token refresh) -- bumps last_login_at and
+    reports whether it was null going in, i.e. this is the very first
+    session this employee has ever had. Self-update only, covered by
+    employees_update's existing "id = current_employee_id()" branch, so no
+    RLS change was needed for this beyond adding the column.
+    """
+    employee = await db.get(EmployeeModel, uuid.UUID(current.employee_id))
+    if employee is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+    is_first_login = employee.last_login_at is None
+    employee.last_login_at = datetime.now(timezone.utc)
+    await db.flush()
+    return TouchLoginResponse(is_first_login=is_first_login)
 
 
 @router.get("/me/permissions", response_model=list[str])

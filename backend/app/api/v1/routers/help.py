@@ -113,6 +113,24 @@ async def get_help_article(
     return article
 
 
+@router.post("/articles/{article_id}/view", status_code=status.HTTP_204_NO_CONTENT)
+async def record_help_article_view(
+    article_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _current: CurrentEmployee = Depends(get_current_employee),
+) -> None:
+    """Fire-and-forget view counter, called by the frontend when an article
+    is actually opened (not on every list fetch). Goes through app.
+    increment_help_article_view() rather than a plain UPDATE -- an ordinary
+    employee reading a published article holds no help_articles.manage
+    grant, so help_articles_mutate's RLS would otherwise block this exact
+    write (see 047_engagement_tracking.sql for why the function is scoped
+    the way it is).
+    """
+    await db.execute(text("select app.increment_help_article_view(:id)"), {"id": str(article_id)})
+    await db.flush()
+
+
 @router.post("/articles", response_model=HelpArticle, status_code=status.HTTP_201_CREATED)
 async def create_help_article(
     payload: HelpArticleCreate,

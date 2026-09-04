@@ -50,6 +50,18 @@ export default {
       fontFamily: {
         ui: ["Poppins", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
       },
+      keyframes: {
+        // Used behind Tailwind's built-in motion-safe: variant (which maps
+        // to prefers-reduced-motion automatically), never applied directly
+        // -- see SuccessBanner.tsx for the one place this ships today.
+        "pop-in": {
+          "0%": { opacity: "0", transform: "scale(0.94) translateY(-2px)" },
+          "100%": { opacity: "1", transform: "scale(1) translateY(0)" },
+        },
+      },
+      animation: {
+        "pop-in": "pop-in 220ms ease-out",
+      },
     },
   },
   plugins: [],

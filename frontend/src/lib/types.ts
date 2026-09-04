@@ -262,6 +262,11 @@ export interface StatusCounts {
   total: number;
 }
 
+export interface ScoreTrendPoint {
+  period_start: string;
+  average_score: number;
+}
+
 export interface DashboardData {
   scope_type: "company" | "org_unit";
   scope_id: string;
@@ -271,6 +276,8 @@ export interface DashboardData {
   goals: StatusCounts;
   average_score: number | null;
   scored_employee_count: number;
+  score_trend: ScoreTrendPoint[];
+  kpi_evidence_coverage_pct: number | null;
 }
 
 export interface KpiScore {
@@ -387,6 +394,7 @@ export interface HelpArticle {
   body_markdown: string;
   tags: string[];
   status: HelpArticleStatus;
+  view_count: number;
   created_by: string | null;
   updated_by: string | null;
   created_at: string;

@@ -57,6 +57,7 @@ class HelpArticle(HelpArticleBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    view_count: int = 0
     created_by: uuid.UUID | None = None
     updated_by: uuid.UUID | None = None
     created_at: datetime

@@ -133,11 +133,12 @@ export default function HelpAdmin() {
             <TableHead>
               <Th>Title</Th>
               <Th>Status</Th>
+              <Th>Views</Th>
             </TableHead>
             <tbody>
               {articlesQuery.isLoading && (
                 <tr>
-                  <td colSpan={2}>
+                  <td colSpan={3}>
                     <LoadingState label="Loading..." />
                   </td>
                 </tr>
@@ -157,9 +158,10 @@ export default function HelpAdmin() {
                       {article.status}
                     </span>
                   </Td>
+                  <Td className="text-text-muted">{article.view_count}</Td>
                 </Tr>
               ))}
-              {articlesQuery.data?.length === 0 && <TableEmptyRow colSpan={2} message="No articles yet." />}
+              {articlesQuery.data?.length === 0 && <TableEmptyRow colSpan={3} message="No articles yet." />}
             </tbody>
           </Table>
         </Card>

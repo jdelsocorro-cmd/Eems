@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentEmployee, get_current_employee, get_db
-from app.schemas.dashboard import Dashboard, StatusCounts
+from app.schemas.dashboard import Dashboard, ScoreTrendPoint, StatusCounts
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
@@ -125,6 +125,77 @@ async def _build_dashboard(db: AsyncSession, scope_type: Literal["company", "org
     )
     score_row = score_result.one()
 
+    # Real historical trend, not a fabricated one -- collapses each scoped
+    # employee's LATEST snapshot per period (a period can be recomputed more
+    # than once), then averages across employees per period, same shape as
+    # the single-latest-overall query above just grouped by period instead
+    # of collapsed to "now". Capped at 8 points and returned oldest-first,
+    # the natural reading direction for a sparkline.
+    trend_result = await db.execute(
+        text(f"""
+            with scoped_employees as (
+                select distinct e.id
+                from employees e
+                {EMPLOYEE_SCOPE_JOIN[scope_type]}
+                and e.deleted_at is null
+            ),
+            latest_per_period as (
+                select distinct on (ks.employee_id, ks.period_start) ks.period_start, ks.computed_score
+                from kpi_scores ks
+                join scoped_employees se on se.id = ks.employee_id
+                order by ks.employee_id, ks.period_start, ks.computed_at desc
+            )
+            select period_start, avg(computed_score) as avg_score
+            from latest_per_period
+            where computed_score is not null
+            group by period_start
+            order by period_start desc
+            limit 8
+        """),
+        {"scope_id": str(scope_id)},
+    )
+    score_trend = [
+        ScoreTrendPoint(period_start=row.period_start, average_score=round(float(row.avg_score), 2))
+        for row in reversed(trend_result.all())
+    ]
+
+    # Adoption metric for the scoring pipeline: of everyone in scope, how
+    # many have at least one active KPI actually backed by linked evidence
+    # (a task/project/milestone via kpi_tasks/kpi_projects/kpi_milestones,
+    # 031_kpi_links.sql) rather than a KPI that just sits there unlinked --
+    # the exact gap diagnosed this session (employees with real completed
+    # work but zero KPIs, so nothing rolls up to their scorecard).
+    evidence_result = await db.execute(
+        text(f"""
+            with scoped_employees as (
+                select distinct e.id
+                from employees e
+                {EMPLOYEE_SCOPE_JOIN[scope_type]}
+                and e.deleted_at is null
+            )
+            select
+                (select count(*) from scoped_employees) as total_employees,
+                (
+                    select count(distinct k.employee_id)
+                    from kpis k
+                    join scoped_employees se on se.id = k.employee_id
+                    where k.deleted_at is null and k.status = 'active'
+                      and (
+                        exists (select 1 from kpi_tasks kt where kt.kpi_id = k.id)
+                        or exists (select 1 from kpi_projects kp where kp.kpi_id = k.id)
+                        or exists (select 1 from kpi_milestones km where km.kpi_id = k.id)
+                      )
+                ) as employees_with_evidence
+        """),
+        {"scope_id": str(scope_id)},
+    )
+    evidence_row = evidence_result.one()
+    kpi_evidence_coverage_pct = (
+        round(evidence_row.employees_with_evidence / evidence_row.total_employees * 100, 1)
+        if evidence_row.total_employees > 0
+        else None
+    )
+
     return Dashboard(
         scope_type=scope_type,
         scope_id=str(scope_id),
@@ -134,6 +205,8 @@ async def _build_dashboard(db: AsyncSession, scope_type: Literal["company", "org
         goals=StatusCounts(counts=goals, total=sum(goals.values())),
         average_score=round(float(score_row.avg_score), 2) if score_row.avg_score is not None else None,
         scored_employee_count=score_row.scored_count,
+        score_trend=score_trend,
+        kpi_evidence_coverage_pct=kpi_evidence_coverage_pct,
     )
 
 

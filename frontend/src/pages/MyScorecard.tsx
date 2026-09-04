@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
 import { apiClient, errorMessage } from "@/lib/apiClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,6 +16,7 @@ function ratio(kpi: Kpi): number {
 export default function MyScorecard() {
   const { session } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [periodStart, setPeriodStart] = useState(`${new Date().getFullYear()}-01-01`);
   const [periodEnd, setPeriodEnd] = useState(`${new Date().getFullYear()}-12-31`);
 
@@ -185,7 +187,7 @@ export default function MyScorecard() {
           {ownedGoalsQuery.isLoading ? (
             <LoadingState label="Loading..." />
           ) : (ownedGoalsQuery.data ?? []).length === 0 ? (
-            <EmptyState message="You don't own any goals yet." />
+            <EmptyState message="You don't own any goals yet." action={{ label: "Go to Goals & Performance", onClick: () => navigate("/goals") }} />
           ) : (
             <ul className="flex flex-col gap-1">
               {(ownedGoalsQuery.data ?? []).map((goal) => (
@@ -205,7 +207,7 @@ export default function MyScorecard() {
           {ownedProjectsQuery.isLoading ? (
             <LoadingState label="Loading..." />
           ) : (ownedProjectsQuery.data ?? []).length === 0 ? (
-            <EmptyState message="You don't own any projects yet." />
+            <EmptyState message="You don't own any projects yet." action={{ label: "Go to Projects", onClick: () => navigate("/projects") }} />
           ) : (
             <ul className="flex flex-col gap-1">
               {(ownedProjectsQuery.data ?? []).map((project) => (

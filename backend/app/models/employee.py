@@ -37,6 +37,7 @@ class Employee(Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("employees.id"))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     password_reset_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PositionAssignment(Base):

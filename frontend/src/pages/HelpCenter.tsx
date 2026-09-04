@@ -188,7 +188,15 @@ export default function HelpCenter() {
             {(articlesQuery.data ?? []).map((article) => (
               <li key={article.id}>
                 <button
-                  onClick={() => setSelectedArticleId(article.id)}
+                  onClick={() => {
+                    setSelectedArticleId(article.id);
+                    if (selectedArticleId !== article.id) {
+                      // Fire-and-forget -- only counts a genuine "opened this
+                      // article", not every list refetch, and a failed ping
+                      // shouldn't block or error out reading the article.
+                      apiClient.post(`/help/articles/${article.id}/view`, {}).catch(() => {});
+                    }
+                  }}
                   className={`w-full truncate rounded-edge-sm px-2 py-1.5 text-left text-sm ${
                     selectedArticleId === article.id ? "bg-nav-active text-edge-teal font-medium" : "text-text-muted hover:bg-surface2"
                   }`}

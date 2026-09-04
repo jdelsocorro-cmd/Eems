@@ -22,6 +22,16 @@ class EmployeeMe(BaseModel):
     hire_date: date | None
 
 
+class TouchLoginResponse(BaseModel):
+    """is_first_login is true exactly once per employee, ever -- the call
+    where last_login_at was still null going in. The frontend uses this to
+    show a one-time welcome banner instead of tracking a separate
+    "has seen welcome" flag.
+    """
+
+    is_first_login: bool
+
+
 class EmployeeBase(BaseModel):
     first_name: str
     last_name: str
