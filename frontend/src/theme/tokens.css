@@ -228,3 +228,20 @@ body {
   outline: 2px solid var(--edge-teal);
   outline-offset: 2px;
 }
+
+/* Chrome/Edge paint an autofilled input with a hardcoded pale-yellow fill
+   the app has no control over via normal background-color rules -- flagged
+   live on the redesigned login screen, where it clashed against the
+   deliberately warm-ivory palette and read as a warning state on a screen
+   where nothing was wrong. The oversized inset box-shadow is the only way
+   to override that paint; the long transition-delay is the standard trick
+   to stop Chrome re-asserting its own yellow the instant the field is
+   focused or edited. Applies to every input app-wide, not just login --
+   the same native behavior fires on any saved-credential field.  */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px var(--c-surface2) inset;
+  -webkit-text-fill-color: var(--c-text);
+  transition: background-color 5000s ease-in-out 0s;
+}

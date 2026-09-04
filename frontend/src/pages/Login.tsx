@@ -21,24 +21,50 @@ function AuthShell({ children }: { children: ReactNode }) {
   // area. Same theme every other page in the app actually uses.
   return (
     <div className="flex min-h-screen font-ui text-text" data-theme="navy">
-      <div className="hidden w-[44%] flex-col justify-between bg-edge-navy px-12 py-12 text-white lg:flex">
-        <div className="flex items-center gap-2">
+      <div className="relative hidden w-[44%] flex-col overflow-hidden bg-edge-navy px-12 py-12 text-white lg:flex">
+        {/* Depth + signature mark -- a flat solid fill read as "background-
+            color set to the brand hex," not an art-directed surface. The
+            glow sits behind the vision block as its light source; the
+            oversized ghosted shield bleeds off the corner as the one
+            element that ties this panel back to the product itself rather
+            than being swappable with any other login screen. Both purely
+            decorative (aria-hidden), z-0 under the real content. */}
+        <div
+          className="pointer-events-none absolute -left-24 top-1/3 h-[560px] w-[560px] rounded-full opacity-40"
+          style={{ background: "radial-gradient(circle, rgba(66,228,150,0.16), transparent 70%)" }}
+          aria-hidden="true"
+        />
+        <img
+          src="/brand/edge-icon.png"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-24 -right-20 w-[380px] opacity-[0.07]"
+        />
+
+        <div className="relative z-10 flex items-center gap-2">
           <img src="/brand/edge-icon.png" alt="" width={24} height={26} />
           <span className="text-xl font-semibold">
             EEMS<span className="text-edge-teal">.</span>
           </span>
         </div>
-        <div>
+
+        {/* flex-1 + justify-center gives the vision statement one real
+            center of gravity regardless of viewport height, instead of the
+            previous justify-between column (logo / vision / tagline as
+            three independently-spaced items, leaving two large equal but
+            purposeless voids). */}
+        <div className="relative z-10 flex flex-1 flex-col justify-center">
           <p className="text-xs font-bold uppercase tracking-widest text-edge-teal">The Vision</p>
-          <p className="mt-3 max-w-md text-2xl font-medium leading-snug text-white/95">
+          <p className="mt-3 max-w-lg text-3xl font-medium leading-snug text-white/95">
             &ldquo;Centralize every ad-hoc request, every KPI, and every goal into one system.&rdquo;
           </p>
-          <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/50">
+          <p className="mt-4 max-w-md text-sm leading-relaxed text-white/50">
             Instead of hunting through Slack, spreadsheets, or memory for what you asked someone to do, or how they're
             doing, EEMS answers that question.
           </p>
         </div>
-        <p className="text-xs text-white/30">The Human Edge in Digital Learning</p>
+
+        <p className="relative z-10 text-xs text-white/30">The Human Edge in Digital Learning</p>
       </div>
 
       <div className="flex flex-1 items-center justify-center bg-bg px-6 py-12">
