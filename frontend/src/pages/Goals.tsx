@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 
@@ -17,11 +17,43 @@ import type {
   KpiTask,
   Milestone,
   OrgUnit,
+  Position,
+  PositionAssignment,
   Project,
   Task,
 } from "@/lib/types";
 import { Button, Card, EmptyState, ErrorBanner, FieldLabel, InfoTooltip, LoadingState, Table, TableEmptyRow, TableHead, Td, Th, Tr } from "@/components/ui";
 import { EmployeeLink } from "@/components/EmployeeLink";
+
+const ALL_TYPES = "all";
+const ALL_STATUSES = "all";
+
+// Same weighted-average formula as app.compute_employee_score
+// (005_goals_kpis.sql) -- direction-aware, weight-normalized, ratios capped
+// at 1.5x so one wildly over-achieved KPI can't dominate the average. Here
+// it's grouped by goal_id instead of employee_id+period, since a goal's
+// progress is just "how are the KPIs linked to THIS goal doing," independent
+// of who owns them or what period they span.
+function computeGoalProgress(kpis: Kpi[]): number | null {
+  let totalWeight = 0;
+  let weightedSum = 0;
+  for (const kpi of kpis) {
+    if (kpi.status !== "active") continue;
+    const cap = 1.5;
+    let ratio: number;
+    if (kpi.direction === "higher_is_better") {
+      ratio = kpi.target_value === 0 ? 0 : Math.min(kpi.current_value / kpi.target_value, cap);
+    } else if (kpi.direction === "lower_is_better") {
+      ratio = kpi.current_value > 0 ? Math.min(kpi.target_value / kpi.current_value, cap) : 1;
+    } else {
+      ratio = kpi.target_value === 0 ? 0 : Math.max(1 - Math.min(Math.abs(kpi.current_value - kpi.target_value) / kpi.target_value, 1), 0);
+    }
+    totalWeight += kpi.weight;
+    weightedSum += kpi.weight * ratio;
+  }
+  if (totalWeight === 0) return null;
+  return Math.round((weightedSum / totalWeight) * 10000) / 100;
+}
 
 type EvidenceKind = "task" | "project" | "milestone";
 const EVIDENCE_KINDS: EvidenceKind[] = ["task", "project", "milestone"];
@@ -124,6 +156,9 @@ export default function Goals() {
   const queryClient = useQueryClient();
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>(ALL_TYPES);
+  const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUSES);
 
   const meQuery = useQuery({
     queryKey: ["employees", "me"],
@@ -135,14 +170,60 @@ export default function Goals() {
   const companiesQuery = useQuery({ queryKey: ["companies"], queryFn: () => apiClient.get<Company[]>("/companies") });
   const employeesQuery = useQuery({ queryKey: ["employees"], queryFn: () => apiClient.get<Employee[]>("/employees") });
   const unitsQuery = useQuery({ queryKey: ["org-units"], queryFn: () => apiClient.get<OrgUnit[]>("/org-units") });
+  const positionsQuery = useQuery({ queryKey: ["positions"], queryFn: () => apiClient.get<Position[]>("/positions") });
+  const assignmentsQuery = useQuery({
+    queryKey: ["position-assignments", "current"],
+    queryFn: () => apiClient.get<PositionAssignment[]>("/position-assignments?current_only=true"),
+  });
 
   const selectedGoal = goalsQuery.data?.find((g) => g.id === selectedGoalId) ?? null;
 
-  const kpisQuery = useQuery({
-    queryKey: ["kpis", "goal", selectedGoalId],
-    queryFn: () => apiClient.get<Kpi[]>(`/kpis?goal_id=${selectedGoalId}`),
-    enabled: !!selectedGoalId,
+  // Fetched once, unfiltered, and reused for both the table's Progress
+  // column (every goal needs its own KPIs to compute that) and the Details
+  // panel's "Linked KPIs" list (filtered client-side by goal_id) -- avoids
+  // firing a second server-scoped request every time the selected goal
+  // changes, since the full list is already in hand either way.
+  const kpisQuery = useQuery({ queryKey: ["kpis"], queryFn: () => apiClient.get<Kpi[]>("/kpis") });
+
+  const kpisByGoal = useMemo(() => {
+    const map = new Map<string, Kpi[]>();
+    for (const kpi of kpisQuery.data ?? []) {
+      if (!kpi.goal_id) continue;
+      const list = map.get(kpi.goal_id) ?? [];
+      list.push(kpi);
+      map.set(kpi.goal_id, list);
+    }
+    return map;
+  }, [kpisQuery.data]);
+
+  const selectedGoalKpis = selectedGoalId ? (kpisByGoal.get(selectedGoalId) ?? []) : [];
+
+  // Department is just the position's own org_unit -- same convention Users
+  // and Org Chart already use.
+  const primaryAssignmentByEmployee = useMemo(() => {
+    const map = new Map<string, PositionAssignment>();
+    for (const a of assignmentsQuery.data ?? []) {
+      if (a.is_primary) map.set(a.employee_id, a);
+    }
+    return map;
+  }, [assignmentsQuery.data]);
+  const positionsById = useMemo(() => new Map((positionsQuery.data ?? []).map((p) => [p.id, p])), [positionsQuery.data]);
+
+  function employeesInOrgUnit(orgUnitId: string): Employee[] {
+    return (employeesQuery.data ?? []).filter((emp) => {
+      const assignment = primaryAssignmentByEmployee.get(emp.id);
+      const position = assignment ? positionsById.get(assignment.position_id) : undefined;
+      return position?.org_unit_id === orgUnitId;
+    });
+  }
+
+  const filteredGoals = (goalsQuery.data ?? []).filter((goal) => {
+    if (typeFilter !== ALL_TYPES && goal.goal_type !== typeFilter) return false;
+    if (statusFilter !== ALL_STATUSES && goal.status !== statusFilter) return false;
+    if (search.trim() && !goal.title.toLowerCase().includes(search.trim().toLowerCase())) return false;
+    return true;
   });
+  const isGoalsFiltering = search.trim().length > 0 || typeFilter !== ALL_TYPES || statusFilter !== ALL_STATUSES;
 
   const createGoal = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiClient.post<Goal>("/goals", payload),
@@ -166,7 +247,7 @@ export default function Goals() {
 
   const createKpi = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiClient.post<Kpi>("/kpis", { ...payload, goal_id: selectedGoalId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["kpis", "goal", selectedGoalId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["kpis"] }),
   });
 
   return (
@@ -193,6 +274,39 @@ export default function Goals() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card accent className="lg:col-span-2">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search goal title..."
+              type="search"
+              className="min-w-[180px] flex-1 rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text outline-none focus:border-border-hover"
+            />
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+            >
+              <option value={ALL_TYPES}>All types</option>
+              {GOAL_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t.replace("_", "-")}
+                </option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-sm text-text"
+            >
+              <option value={ALL_STATUSES}>All statuses</option>
+              {GOAL_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
           <Table>
             <TableHead>
               <Th>Title</Th>
@@ -204,34 +318,42 @@ export default function Goals() {
                   <InfoTooltip content={GOAL_STATUS_LEGEND} side="bottom" />
                 </span>
               </Th>
+              <Th>Progress</Th>
             </TableHead>
             <tbody>
               {goalsQuery.isLoading && (
                 <tr>
-                  <td colSpan={4}>
+                  <td colSpan={5}>
                     <LoadingState label="Loading goals..." />
                   </td>
                 </tr>
               )}
-              {(goalsQuery.data ?? []).map((goal) => (
-                <Tr key={goal.id} onClick={() => setSelectedGoalId(goal.id)} selected={selectedGoalId === goal.id}>
-                  <Td className="text-text">{goal.title}</Td>
-                  <Td className="text-text-muted">{goal.goal_type}</Td>
-                  <Td className="text-text-muted" onClick={(e) => e.stopPropagation()}>
-                    {goal.owner_employee_id ? (
-                      <EmployeeLink employeeId={goal.owner_employee_id} name={employeeName(employeesQuery.data, goal.owner_employee_id)} />
-                    ) : (
-                      employeeName(employeesQuery.data, goal.owner_employee_id)
-                    )}
-                  </Td>
-                  <Td>
-                    <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${GOAL_STATUS_STYLES[goal.status]}`}>
-                      {goal.status}
-                    </span>
-                  </Td>
-                </Tr>
-              ))}
-              {goalsQuery.data?.length === 0 && <TableEmptyRow colSpan={4} message="No goals yet." />}
+              {filteredGoals.map((goal) => {
+                const progress = computeGoalProgress(kpisByGoal.get(goal.id) ?? []);
+                return (
+                  <Tr key={goal.id} onClick={() => setSelectedGoalId(goal.id)} selected={selectedGoalId === goal.id}>
+                    <Td className="text-text">{goal.title}</Td>
+                    <Td className="text-text-muted">{goal.goal_type.replace("_", "-")}</Td>
+                    <Td className="text-text-muted" onClick={(e) => e.stopPropagation()}>
+                      {goal.owner_employee_id ? (
+                        <EmployeeLink employeeId={goal.owner_employee_id} name={employeeName(employeesQuery.data, goal.owner_employee_id)} />
+                      ) : (
+                        <span className="rounded-edge-sm bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning">Unassigned</span>
+                      )}
+                    </Td>
+                    <Td>
+                      <span className={`rounded-edge-sm px-2 py-0.5 text-xs font-medium ${GOAL_STATUS_STYLES[goal.status]}`}>
+                        {goal.status}
+                      </span>
+                    </Td>
+                    <Td className="text-text-muted">{progress === null ? "No active KPIs" : `${progress}%`}</Td>
+                  </Tr>
+                );
+              })}
+              {goalsQuery.data?.length === 0 && <TableEmptyRow colSpan={5} message="No goals yet." />}
+              {(goalsQuery.data?.length ?? 0) > 0 && isGoalsFiltering && filteredGoals.length === 0 && (
+                <TableEmptyRow colSpan={5} message="No goals match your search or filters." />
+              )}
             </tbody>
           </Table>
         </Card>
@@ -239,14 +361,19 @@ export default function Goals() {
         <Card accent className="p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Details</h2>
           {!selectedGoal ? (
-            <EmptyState message="Select a goal to see details." />
+            <div className="flex flex-col gap-2">
+              <EmptyState message="Select a goal to see details." />
+              <p className="text-center text-xs text-text-dim">
+                KPIs live under a goal — select one above, or create an individual goal to give one employee a personal target.
+              </p>
+            </div>
           ) : (
             <div className="flex flex-col gap-3">
               <div>
                 <p className="text-base font-medium text-text">{selectedGoal.title}</p>
                 {selectedGoal.description && <p className="mt-1 text-sm text-text-muted">{selectedGoal.description}</p>}
                 <p className="mt-1 text-xs text-text-dim">
-                  {selectedGoal.period_start} to {selectedGoal.period_end}
+                  {new Date(selectedGoal.period_start).toLocaleDateString()} to {new Date(selectedGoal.period_end).toLocaleDateString()}
                 </p>
               </div>
 
@@ -294,14 +421,17 @@ export default function Goals() {
               <div className="border-t border-border pt-3">
                 <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Linked KPIs</p>
                 <div className="flex flex-col gap-1.5">
-                  {(kpisQuery.data ?? []).map((kpi) => (
+                  {selectedGoalKpis.map((kpi) => (
                     <KpiRow key={kpi.id} kpi={kpi} />
                   ))}
-                  {kpisQuery.data?.length === 0 && <EmptyState message="No KPIs linked yet." />}
+                  {selectedGoalKpis.length === 0 && <EmptyState message="No KPIs linked yet." />}
                 </div>
                 {createKpi.isError && <ErrorBanner message={errorMessage(createKpi.error)} />}
                 <NewKpiForm
+                  key={selectedGoal.id}
                   employees={employeesQuery.data ?? []}
+                  goal={selectedGoal}
+                  employeesInOrgUnit={employeesInOrgUnit}
                   pending={createKpi.isPending}
                   onSubmit={(payload) => createKpi.mutate(payload)}
                 />
@@ -492,21 +622,40 @@ function CreateGoalForm({
   );
 }
 
+// A KPI's employee is scoped to the goal it's being added under: an
+// individual goal has exactly one legitimate owner (the goal's own
+// employee_id), and an org-unit goal defaults to that unit's current
+// members -- otherwise nothing stops a KPI toward a department goal being
+// quietly assigned to someone outside it, breaking the "cascading
+// alignment" this page promises. Company goals stay unrestricted, since a
+// company-wide target genuinely can involve anyone. The restriction is a
+// default, not a wall: "Allow any employee" unlocks the full list when the
+// scoped choice is genuinely wrong for a given KPI.
 function NewKpiForm({
   employees,
+  goal,
+  employeesInOrgUnit,
   onSubmit,
   pending,
 }: {
   employees: Employee[];
+  goal: Goal;
+  employeesInOrgUnit: (orgUnitId: string) => Employee[];
   onSubmit: (payload: Record<string, unknown>) => void;
   pending: boolean;
 }) {
+  const isIndividual = goal.goal_type === "individual" && !!goal.employee_id;
+  const scopedEmployees = goal.goal_type === "org_unit" && goal.org_unit_id ? employeesInOrgUnit(goal.org_unit_id) : null;
+
   const [name, setName] = useState("");
-  const [employeeId, setEmployeeId] = useState("");
+  const [employeeId, setEmployeeId] = useState(isIndividual ? (goal.employee_id as string) : "");
+  const [allowAnyEmployee, setAllowAnyEmployee] = useState(false);
   const [unit, setUnit] = useState("");
   const [direction, setDirection] = useState<KpiDirection>("higher_is_better");
   const [targetValue, setTargetValue] = useState("");
   const [weight, setWeight] = useState("");
+
+  const employeeOptions = allowAnyEmployee || !scopedEmployees ? employees : scopedEmployees;
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -542,20 +691,34 @@ function NewKpiForm({
 
         <div>
           <FieldLabel>Owning employee</FieldLabel>
-          <select
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
-            className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text"
-          >
-            <option value="" disabled>
-              Choose an employee...
-            </option>
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.first_name} {emp.last_name}
-              </option>
-            ))}
-          </select>
+          {isIndividual ? (
+            <p className="rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text">
+              {employeeName(employees, goal.employee_id)}
+            </p>
+          ) : (
+            <>
+              <select
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                className="w-full rounded-edge-sm border border-border bg-surface2 px-2 py-1.5 text-xs text-text"
+              >
+                <option value="" disabled>
+                  Choose an employee...
+                </option>
+                {employeeOptions.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.first_name} {emp.last_name}
+                  </option>
+                ))}
+              </select>
+              {scopedEmployees && (
+                <label className="mt-1 flex items-center gap-1.5 text-[11px] text-text-dim">
+                  <input type="checkbox" checked={allowAnyEmployee} onChange={(e) => setAllowAnyEmployee(e.target.checked)} />
+                  Allow any employee (not just this unit's members)
+                </label>
+              )}
+            </>
+          )}
         </div>
 
         <div>
