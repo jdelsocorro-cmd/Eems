@@ -1,9 +1,60 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui";
+
+// A design review flagged the previous version -- a small card floating
+// dead-center in an otherwise empty navy field -- as a missed brand moment:
+// the very first thing every user sees, reduced to generic auth
+// boilerplate. This split-panel shell gives the brand statement (the same
+// vision line the Help Center walkthrough opens with) a real presence on
+// desktop, and simply drops that panel on narrow viewports rather than
+// squeezing it in -- the form alone is what a phone-width login actually
+// needs.
+function AuthShell({ children }: { children: ReactNode }) {
+  // data-theme="navy" is normally set by AppLayout (post-auth) -- Login sits
+  // outside that shell entirely, so without this it inherits the bare
+  // :root tokens (the unused dark-mode default) and the right panel below
+  // silently renders navy-on-navy instead of the intended light content
+  // area. Same theme every other page in the app actually uses.
+  return (
+    <div className="flex min-h-screen font-ui text-text" data-theme="navy">
+      <div className="hidden w-[44%] flex-col justify-between bg-edge-navy px-12 py-12 text-white lg:flex">
+        <div className="flex items-center gap-2">
+          <img src="/brand/edge-icon.png" alt="" width={24} height={26} />
+          <span className="text-xl font-semibold">
+            EEMS<span className="text-edge-teal">.</span>
+          </span>
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-edge-teal">The Vision</p>
+          <p className="mt-3 max-w-md text-2xl font-medium leading-snug text-white/95">
+            &ldquo;Centralize every ad-hoc request, every KPI, and every goal into one system.&rdquo;
+          </p>
+          <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/50">
+            Instead of hunting through Slack, spreadsheets, or memory for what you asked someone to do, or how they're
+            doing, EEMS answers that question.
+          </p>
+        </div>
+        <p className="text-xs text-white/30">The Human Edge in Digital Learning</p>
+      </div>
+
+      <div className="flex flex-1 items-center justify-center bg-bg px-6 py-12">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 text-center lg:hidden">
+            <img src="/brand/edge-icon.png" alt="" width={28} height={30} className="mx-auto mb-2" />
+            <span className="text-2xl font-semibold text-text">
+              EEMS<span className="text-edge-teal">.</span>
+            </span>
+          </div>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Login() {
   const { session, loading } = useAuth();
@@ -47,117 +98,103 @@ export default function Login() {
 
   if (forgotMode) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg font-ui text-text">
-        <div className="w-full max-w-sm rounded-edge-lg bg-surface p-8 shadow-edge-lg">
-          <div className="mb-6 text-center">
-            <img src="/brand/edge-icon.png" alt="" width={28} height={30} className="mx-auto mb-2" />
-            <span className="text-2xl font-semibold text-text">
-              EEMS<span className="text-edge-teal">.</span>
-            </span>
-            <p className="mt-1 text-sm text-text-muted">Reset your password.</p>
-          </div>
+      <AuthShell>
+        <h1 className="mb-1 text-xl font-semibold text-text">Reset your password</h1>
+        <p className="mb-6 text-sm text-text-muted">We'll email you a link to set a new one.</p>
 
-          {resetSent ? (
-            <p className="text-center text-sm text-text">
-              If an account exists for <span className="font-medium">{email}</span>, we've sent a password reset link to it.
-            </p>
-          ) : (
-            <form onSubmit={handleForgotPassword} className="flex flex-col gap-4">
-              <div>
-                <label htmlFor="forgot-email" className="mb-1 block text-xs font-medium text-text-muted">
-                  Work email
-                </label>
-                <input
-                  id="forgot-email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-edge-md border border-border bg-surface2 px-3 py-2 text-sm text-text outline-none focus:border-border-hover"
-                />
-              </div>
-              {error && <p className="text-sm text-danger">{error}</p>}
-              <Button type="submit" disabled={submitting} className="mt-2 w-full">
-                {submitting ? "Sending..." : "Send reset link"}
-              </Button>
-            </form>
-          )}
+        {resetSent ? (
+          <p className="text-sm text-text">
+            If an account exists for <span className="font-medium">{email}</span>, we've sent a password reset link to it.
+          </p>
+        ) : (
+          <form onSubmit={handleForgotPassword} className="flex flex-col gap-4">
+            <div>
+              <label htmlFor="forgot-email" className="mb-1 block text-xs font-medium text-text-muted">
+                Work email
+              </label>
+              <input
+                id="forgot-email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-edge-md border border-border bg-surface2 px-3 py-2 text-sm text-text outline-none focus:border-border-hover"
+              />
+            </div>
+            {error && <p className="text-sm text-danger">{error}</p>}
+            <Button type="submit" disabled={submitting} className="mt-2 w-full">
+              {submitting ? "Sending..." : "Send reset link"}
+            </Button>
+          </form>
+        )}
 
-          <button
-            type="button"
-            onClick={() => {
-              setForgotMode(false);
-              setResetSent(false);
-              setError(null);
-            }}
-            className="mt-4 w-full text-center text-xs text-edge-teal hover:underline"
-          >
-            Back to sign in
-          </button>
-        </div>
-      </div>
+        <button
+          type="button"
+          onClick={() => {
+            setForgotMode(false);
+            setResetSent(false);
+            setError(null);
+          }}
+          className="mt-4 w-full text-center text-xs text-edge-teal hover:underline"
+        >
+          Back to sign in
+        </button>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg font-ui text-text">
-      <div className="w-full max-w-sm rounded-edge-lg bg-surface p-8 shadow-edge-lg">
-        <div className="mb-6 text-center">
-          <img src="/brand/edge-icon.png" alt="" width={28} height={30} className="mx-auto mb-2" />
-          <span className="text-2xl font-semibold text-text">
-            EEMS<span className="text-edge-teal">.</span>
-          </span>
-          <p className="mt-1 text-sm text-text-muted">The Human Edge in Digital Learning</p>
+    <AuthShell>
+      <h1 className="mb-1 text-xl font-semibold text-text">Sign in</h1>
+      <p className="mb-6 text-sm text-text-muted">Welcome back. Enter your work email to continue.</p>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div>
+          <label htmlFor="email" className="mb-1 block text-xs font-medium text-text-muted">
+            Work email
+          </label>
+          <input
+            id="email"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-edge-md border border-border bg-surface2 px-3 py-2 text-sm text-text outline-none focus:border-border-hover"
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label htmlFor="email" className="mb-1 block text-xs font-medium text-text-muted">
-              Work email
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <label htmlFor="password" className="block text-xs font-medium text-text-muted">
+              Password
             </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-edge-md border border-border bg-surface2 px-3 py-2 text-sm text-text outline-none focus:border-border-hover"
-            />
+            <button
+              type="button"
+              onClick={() => {
+                setForgotMode(true);
+                setError(null);
+              }}
+              className="text-xs text-edge-teal hover:underline"
+            >
+              Forgot password?
+            </button>
           </div>
+          <input
+            id="password"
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-edge-md border border-border bg-surface2 px-3 py-2 text-sm text-text outline-none focus:border-border-hover"
+          />
+        </div>
 
-          <div>
-            <div className="mb-1 flex items-center justify-between">
-              <label htmlFor="password" className="block text-xs font-medium text-text-muted">
-                Password
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setForgotMode(true);
-                  setError(null);
-                }}
-                className="text-xs text-edge-teal hover:underline"
-              >
-                Forgot password?
-              </button>
-            </div>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-edge-md border border-border bg-surface2 px-3 py-2 text-sm text-text outline-none focus:border-border-hover"
-            />
-          </div>
+        {error && <p className="text-sm text-danger">{error}</p>}
 
-          {error && <p className="text-sm text-danger">{error}</p>}
-
-          <Button type="submit" disabled={submitting} className="mt-2 w-full">
-            {submitting ? "Signing in..." : "Sign in"}
-          </Button>
-        </form>
-      </div>
-    </div>
+        <Button type="submit" disabled={submitting} className="mt-2 w-full">
+          {submitting ? "Signing in..." : "Sign in"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

@@ -10,58 +10,28 @@ import { Card, ErrorBanner, LoadingState } from "@/components/ui";
 
 type ScopeType = "company" | "org_unit";
 
-// Real historical snapshots (kpi_scores, one point per period with a
-// computed score in scope) -- never rendered for fewer than 2 points, since
-// a "trend" of one dot is not a trend, just a number restated as a picture.
-function ScoreSparkline({ points }: { points: ScoreTrendPoint[] }) {
-  if (points.length < 2) return null;
-
-  const values = points.map((p) => p.average_score);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const width = 100;
-  const height = 26;
-
-  const coords = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * width;
-    const y = height - ((v - min) / range) * height;
-    return [x, y] as const;
-  });
-  const linePoints = coords.map(([x, y]) => `${x},${y}`).join(" ");
-  const areaPoints = `0,${height} ${linePoints} ${width},${height}`;
-  const [lastX, lastY] = coords[coords.length - 1];
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="mt-2 h-7 w-full" preserveAspectRatio="none" aria-hidden="true">
-      <polyline points={areaPoints} fill="var(--c-green-soft)" stroke="none" />
-      <polyline points={linePoints} fill="none" stroke="var(--c-green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={lastX} cy={lastY} r="2.5" fill="var(--c-green)" />
-    </svg>
-  );
-}
-
-// Icon + colored top accent, matching the KPI-card treatment Org Chart's
-// StatStrip already established -- this is the app's first-landed page
-// after login, so it should carry at least as much visual weight as the
-// page one click away. Accent colors reuse the same semantic/hue-wheel
-// palette Org Chart's tiles use (teal/info/warning + two SWATCH_HEX hues)
-// rather than inventing a new one.
+// Icon + a single shared accent treatment (Card's own navy->teal gradient,
+// not a bespoke hue per card) -- a design review flagged the previous
+// version (a different arbitrary color per card: teal/blue/purple/gold/
+// pink) as decoration standing in for meaning, six hues with nothing in
+// common. `concerning` is the one legitimate reason to break from the
+// shared accent: it swaps to a solid warning strip, reserving color for
+// the metric that actually needs attention instead of spending it on all six.
 function StatusCard({
   title,
   counts,
   icon: Icon,
-  accent,
+  concerning = false,
 }: {
   title: string;
   counts: Record<string, number>;
   icon: ComponentType<IconProps>;
-  accent: string;
+  concerning?: boolean;
 }) {
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   return (
-    <Card className="relative overflow-hidden p-4">
-      <div className={`absolute inset-x-0 top-0 h-[3px] ${accent}`} />
+    <Card accent={!concerning} className="relative overflow-hidden p-4">
+      {concerning && <div className="absolute inset-x-0 top-0 h-[3px] bg-warning" />}
       <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
         <Icon size={14} className="text-text-dim" />
         {title}
@@ -76,6 +46,67 @@ function StatusCard({
         ))}
         {total === 0 && <li className="text-text-dim">No data in scope.</li>}
       </ul>
+    </Card>
+  );
+}
+
+// The dashboard's one large composition below the stat row -- filling what
+// was previously ~70% of empty viewport at desktop width with the metric
+// that most deserves the space, rather than leaving it blank. Real period
+// snapshots (kpi_scores), never a fabricated trend: below 2 points there's
+// nothing to draw a line between, so it explains why instead of rendering
+// an empty chart shell.
+function ScoreTrendPanel({ points }: { points: ScoreTrendPoint[] }) {
+  if (points.length < 2) {
+    return (
+      <Card accent className="p-5">
+        <p className="text-sm font-semibold uppercase tracking-wide text-text-muted">Average KPI score trend</p>
+        <p className="mt-2 text-sm text-text-dim">
+          Trend appears once scores have been computed for at least two periods (My Scorecard &rarr; "Compute score for
+          period"). Right now there {points.length === 1 ? "is only one snapshot" : "isn't a computed score yet"} in scope.
+        </p>
+      </Card>
+    );
+  }
+
+  const values = points.map((p) => p.average_score);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const width = 600;
+  const height = 140;
+  const padding = 8;
+
+  const coords = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * width;
+    const y = padding + (height - padding * 2) * (1 - (v - min) / range);
+    return [x, y] as const;
+  });
+  const linePoints = coords.map(([x, y]) => `${x},${y}`).join(" ");
+  const areaPoints = `0,${height} ${linePoints} ${width},${height}`;
+  const [lastX, lastY] = coords[coords.length - 1];
+  const latest = values[values.length - 1];
+  const first = values[0];
+  const delta = Math.round((latest - first) * 10) / 10;
+
+  return (
+    <Card accent className="p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-semibold uppercase tracking-wide text-text-muted">Average KPI score trend</p>
+        <p className="text-xs text-text-dim">
+          {delta === 0 ? "Flat" : delta > 0 ? `Up ${delta} pts` : `Down ${Math.abs(delta)} pts`} across {points.length} periods
+        </p>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 h-36 w-full" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="0" y1={height / 2} x2={width} y2={height / 2} stroke="var(--c-border)" strokeWidth="1" />
+        <polyline points={areaPoints} fill="var(--c-green-soft)" stroke="none" />
+        <polyline points={linePoints} fill="none" stroke="var(--c-green)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx={lastX} cy={lastY} r="4" fill="var(--c-green)" />
+      </svg>
+      <div className="mt-1 flex justify-between text-xs text-text-dim">
+        <span>{new Date(points[0].period_start).toLocaleDateString(undefined, { month: "short", year: "numeric" })}</span>
+        <span>{new Date(points[points.length - 1].period_start).toLocaleDateString(undefined, { month: "short", year: "numeric" })}</span>
+      </div>
     </Card>
   );
 }
@@ -169,43 +200,56 @@ export default function ExecutiveDashboard() {
       {dashboardQuery.isLoading && <LoadingState label="Loading dashboard..." />}
 
       {dashboardQuery.data && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <StatusCard title="Headcount" counts={dashboardQuery.data.headcount.counts} icon={IconUsers} accent="bg-edge-teal" />
-          <StatusCard title="Projects" counts={dashboardQuery.data.projects.counts} icon={IconFolder} accent="bg-info" />
-          <StatusCard title="Tasks" counts={dashboardQuery.data.tasks.counts} icon={IconListCheck} accent="bg-[#542fc6]" />
-          <StatusCard title="Goals" counts={dashboardQuery.data.goals.counts} icon={IconTargetArrow} accent="bg-warning" />
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <StatusCard title="Headcount" counts={dashboardQuery.data.headcount.counts} icon={IconUsers} />
+            <StatusCard title="Projects" counts={dashboardQuery.data.projects.counts} icon={IconFolder} />
+            <StatusCard title="Tasks" counts={dashboardQuery.data.tasks.counts} icon={IconListCheck} />
+            <StatusCard title="Goals" counts={dashboardQuery.data.goals.counts} icon={IconTargetArrow} />
 
-          <Card className="relative overflow-hidden p-4">
-            <div className="absolute inset-x-0 top-0 h-[3px] bg-[#c62fa0]" />
-            <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
-              <IconGauge size={14} className="text-text-dim" />
-              Average KPI score
-            </p>
-            <p className="mt-2 text-3xl font-semibold leading-none text-text">
-              {dashboardQuery.data.average_score === null ? "--" : `${dashboardQuery.data.average_score}%`}
-            </p>
-            <ScoreSparkline points={dashboardQuery.data.score_trend} />
-            <p className="mt-1.5 text-xs text-text-dim">
-              Based on the latest computed score for {dashboardQuery.data.scored_employee_count} employee
-              {dashboardQuery.data.scored_employee_count === 1 ? "" : "s"} in scope.
-            </p>
-          </Card>
+            <Card
+              accent={dashboardQuery.data.average_score !== null && dashboardQuery.data.average_score >= 50}
+              className="relative overflow-hidden p-4"
+            >
+              {(dashboardQuery.data.average_score === null || dashboardQuery.data.average_score < 50) && (
+                <div className="absolute inset-x-0 top-0 h-[3px] bg-warning" />
+              )}
+              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
+                <IconGauge size={14} className="text-text-dim" />
+                Average KPI score
+              </p>
+              <p className="mt-2 text-3xl font-semibold leading-none text-text">
+                {dashboardQuery.data.average_score === null ? "--" : `${dashboardQuery.data.average_score}%`}
+              </p>
+              <p className="mt-2.5 text-xs text-text-dim">
+                Based on the latest computed score for {dashboardQuery.data.scored_employee_count} employee
+                {dashboardQuery.data.scored_employee_count === 1 ? "" : "s"} in scope.
+              </p>
+            </Card>
 
-          <Card className="relative overflow-hidden p-4">
-            <div className="absolute inset-x-0 top-0 h-[3px] bg-edge-teal" />
-            <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
-              <IconLink size={14} className="text-text-dim" />
-              KPI evidence coverage
-            </p>
-            <p className="mt-2 text-3xl font-semibold leading-none text-text">
-              {dashboardQuery.data.kpi_evidence_coverage_pct === null ? "--" : `${dashboardQuery.data.kpi_evidence_coverage_pct}%`}
-            </p>
-            <p className="mt-2.5 text-xs text-text-dim">
-              Employees in scope with at least one active KPI backed by real linked evidence (a task, project, or milestone) --
-              the rest have nothing feeding their scorecard yet.
-            </p>
-          </Card>
-        </div>
+            <Card
+              accent={dashboardQuery.data.kpi_evidence_coverage_pct !== null && dashboardQuery.data.kpi_evidence_coverage_pct >= 50}
+              className="relative overflow-hidden p-4"
+            >
+              {(dashboardQuery.data.kpi_evidence_coverage_pct === null || dashboardQuery.data.kpi_evidence_coverage_pct < 50) && (
+                <div className="absolute inset-x-0 top-0 h-[3px] bg-warning" />
+              )}
+              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
+                <IconLink size={14} className="text-text-dim" />
+                KPI evidence coverage
+              </p>
+              <p className="mt-2 text-3xl font-semibold leading-none text-text">
+                {dashboardQuery.data.kpi_evidence_coverage_pct === null ? "--" : `${dashboardQuery.data.kpi_evidence_coverage_pct}%`}
+              </p>
+              <p className="mt-2.5 text-xs text-text-dim">
+                Employees in scope with at least one active KPI backed by real linked evidence (a task, project, or milestone) --
+                the rest have nothing feeding their scorecard yet.
+              </p>
+            </Card>
+          </div>
+
+          <ScoreTrendPanel points={dashboardQuery.data.score_trend} />
+        </>
       )}
     </div>
   );

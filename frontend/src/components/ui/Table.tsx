@@ -34,11 +34,17 @@ export function Tr({
   selected?: boolean;
   className?: string;
 }) {
+  // Zebra striping (even:) only applies when the row isn't selected -- kept
+  // as an explicit branch rather than layering both classes and trusting
+  // Tailwind's cascade order, so a selected+even row never has to rely on
+  // which utility happens to win. Hover uses surface3 (one step darker than
+  // the surface2 zebra tint) so hover still reads clearly on striped rows,
+  // not just odd ones.
   return (
     <tr
       onClick={onClick}
-      className={`border-b border-border last:border-0 ${onClick ? "cursor-pointer hover:bg-surface2" : ""} ${
-        selected ? "bg-nav-active" : ""
+      className={`border-b border-border last:border-0 ${selected ? "bg-nav-active" : "even:bg-surface2"} ${
+        onClick ? "cursor-pointer hover:bg-surface3" : ""
       } ${className}`}
     >
       {children}
