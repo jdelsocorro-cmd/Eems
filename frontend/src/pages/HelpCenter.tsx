@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 
@@ -13,16 +13,40 @@ import { Card, EmptyState, ErrorBanner, LoadingState } from "@/components/ui";
 // employee, so raw HTML is still run through rehype-sanitize rather than
 // trusted outright. This extends the default (GitHub-style) schema with
 // exactly what a visual article needs -- inline `style` so an author can
-// build icon-badge/card layouts without a stylesheet, and `className` for
-// the same reason -- while everything sanitize already strips (script,
-// iframe, on* handlers, javascript: hrefs) stays stripped.
+// build icon-badge/card layouts without a stylesheet, `className` for the
+// same reason, and `data:` as an allowed protocol on `img[src]` ONLY (the
+// default schema permits just http/https there, which silently drops every
+// inline base64 icon -- found live, as a page full of broken-image squares,
+// after the default schema stripped src="data:image/png;base64,..." off
+// every single <img>). `href` deliberately keeps its narrower default
+// (http/https/mailto/irc/xmpp, no `data:`) -- a data: link is a real
+// phishing/same-tab-navigation vector an <img src> isn't.
 const ARTICLE_HTML_SCHEMA = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] ?? []), "style", "className"],
   },
+  protocols: {
+    ...defaultSchema.protocols,
+    src: [...(defaultSchema.protocols?.src ?? []), "data"],
+  },
 };
+
+// react-markdown runs a SECOND, independent URL check of its own
+// (defaultUrlTransform) on every href/src, on top of whatever rehype-sanitize
+// allows -- its own hardcoded allowlist is just http(s)/irc(s)/mailto/xmpp,
+// no `data:`, so the rehype-sanitize protocol change above is necessary but
+// not sufficient on its own. Found live: rehype-sanitize preserved the
+// data: src correctly all the way through the rehype pipeline (verified by
+// reproducing it directly), yet every <img> still rendered with an empty
+// src -- this second, later transform was silently blanking it afterward.
+// Scoped to `data:image/`, not all `data:` URIs, so a `data:text/html` href
+// still gets blocked exactly like before.
+function allowDataImages(url: string): string {
+  if (url.startsWith("data:image/")) return url;
+  return defaultUrlTransform(url);
+}
 
 // Detects a YouTube/Vimeo/Loom URL sitting alone on its own line and swaps
 // it for an embedded iframe -- the "embedded videos" requirement without
@@ -75,7 +99,7 @@ function ArticleBody({ markdown }: { markdown: string }) {
             allowFullScreen
           />
         ) : (
-          <ReactMarkdown key={i} rehypePlugins={[rehypeRaw, [rehypeSanitize, ARTICLE_HTML_SCHEMA]]}>
+          <ReactMarkdown key={i} rehypePlugins={[rehypeRaw, [rehypeSanitize, ARTICLE_HTML_SCHEMA]]} urlTransform={allowDataImages}>
             {block.content}
           </ReactMarkdown>
         ),
