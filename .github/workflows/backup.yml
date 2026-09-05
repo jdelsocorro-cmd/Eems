@@ -36,7 +36,15 @@ jobs:
           # `pg_dump` on PATH still resolving to v16 (the runner's default
           # alternatives didn't switch), found live while restoring this
           # workflow to working order on 2026-09-05.
-          /usr/lib/postgresql/17/bin/pg_dump "${{ secrets.SUPABASE_DB_ADMIN_URL }}" -F c -f "eems-backup-${timestamp}.dump"
+          #
+          # -n public -n app: an actual restore drill (same day) surfaced
+          # that an unscoped pg_dump also dumps Supabase's own internal
+          # schemas (auth, storage, etc.) -- which already exist by default
+          # on every Supabase project, so restoring them collided with a
+          # "CREATE SCHEMA auth already exists" error and the restore never
+          # completed. This app's own data lives only in public/app; those
+          # are the only schemas this backup needs to protect.
+          /usr/lib/postgresql/17/bin/pg_dump "${{ secrets.SUPABASE_DB_ADMIN_URL }}" -n public -n app -F c -f "eems-backup-${timestamp}.dump"
 
       # A production readiness review (2026-09-05) found every run of this
       # workflow had been failing since it was added -- SUPABASE_DB_ADMIN_URL
