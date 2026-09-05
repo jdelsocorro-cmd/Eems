@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentEmployee, get_current_employee, get_db
@@ -73,21 +73,43 @@ async def cascade_goal(
     """Bulk-creates one individual goal per selected employee, linked via
     parent_goal_id, off a department (org_unit) goal -- the point being
     "adjust, don't retype" for a Department Head setting up their team's
-    goals. No separate require_permission guard: each generated Goal (and
-    Kpi, if a template is given) goes through the exact same RLS this
-    endpoint would hit if the manager created them one at a time via POST
-    /goals and POST /kpis -- goals_mutate's has_permission_on_employee check
-    for the individual-goal branch (046), kpis_insert's kpi.update_target
-    check (006) for the KPI. If the caller isn't authorized for a given
-    employee, that INSERT raises and the whole request rolls back (session.
-    begin() wraps the request in one transaction, see db/session.py) --
-    nothing partially commits.
+    goals. Each generated Goal (and Kpi, if a template is given) ALSO goes
+    through the exact same RLS this endpoint would hit if the manager
+    created them one at a time via POST /goals and POST /kpis -- goals_
+    mutate's has_permission_on_employee check for the individual-goal
+    branch (046), kpis_insert's kpi.update_target check (006) for the KPI.
+    If the caller isn't authorized for a given employee, that INSERT raises
+    and the whole request rolls back (session.begin() wraps the request in
+    one transaction, see db/session.py) -- nothing partially commits.
+
+    The explicit has_permission_on_org_unit check below is a THIRD, separate
+    authorization layer, not a substitute for the two above -- a security
+    review found that without it, a caller could pass an arbitrary org_unit
+    goal_id belonging to a department they don't manage (goals are broadly
+    readable company-wide by design, so they can always look one up) and
+    still successfully cascade against employees they DO manage, since the
+    per-employee RLS check above never looks at which department the parent
+    goal belongs to. That doesn't expose or modify any data outside the
+    caller's real scope, but it does let them falsely attribute a generated
+    goal's parent_goal_id/title to a department goal that isn't theirs to
+    cascade from -- a data-integrity gap on the parent resource itself,
+    which only this explicit check (not the per-child ones) can catch.
     """
     parent = await db.get(GoalModel, goal_id)
     if parent is None or parent.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found")
     if parent.goal_type != "org_unit":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only an org-unit goal can be cascaded to a team")
+
+    can_manage_parent = await db.execute(
+        text("select app.has_permission_on_org_unit(:employee_id, :org_unit_id, 'goal', 'manage')"),
+        {"employee_id": current.employee_id, "org_unit_id": str(parent.org_unit_id)},
+    )
+    if not can_manage_parent.scalar_one():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to cascade goals for this department",
+        )
 
     template: KpiTemplateModel | None = None
     if payload.kpi_template_id is not None:
