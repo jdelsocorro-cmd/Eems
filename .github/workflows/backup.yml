@@ -23,7 +23,20 @@ jobs:
           echo "DUMP_FILE=eems-backup-${timestamp}.dump" >> "$GITHUB_ENV"
           pg_dump "${{ secrets.SUPABASE_DB_ADMIN_URL }}" -F c -f "eems-backup-${timestamp}.dump"
 
+      # A production readiness review (2026-09-05) found every run of this
+      # workflow had been failing since it was added -- SUPABASE_DB_ADMIN_URL
+      # and all four R2_* secrets were never actually set on this repo, so
+      # pg_dump silently fell back to a local socket connection and failed
+      # immediately. That's now fixed by actually setting the secrets, but a
+      # second, independent bug was found at the same time: this R2 upload
+      # step had no `continue-on-error`, so if it ever fails again for any
+      # reason (an expired token, a renamed bucket), the artifact step below
+      # would never even run -- silently defeating the "two independent
+      # copies, in case R2 breaks" design this workflow's own comment
+      # documents. continue-on-error here means a broken R2 upload no longer
+      # takes the GitHub artifact copy down with it.
       - name: Upload to Cloudflare R2
+        continue-on-error: true
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -33,6 +46,7 @@ jobs:
             --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
 
       - name: Upload redundant copy as a workflow artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.DUMP_FILE }}
