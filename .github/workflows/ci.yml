@@ -1,0 +1,55 @@
+name: CI
+
+# A production readiness review (2026-09-05) found no CI gate existed at
+# all -- lint/typecheck/pytest scripts all already existed in the repo,
+# but nothing invoked them on push or PR, so a broken build or a failing
+# test only ever surfaced live, after reaching Render/Vercel. This closes
+# that gap with the cheapest correct fix: run what already exists.
+#
+# Backend tests run with NO Supabase credentials and RUN_LIVE_TESTS unset
+# on purpose -- backend/tests/integration/test_*_live.py is already
+# self-gated to skip unless RUN_LIVE_TESTS=1 (see test_user_rbac_live.py),
+# and CI must never hold credentials for the production Supabase project
+# (there is currently no separate dev/CI project -- see the accompanying
+# reliability fix). Only the real unit tests (test_app_wiring.py,
+# test_bulk_import_dates.py, test_security.py), which use placeholder
+# config and never touch a real database, run here.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+      - name: Run unit tests (live integration tests are self-skipped without RUN_LIVE_TESTS=1)
+        working-directory: backend
+        run: pytest tests --ignore=tests/integration -v
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Typecheck + build
+        working-directory: frontend
+        run: npm run build

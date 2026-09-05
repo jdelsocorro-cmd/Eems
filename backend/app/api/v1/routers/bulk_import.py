@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentEmployee, get_db, require_permission
@@ -107,28 +107,36 @@ async def commit_import_batch(
     db: AsyncSession = Depends(get_db),
     current: CurrentEmployee = Depends(require_bulk_import),
 ) -> ImportBatchModel:
-    """RETURNING-then-check isn't needed here the way it is elsewhere in
-    this codebase -- import_batches_update's RLS (initiated_by = self or
-    has_permission_on_company) is checked implicitly by db.get() finding the
-    row at all (import_batches_select uses the identical condition), and
-    commit_batch() itself already handles every per-row RLS/constraint
-    failure internally (reject, don't raise) rather than needing a top-level
-    guard.
+    """A security review found the previous read-then-check-then-process
+    shape here had a real double-submit race: a double-click or retried
+    request could both read status='previewed' before either write landed,
+    processing the same batch twice. Claiming the batch atomically first
+    (previewed -> committing, in one UPDATE ... WHERE ... RETURNING) closes
+    that -- a losing concurrent request's UPDATE affects 0 rows and gets a
+    409, the same compare-and-set idiom already used for approve/reject
+    elsewhere in this codebase. The ownership/ RLS-visibility check still
+    happens first via db.get() (import_batches_select), same as before.
     """
     batch = await db.get(ImportBatchModel, batch_id)
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import batch not found")
-    if batch.status != "previewed":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Batch is '{batch.status}', not 'previewed' -- it may already be committed",
-        )
     if batch.initiated_by != uuid.UUID(current.employee_id):
         # Only the person who staged a batch can commit it -- an admin with
         # oversight visibility (has_permission_on_company) can SEE someone
         # else's batch via RLS, but committing someone else's staged import
         # on their behalf isn't a scenario this phase supports.
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the employee who staged this batch can commit it")
+
+    claim = await db.execute(
+        text("update import_batches set status = 'committing' where id = :id and status = 'previewed' returning id"),
+        {"id": str(batch_id)},
+    )
+    if claim.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Batch is '{batch.status}', not 'previewed' -- it may already be committed",
+        )
+    await db.refresh(batch)
 
     return await service.commit_batch(db, batch)
 

@@ -90,6 +90,9 @@ def get_module_config(module: str) -> ImportModuleConfig:
     return config
 
 
+MAX_IMPORT_ROWS = 2000
+
+
 async def parse_csv(file: UploadFile) -> list[dict[str, str]]:
     raw = await file.read()
     try:
@@ -102,6 +105,18 @@ async def parse_csv(file: UploadFile) -> list[dict[str, str]]:
     rows = list(reader)
     if not rows:
         raise ImportError_("File has a header row but no data rows.")
+    # A production readiness review found no size/row-count guard at all --
+    # stage_batch/commit_batch each do several sequential DB round-trips
+    # per row (position lookup alone does 3 queries per row when the module
+    # uses position columns), so an unbounded file risks a very long
+    # request or hitting Render's own request timeout with no progress
+    # indication in between. 2000 is generous for this org's actual scale
+    # (63 employees today) while still bounding a runaway upload -- split a
+    # larger file rather than raise this, since a single request holding
+    # open thousands of sequential round-trips isn't something to grow
+    # into, it's something to avoid.
+    if len(rows) > MAX_IMPORT_ROWS:
+        raise ImportError_(f"File has {len(rows)} rows, which exceeds the {MAX_IMPORT_ROWS}-row limit per import. Split it into smaller files.")
     return rows
 
 
@@ -324,10 +339,37 @@ async def stage_batch(
 
     existing_by_key, existing_by_alt = await _bulk_lookup_existing(db, config, rows)
 
+    # _classify_row only checks a row's key against rows ALREADY IN THE
+    # DATABASE -- two new-record rows in the SAME file sharing a work_email
+    # both classify as "insert" independently, and the collision was
+    # previously invisible until commit_batch's raw insert hit the DB's
+    # own unique constraint and failed with a generic error. Tracking
+    # claimed key/alt values as we go through this file catches it here,
+    # at staging/preview time, with a specific message instead.
+    claimed_keys: set[str] = set()
+    claimed_alts: set[str] = set()
+
     for i, row in enumerate(rows, start=1):
         action, target_id, key_value, errors = await _classify_row(
             db, config, company_id, row, import_mode, existing_by_key, existing_by_alt
         )
+
+        if action == "insert":
+            alt_value = (row.get(config.alternate_matching_key) or "").strip() if config.alternate_matching_key else ""
+            duplicate_of = None
+            if key_value and key_value in claimed_keys:
+                duplicate_of = config.matching_key
+            elif alt_value and alt_value in claimed_alts:
+                duplicate_of = config.alternate_matching_key
+            if duplicate_of:
+                action = "reject"
+                errors = (errors or []) + [f"Duplicate {duplicate_of} within this file -- another row above already claims it"]
+            else:
+                if key_value:
+                    claimed_keys.add(key_value)
+                if alt_value:
+                    claimed_alts.add(alt_value)
+
         db.add(
             ImportBatchRow(
                 batch_id=batch.id,
@@ -363,10 +405,34 @@ async def revalidate_batch(db: AsyncSession, batch: ImportBatch) -> list[ImportB
 
     existing_by_key, existing_by_alt = await _bulk_lookup_existing(db, config, rows)
 
+    # Same intra-file duplicate tracking as stage_batch -- batch_rows is
+    # already ordered by row_number, so "claimed by an earlier row" means
+    # the same thing here as it does on first upload.
+    claimed_keys: set[str] = set()
+    claimed_alts: set[str] = set()
+
     for batch_row in batch_rows:
         action, target_id, key_value, errors = await _classify_row(
             db, config, batch.company_id, batch_row.raw_data, batch.import_mode, existing_by_key, existing_by_alt
         )
+
+        if action == "insert":
+            row = batch_row.raw_data
+            alt_value = (row.get(config.alternate_matching_key) or "").strip() if config.alternate_matching_key else ""
+            duplicate_of = None
+            if key_value and key_value in claimed_keys:
+                duplicate_of = config.matching_key
+            elif alt_value and alt_value in claimed_alts:
+                duplicate_of = config.alternate_matching_key
+            if duplicate_of:
+                action = "reject"
+                errors = (errors or []) + [f"Duplicate {duplicate_of} within this file -- another row above already claims it"]
+            else:
+                if key_value:
+                    claimed_keys.add(key_value)
+                if alt_value:
+                    claimed_alts.add(alt_value)
+
         batch_row.action = action
         batch_row.target_record_id = target_id
         batch_row.matching_key_value = key_value

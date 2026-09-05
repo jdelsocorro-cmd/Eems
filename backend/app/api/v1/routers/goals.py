@@ -114,7 +114,7 @@ async def cascade_goal(
     template: KpiTemplateModel | None = None
     if payload.kpi_template_id is not None:
         template = await db.get(KpiTemplateModel, payload.kpi_template_id)
-        if template is None:
+        if template is None or not template.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="KPI template not found")
 
     existing = await db.execute(
@@ -125,12 +125,19 @@ async def cascade_goal(
     created: list[GoalModel] = []
     skipped: list[uuid.UUID] = []
     for employee_id in payload.employee_ids:
+        # already_covered is updated as we go (not just seeded from the DB
+        # once above) so a duplicate employee_id repeated within the same
+        # payload is also caught here, gracefully, instead of surfacing as
+        # a raw IntegrityError from uq_goals_parent_employee_active
+        # (053_add_missing_indexes_and_dedup_constraints.sql) mid-request,
+        # which would otherwise abort every goal already created in this
+        # same transaction.
         if employee_id in already_covered:
             skipped.append(employee_id)
             continue
 
         employee = await db.get(EmployeeModel, employee_id)
-        if employee is None:
+        if employee is None or employee.deleted_at is not None:
             skipped.append(employee_id)
             continue
 
@@ -173,6 +180,7 @@ async def cascade_goal(
             db.add(kpi)
             await db.flush()
 
+        already_covered.add(employee_id)
         created.append(child)
 
     for goal in created:

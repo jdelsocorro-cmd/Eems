@@ -213,7 +213,7 @@ async def create_employee(
 async def invite_employee(
     employee_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _current: CurrentEmployee = Depends(require_permission("employee", "create")),
+    current: CurrentEmployee = Depends(require_permission("employee", "create")),
 ) -> EmployeeModel:
     """Sends the same Supabase invite email POST /employees's send_invite=
     true path does, for an employee who was provisioned without one -- the
@@ -222,10 +222,30 @@ async def invite_employee(
     explicit action). Guarded on auth_user_id already being null: an
     already-invited employee should go through password recovery, not a
     second invite email pointing at an account that already exists.
+
+    require_permission("employee","create") only checks the caller holds
+    that grant SOMEWHERE -- it doesn't confirm this specific employee_id
+    is in their scope. A security review found that gap compounds
+    044_employees_select_unassigned_visibility.sql's already-accepted
+    tradeoff (any such holder can SEE an unassigned employee) with a real
+    external side effect: without this check, that same holder could also
+    TRIGGER a real Supabase invite email for someone outside their scope.
+    Explicitly re-checking has_permission_on_employee here -- the same
+    predicate employees_update's own RLS uses -- before the external call
+    closes that, and matches the pattern kpis.py already uses for its own
+    scope-check-before-external-effect case.
     """
     employee = await db.get(EmployeeModel, employee_id)
     if employee is None or employee.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+
+    can_manage = await db.execute(
+        text("select app.has_permission_on_employee(:caller, :target, 'employee', 'update')"),
+        {"caller": current.employee_id, "target": str(employee_id)},
+    )
+    if not can_manage.scalar_one():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to invite this employee")
+
     if employee.auth_user_id is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -247,7 +267,7 @@ async def invite_employee(
 async def reset_employee_password(
     employee_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _current: CurrentEmployee = Depends(require_permission("employee", "update")),
+    current: CurrentEmployee = Depends(require_permission("employee", "update")),
 ) -> EmployeeModel:
     """Admin-assist path for "I forgot my password" -- sends the same
     Supabase recovery email a self-service Forgot Password link on /login
@@ -256,19 +276,43 @@ async def reset_employee_password(
     Guarded on auth_user_id already being set: nothing to recover for an
     employee who was never invited -- send-invite is the right action there.
 
+    Same has_permission_on_employee re-check as invite_employee above, for
+    the same reason: require_permission("employee","update") only confirms
+    the grant exists somewhere, not that this employee_id is in scope, and
+    the Supabase recovery email is a real external effect that shouldn't
+    fire before that's confirmed.
+
     password_reset_requested_at exists purely so this UPDATE gets picked up
     by trg_audit_employees (045_employee_password_reset_tracking.sql) --
     the Supabase Auth API call itself leaves no trace in this system's own
     audit_log otherwise, and it doubles as "last requested" in the UI so an
-    admin doesn't re-send and spam the same inbox.
+    admin doesn't re-send and spam the same inbox. It also now backs a
+    cooldown (see the 60-second check below): a security review found
+    nothing previously stopped an admin from clicking "Send Password
+    Reset" repeatedly and spamming the same inbox.
     """
     employee = await db.get(EmployeeModel, employee_id)
     if employee is None or employee.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+
+    can_manage = await db.execute(
+        text("select app.has_permission_on_employee(:caller, :target, 'employee', 'update')"),
+        {"caller": current.employee_id, "target": str(employee_id)},
+    )
+    if not can_manage.scalar_one():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to reset this employee's password")
+
     if employee.auth_user_id is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This employee has no login to reset -- send an invite instead")
     if employee.status == "offboarded":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot reset the password of an offboarded employee")
+    if employee.password_reset_requested_at is not None:
+        seconds_since_last = (datetime.now(timezone.utc) - employee.password_reset_requested_at).total_seconds()
+        if seconds_since_last < 60:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"A reset email was already sent {int(seconds_since_last)}s ago -- wait a moment before sending another",
+            )
 
     try:
         await send_password_recovery(employee.work_email)
