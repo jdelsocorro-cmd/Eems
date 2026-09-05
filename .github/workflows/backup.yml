@@ -14,8 +14,18 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - name: Install postgresql-client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      # Ubuntu's default `postgresql-client` package is version 16, but the
+      # Supabase project is on Postgres 17.6 -- pg_dump refuses to dump from
+      # a server newer than itself (a built-in safety check, found live
+      # while restoring this workflow to working order on 2026-09-05).
+      # Installing from the official PGDG apt repo instead of Ubuntu's own
+      # gets a client version that actually matches.
+      - name: Install postgresql-client 17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
 
       - name: Dump the database
         run: |
