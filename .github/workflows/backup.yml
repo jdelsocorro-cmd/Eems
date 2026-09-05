@@ -31,7 +31,12 @@ jobs:
         run: |
           timestamp=$(date -u +%Y%m%dT%H%M%SZ)
           echo "DUMP_FILE=eems-backup-${timestamp}.dump" >> "$GITHUB_ENV"
-          pg_dump "${{ secrets.SUPABASE_DB_ADMIN_URL }}" -F c -f "eems-backup-${timestamp}.dump"
+          # Explicit version-specific path -- installing postgresql-client-17
+          # alongside Ubuntu's own already-present v16 package left plain
+          # `pg_dump` on PATH still resolving to v16 (the runner's default
+          # alternatives didn't switch), found live while restoring this
+          # workflow to working order on 2026-09-05.
+          /usr/lib/postgresql/17/bin/pg_dump "${{ secrets.SUPABASE_DB_ADMIN_URL }}" -F c -f "eems-backup-${timestamp}.dump"
 
       # A production readiness review (2026-09-05) found every run of this
       # workflow had been failing since it was added -- SUPABASE_DB_ADMIN_URL
