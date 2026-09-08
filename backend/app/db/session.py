@@ -3,7 +3,6 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy import text
-from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 
@@ -11,31 +10,46 @@ settings = get_settings()
 
 # SUPABASE_DB_URL points at Supabase's DIRECT connection (port 5432), not
 # the Transaction pooler (6543), despite the original plan's default
-# preference for the pooler. Reason, found via integration testing: even
-# with poolclass=NullPool + statement_cache_size=0 (both applied below), the
+# preference for the pooler. Reason, found via integration testing: the
 # Transaction pooler (Supavisor) intermittently handed back a backend
 # connection with a stale prepared statement from an earlier, unrelated
 # client session, causing DuplicatePreparedStatementError on ordinary
 # queries -- including SQLAlchemy's own dialect-initialization query, before
-# any application code even ran. The identical NullPool + statement_cache_
-# size=0 setup against the direct connection had zero failures across
-# repeated testing. Phase 1 scale doesn't need pooler-level connection
-# multiplexing anyway (Supabase free tier allows 60 direct connections;
-# NullPool means at most one physical connection per in-flight request), so
-# reliability wins over following the general pooler-for-serverless
-# heuristic that doesn't hold up empirically for this combination right now.
-# Revisit if connection volume ever approaches that limit.
+# any application code even ran. The direct/session-mode connection had zero
+# failures across repeated testing -- it doesn't multiplex unrelated client
+# sessions onto one physical backend connection the way transaction-mode
+# pooling does, so it doesn't have that failure mode.
 #
-# NullPool + statement_cache_size=0 are kept regardless (cheap, defensive,
-# and correct practice for any pgbouncer-fronted Postgres, direct or not):
-#   - statement_cache_size=0 stops asyncpg from using named prepared
-#     statements client-side at all.
-#   - NullPool means SQLAlchemy doesn't hold physical connections open
-#     between requests, so an idle app never occupies a chunk of the
-#     60-connection budget it isn't actively using.
+# statement_cache_size=0 stops asyncpg from using named prepared statements
+# client-side at all -- still correct/defensive practice here even without
+# transaction-mode pooling in the picture, and cheap to keep.
+#
+# A production readiness review (2026-09-08) found this engine originally
+# used poolclass=NullPool -- meaning every single request opened a brand-new
+# physical connection from scratch and closed it at the end. That decision
+# was carried over from when this connection targeted the transaction
+# pooler (where NullPool was one part of dodging the prepared-statement bug
+# above); it was never revisited after the switch to the direct/session-mode
+# connection, which doesn't share that risk. Measured live: opening a fresh
+# connection to this database costs ~2.2s on its own (Render's default
+# region is Oregon; Supabase is ap-southeast-1/Singapore -- see the
+# accompanying region-migration fix), separate from actual query time
+# (~175-355ms once a connection exists) -- meaning NullPool was paying that
+# ~2.2s connection-setup tax on every single API request. Pooling here reuses
+# already-established connections across requests instead, which is safe
+# now that this isn't the transaction-mode pooler: a session-mode/direct
+# connection is a real, dedicated backend session for as long as SQLAlchemy
+# holds it, not something Supavisor is multiplexing between unrelated
+# clients concurrently. pool_size=5 keeps normal traffic pooled without
+# opening new connections; max_overflow=5 allows bursts past that (both
+# comfortably inside Supabase's 60-direct-connection budget on a
+# single-worker Render free-tier deployment); pool_pre_ping guards against
+# a connection going stale after Render's own periodic idle/sleep cycles.
 engine = create_async_engine(
     settings.supabase_db_url,
-    poolclass=NullPool,
+    pool_size=5,
+    max_overflow=5,
+    pool_pre_ping=True,
     connect_args={"statement_cache_size": 0},
 )
 
