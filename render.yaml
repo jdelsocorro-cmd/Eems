@@ -2,10 +2,24 @@
 # reads this file to provision the backend automatically. Secrets are
 # `sync: false` so Render prompts for each value at setup time instead of
 # storing them in this committed file.
+#
+# region: singapore -- added 2026-09-08. The original eems-backend service
+# was created with no region set (defaults to Oregon), while Supabase is
+# ap-southeast-1/Singapore -- confirmed live via a diagnostic endpoint that
+# every database connection/query was paying real cross-Pacific latency,
+# compounding badly on any endpoint running several sequential queries
+# (the executive dashboard alone measured 7.77s even after fixing the
+# separate NullPool connection-pooling issue). Named eems-backend-sg here
+# (not reusing "eems-backend") because Render doesn't support changing an
+# existing service's region in place -- this creates a NEW service
+# alongside the old one so the old one keeps serving traffic until the new
+# one is verified working, then the old one gets deleted and this becomes
+# the one true backend.
 services:
   - type: web
-    name: eems-backend
+    name: eems-backend-sg
     runtime: docker
+    region: singapore
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     plan: free
