@@ -77,6 +77,41 @@ if [ "$RESTORE_EXIT" -ne 0 ]; then
   echo "actually passed."
 fi
 
+# --no-owner --no-privileges above is correct (avoids "role postgres already
+# exists"-style ownership conflicts on a target that doesn't share the
+# source's exact role setup) but has a real cost: it strips EVERY grant on
+# every restored object, including the ones the app's own connection role
+# depends on to see anything at all. Found live 2026-09-08 -- a restore
+# drill against eems-dev several days earlier had silently left `eems_app`
+# (backend/app/db/session.py's connection role) and `authenticated` with NO
+# usage privilege on the public/app schemas. The restore "succeeded" (all 67
+# employees were really there per an admin connection) but the app itself
+# saw nothing and looked like a total data loss -- indistinguishable from a
+# genuinely failed restore to anyone using it afterward. This is exactly the
+# failure mode a disaster-recovery drill exists to catch, so it gets
+# re-applied unconditionally here rather than left as a "gotcha to remember
+# manually": grant usage on schema public, app to eems_app; (008_app_role.sql)
+# + grant usage on schema app to authenticated; grant execute on all functions
+# in schema app to authenticated; (010_grant_app_schema_to_authenticated.sql)
+# + the standard Supabase public-schema grants, which are normally set up
+# once by Supabase's own project bootstrap and are just as vulnerable to
+# being dropped by this same schema-drop-and-restore cycle.
+echo
+echo "-- Re-applying app-role grants (stripped by --no-owner --no-privileges) --"
+psql "$TARGET_DB_URL" <<'SQL'
+grant usage on schema public, app to eems_app;
+grant usage on schema public, app to authenticated;
+grant execute on all functions in schema app to authenticated;
+alter default privileges in schema app grant execute on functions to authenticated;
+
+grant all on all tables in schema public to anon, authenticated, service_role;
+grant all on all sequences in schema public to anon, authenticated, service_role;
+grant all on all routines in schema public to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+alter default privileges in schema public grant all on routines to anon, authenticated, service_role;
+SQL
+
 END=$(date +%s)
 ELAPSED=$((END - START))
 
@@ -95,6 +130,11 @@ psql "$TARGET_DB_URL" -c "select count(*) as company_count from public.companies
 psql "$TARGET_DB_URL" -c "select count(*) as app_function_count from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'app';"
 psql "$TARGET_DB_URL" -c "select count(*) as rls_enabled_tables from pg_tables t join pg_class c on c.relname = t.tablename where t.schemaname = 'public' and c.relrowsecurity;"
 
+# The check that would have caught the 2026-09-08 incident: row counts above
+# only prove data exists, via an admin connection that bypasses grants
+# entirely. This proves the role the actual app connects as can see it.
+psql "$TARGET_DB_URL" -c "select has_schema_privilege('eems_app', 'public', 'USAGE') as eems_app_can_use_public, has_table_privilege('eems_app', 'public.employees', 'SELECT') as eems_app_can_select_employees;"
+
 echo
 echo "Record the elapsed time above as this drill's RTO data point."
-echo "If any sanity check looks wrong (0 employees, no app schema, RLS not enabled on the expected tables), the restore is NOT trustworthy as-is -- investigate before relying on it."
+echo "If any sanity check looks wrong (0 employees, no app schema, RLS not enabled on the expected tables, or eems_app_can_use_public/eems_app_can_select_employees is false), the restore is NOT trustworthy as-is -- investigate before relying on it."
