@@ -64,3 +64,44 @@ jobs:
             echo "Unexpected status from Supabase -- project may be down or paused."
             exit 1
           fi
+
+  ping-supabase-dev:
+    # eems-dev (see docs/PROD_DATA_SAFETY.md) has no traffic of its own --
+    # nothing but occasional manual test runs ever hits it -- so unlike
+    # production above, it was never covered by an existing keepalive.
+    # NOTE: this is NOT what caused the 2026-09-08 "eems-dev looks empty"
+    # scare -- that turned out to be scripts/restore_drill.sh's pg_restore
+    # stripping eems_app's schema grants, unrelated to project pause state,
+    # already root-caused and fixed (see
+    # [[eems-dev-db-grants-stripped]]/commit d41dff0, which also added a
+    # same-day sanity check for exactly that failure mode). This job exists
+    # only because free-tier auto-pause-after-7-days-idle is a real,
+    # separate, still-unmitigated risk for eems-dev specifically -- cheap
+    # to close given the production job already exists as a template.
+    # Needs its own secrets (SUPABASE_DEV_URL/SUPABASE_DEV_ANON_KEY) since
+    # eems-dev is a different project from the one SUPABASE_URL/
+    # SUPABASE_ANON_KEY point at above -- add them under repo Settings ->
+    # Secrets and variables -> Actions using the values already in
+    # eems/frontend/.env or eems/backend/.env (VITE_SUPABASE_URL/
+    # VITE_SUPABASE_ANON_KEY or SUPABASE_URL/SUPABASE_ANON_KEY -- confirm
+    # against the eems-dev ref, not production, before pasting). The anon
+    # key is safe to store this way; it's already meant to be public
+    # client-side.
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 */12 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit a real PostgREST query against eems-dev
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DEV_URL }}" ]; then
+            echo "SUPABASE_DEV_URL secret not set yet -- skipping until it's added."
+            exit 0
+          fi
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.SUPABASE_DEV_URL }}/rest/v1/companies?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_DEV_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_DEV_ANON_KEY }}")
+          echo "eems-dev Supabase REST responded: $status"
+          if [ "$status" -ge 500 ] || [ "$status" -eq 000 ]; then
+            echo "Unexpected status from eems-dev Supabase -- project may be down or paused."
+            exit 1
+          fi
