@@ -198,7 +198,7 @@ async def test_org_hierarchy_crud_and_reparent_flow():
             json={"new_parent_unit_id": backend_unit_id},
         )
         assert resp.status_code == 400, f"expected 400 (cycle rejected), got {resp.status_code}: {resp.text}"
-        assert "cycle" in resp.text.lower()
+        assert "report to one of its own" in resp.text.lower()
 
         # --- positions under the nested unit: same reparent/subtree/cycle mechanics as before ---
         resp = await api_client.post(
@@ -243,7 +243,7 @@ async def test_org_hierarchy_crud_and_reparent_flow():
             json={"new_reports_to_position_id": report_pos_id},
         )
         assert resp.status_code == 400, f"expected 400 (cycle rejected), got {resp.status_code}: {resp.text}"
-        assert "cycle" in resp.text.lower()
+        assert "report to one of its own" in resp.text.lower()
 
         # --- soft-delete: row survives, API hides it ---
         resp = await api_client.delete(f"/api/v1/positions/{report_pos_id}", headers=headers)
