@@ -33,7 +33,13 @@ jobs:
     steps:
       - name: Hit the backend's own health endpoint (proves web process + DB connection are both alive)
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" https://eems-qhnt.onrender.com/health)
+          # eems-backend-sg (Singapore, matching Supabase's ap-southeast-1)
+          # replaced the original eems-qhnt/eems-backend service (Oregon,
+          # no region set) on 2026-09-08 -- a diagnostic endpoint confirmed
+          # the Oregon service was paying real cross-Pacific latency on
+          # every DB round trip, compounding badly on any endpoint running
+          # several sequential queries.
+          status=$(curl -s -o /dev/null -w "%{http_code}" https://eems-backend-sg.onrender.com/health)
           echo "Render backend responded: $status"
           if [ "$status" -ge 500 ] || [ "$status" -eq 000 ]; then
             echo "Unexpected status from Render backend -- may be down."

@@ -1,5 +1,3 @@
-import time
-
 from fastapi import APIRouter
 from sqlalchemy import text
 
@@ -26,31 +24,3 @@ async def health() -> dict:
     async with AsyncSessionLocal() as session:
         await session.execute(text("select 1"))
     return {"status": "ok"}
-
-
-@router.get("/health/diag")
-async def health_diag() -> dict:
-    """TEMPORARY diagnostic endpoint -- added 2026-09-08 to confirm, with
-    real server-side numbers rather than client-side inference, whether
-    Render-to-Supabase cross-region latency (Render defaults to Oregon;
-    Supabase is ap-southeast-1) plus NullPool's fresh-connection-per-request
-    pattern (db/session.py) is the actual cause of multi-second API response
-    times. Remove once that's confirmed either way -- not meant to ship
-    long-term.
-    """
-    t0 = time.monotonic()
-    async with AsyncSessionLocal() as session:
-        t1 = time.monotonic()
-        await session.execute(text("select 1"))
-        t2 = time.monotonic()
-        await session.execute(text("select 1"))
-        t3 = time.monotonic()
-        await session.execute(text("select count(*) from employees"))
-        t4 = time.monotonic()
-    return {
-        "connection_setup_ms": round((t1 - t0) * 1000),
-        "first_query_ms": round((t2 - t1) * 1000),
-        "second_query_same_connection_ms": round((t3 - t2) * 1000),
-        "third_query_real_table_ms": round((t4 - t3) * 1000),
-        "total_ms": round((t4 - t0) * 1000),
-    }
