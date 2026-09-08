@@ -3,8 +3,16 @@ name: Nightly backup
 # The Supabase free tier caps the DB at 500MB, so dumps stay small -- this
 # is a plain pg_dump, not anything that needs chunking. Two independent
 # copies on purpose: R2 (10GB free, no egress fees, meant to be the durable
-# one) and a GitHub Actions artifact (short-retention, but a second storage
-# provider entirely -- if R2 credentials break silently, this still lands).
+# one) and a GitHub Actions artifact (a second storage provider entirely --
+# if R2 credentials break silently, this still lands).
+#
+# R2 was evaluated 2026-09-08 but its current signup flow requires adding a
+# card on file even to activate the free tier -- declined rather than hand
+# that over for a $0 workflow. Until a genuinely cardless offsite provider
+# is set up, the GitHub artifact copy below is retained for 90 days (GitHub
+# Free's own max) instead of R2's unlimited retention, as this repo's only
+# real safety net -- extend it further or revisit R2/Backblaze if that ever
+# stops being enough runway.
 on:
   schedule:
     - cron: "0 9 * * *" # 09:00 UTC nightly
@@ -74,4 +82,4 @@ jobs:
         with:
           name: ${{ env.DUMP_FILE }}
           path: ${{ env.DUMP_FILE }}
-          retention-days: 14
+          retention-days: 90

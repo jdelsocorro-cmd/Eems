@@ -27,9 +27,11 @@ Get a dump file from the workflow's GitHub Actions run artifacts (Actions → "N
 
 Run this periodically (quarterly is reasonable at this scale) — a backup that restores correctly today doesn't guarantee it will after the next few migrations land.
 
-## Still open: Cloudflare R2
+## Cloudflare R2: evaluated, declined
 
-The backup workflow uploads to R2 as its durable copy, with the GitHub Actions artifact (14-day retention) as a second, independent copy in case R2 credentials ever break silently. R2 is **not yet configured** — no Cloudflare account/bucket exists for this. The GitHub-artifact copy is real and working today (confirmed by the drill above), but it expires after 14 days. Setting up R2 (`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_ACCOUNT_ID` as repo secrets) is the next step for a durable, long-retention backup — treat it as its own task, same as the dev project was.
+R2 was considered 2026-09-08 as a durable, long-retention offsite copy alongside the GitHub Actions artifact. Its current signup flow requires adding a card on file to activate R2 at all, even to stay on the $0 free tier — declined rather than hand that over for a backup workflow that has no real spend need. The backup workflow's R2 upload step (`.github/workflows/backup.yml`) is written and ready (`continue-on-error: true`, so it's a no-op today rather than a failure) if this is revisited later, either with R2 once a cardless path exists, or with an alternative like Backblaze B2.
+
+**In the meantime**, the GitHub Actions artifact is the only copy, and its retention was bumped from 14 to **90 days** (GitHub Free's own max) specifically to compensate for not having a second provider. That's real runway, not a stopgap — but it's still one provider, so if GitHub Actions itself ever had an extended outage or the repo were deleted, there'd be no fallback. Revisit a genuinely cardless offsite option if that risk stops being acceptable.
 
 ## Going forward
 
